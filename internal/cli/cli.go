@@ -8,27 +8,37 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
+	"github.com/TigranOhanyan/gh-gcf/internal/build"
 	"github.com/TigranOhanyan/gh-gcf/internal/pull"
 	"github.com/TigranOhanyan/gh-gcf/internal/source"
 )
 
-const usageText = `gh gcf installs and updates software factory files in a host repository.
+const usageText = `gh gcf installs and updates software factory files in a host repository
+and starts Cursor cloud agents for issues that are ready to build.
 
 Usage:
   gh gcf pull <ref> [--source OWNER/REPO] [--force]
+  gh gcf build [--repo OWNER/REPO] [--max N] [--dry-run]
 
 Commands:
   pull <ref>    Download the factory at <ref> and install it into this repository
+  build         Start a Cursor cloud agent for each issue ready to build
 
 <ref> is a tag, branch, or commit SHA. "latest" means the newest GitHub release.
-The command must be run from the root of the host git repository.
+pull must be run from the root of the host git repository.
 It does not commit.
 
-Flags:
+pull flags:
   --source OWNER/REPO    Factory repository (default TigranOhanyan/github-cursor-factory)
   --force                Overwrite local edits and unmanaged files that are in the way
+
+build flags:
+  --repo OWNER/REPO      Host repository (default: the current repository)
+  --max N                Maximum agents to start (default 1)
+  --dry-run              Print the requests that would be sent and change nothing
 `
 
 // Fetcher downloads a resolved factory archive.
@@ -48,6 +58,8 @@ func Run(args []string, cwd string, stdout, stderr io.Writer, fetch Fetcher) err
 		return nil
 	case "pull":
 		return runPull(args[1:], cwd, stdout, stderr, fetch)
+	case "build":
+		return runBuild(args[1:], stdout, stderr, nil)
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
@@ -88,6 +100,88 @@ func runPull(args []string, cwd string, stdout, stderr io.Writer, fetch Fetcher)
 	}
 	fmt.Fprint(stdout, FormatSummary(repo, ref, fetched.Commit, fetched.ReleaseTag, summary))
 	return nil
+}
+
+func runBuild(args []string, stdout, stderr io.Writer, deps *build.Deps) error {
+	opts, help, err := parseBuildArgs(args)
+	if err != nil {
+		return err
+	}
+	if help {
+		fmt.Fprint(stdout, usageText)
+		return nil
+	}
+	var resolved build.Deps
+	if deps != nil {
+		resolved = *deps
+	}
+	return build.Run(context.Background(), opts, resolved, stdout, stderr)
+}
+
+func parseBuildArgs(args []string) (build.Options, bool, error) {
+	opts := build.Options{Max: 1}
+	var positionals []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "-h" || arg == "--help" || arg == "-help":
+			return build.Options{}, true, nil
+		case arg == "--dry-run" || arg == "-dry-run":
+			opts.DryRun = true
+		case arg == "--dry-run=true" || arg == "-dry-run=true":
+			opts.DryRun = true
+		case arg == "--dry-run=false" || arg == "-dry-run=false":
+			opts.DryRun = false
+		case arg == "--repo" || arg == "-repo":
+			i++
+			if i >= len(args) || strings.HasPrefix(args[i], "-") {
+				return build.Options{}, false, errors.New("flag needs an argument: --repo")
+			}
+			opts.Repo = args[i]
+		case strings.HasPrefix(arg, "--repo="):
+			opts.Repo = strings.TrimPrefix(arg, "--repo=")
+		case strings.HasPrefix(arg, "-repo="):
+			opts.Repo = strings.TrimPrefix(arg, "-repo=")
+		case arg == "--max" || arg == "-max":
+			i++
+			if i >= len(args) || strings.HasPrefix(args[i], "-") {
+				return build.Options{}, false, errors.New("flag needs an argument: --max")
+			}
+			n, err := parseMax(args[i])
+			if err != nil {
+				return build.Options{}, false, err
+			}
+			opts.Max = n
+		case strings.HasPrefix(arg, "--max="):
+			n, err := parseMax(strings.TrimPrefix(arg, "--max="))
+			if err != nil {
+				return build.Options{}, false, err
+			}
+			opts.Max = n
+		case strings.HasPrefix(arg, "-max="):
+			n, err := parseMax(strings.TrimPrefix(arg, "-max="))
+			if err != nil {
+				return build.Options{}, false, err
+			}
+			opts.Max = n
+		case strings.HasPrefix(arg, "-") && arg != "-":
+			return build.Options{}, false, fmt.Errorf("unknown flag: %s", arg)
+		default:
+			positionals = append(positionals, arg)
+		}
+	}
+	if len(positionals) != 0 {
+		return build.Options{}, false, errors.New("usage: gh gcf build [--repo OWNER/REPO] [--max N] [--dry-run]")
+	}
+	return opts, false, nil
+}
+
+func parseMax(v string) (int, error) {
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 {
+		return 0, fmt.Errorf("invalid --max %q", v)
+	}
+	return n, nil
 }
 
 func parsePullArgs(args []string) (ref, repo string, force, help bool, err error) {

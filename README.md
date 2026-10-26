@@ -1,8 +1,8 @@
 # gh gcf
 
-`gh gcf` is a [GitHub CLI](https://cli.github.com/) extension that installs and updates the [software factory](https://github.com/TigranOhanyan/github-cursor-factory) in a host repository.
+`gh gcf` is a [GitHub CLI](https://cli.github.com/) extension that installs and updates the [software factory](https://github.com/TigranOhanyan/github-cursor-factory) in a host repository. `pull` copies factory files into the host. `build` starts Cursor cloud agents for issues that are ready to build.
 
-Run it from the root of the host repository. It downloads one revision of the factory as a tarball, using the GitHub API and the credentials from `gh auth login`, and copies the files it owns into the host. A lock file records that set so a later pull can update factory files and leave everything else alone. The command does not commit. You, or a workflow, commit the result.
+`gh gcf pull` runs from the root of the host repository. It downloads one revision of the factory as a tarball, using the GitHub API and the credentials from `gh auth login`, and copies the files it owns into the host. A lock file records that set so a later pull can update factory files and leave everything else alone. The command does not commit. You, or a workflow, commit the result.
 
 ## Install
 
@@ -102,6 +102,32 @@ Each successful pull writes `.factory/gcf.lock`:
 `version` is `1`. `gh gcf` stops if the lock version is anything else.
 
 The example digests above are the SHA-256 of an empty file, not the checksums of those factory files.
+
+## build
+
+`gh gcf build` is one pass over the host repository. It finds open issues that are ready to build and starts a Cursor cloud agent for each. The agent implements the issue and opens a pull request. This command does not merge that pull request, and it does not poll or schedule.
+
+```shell
+gh gcf build [--repo OWNER/REPO] [--max N] [--dry-run]
+```
+
+`--repo` is the host repository in `OWNER/REPO` form. It defaults to the current repository, the same way other `gh` commands do. `--max` is the maximum number of agents to start in this run. The default is 1. Issues are taken oldest first. `--dry-run` prints each issue that would be built and the request that would be sent. It still reads the repository. It does not add labels, post comments, or call Cursor, and it does not need `CURSOR_API_KEY`.
+
+An issue is ready when it is open, is not a pull request, has the `todo` label, and has neither `in-progress` nor `needs-attention`. Those labels come from the factory's `labels.tf`. This command does not create them. It leaves `todo` in place. It adds `in-progress` to claim an issue, and removes that label only when Cursor returns HTTP 429.
+
+For each selected issue, the command adds `in-progress`, then sends `POST https://api.cursor.com/v1/agents`. The request includes the issue number, title, and body, because the agent's own GitHub token cannot read issues. It also tells the agent to implement only what the issue asks, keep the change small, follow the repository's conventions, run the repository's tests or checks if any exist, never edit `.factory/` or `.github/workflows/`, and write a pull request body that says what changed, how it was checked, and includes `Closes #<n>`. The agent starts from the repository's default branch. On success, the command comments on the issue with the agent's URL.
+
+The pull request is opened under the GitHub account of the Cursor API key's owner.
+
+If Cursor rejects the request, the command adds `needs-attention`, comments on the issue with the HTTP status and the API error message, and continues with the next issue. Timeouts and network errors take that same path, because an agent may already exist. The command exits non-zero if any issue failed. An HTTP 429 from Cursor means no agent was created: the command removes `in-progress`, does not add `needs-attention`, does not comment, and stops the run. An HTTP 429 from GitHub also stops the run.
+
+### Credentials
+
+`CURSOR_API_KEY` is required, except with `--dry-run`. It is a user API key from [Cursor Dashboard → API Keys](https://cursor.com/dashboard/api). The command trims surrounding whitespace and newlines. It fails if the variable is missing, and it does not print the key.
+
+`GCF_BUILDER_MODEL` is optional. When it is set, the command sends that value as `model.id`. When it is unset, the request omits `model` and Cursor uses the account's default model.
+
+GitHub requests use the credentials `gh` already has, from `GH_TOKEN` or `gh auth login`.
 
 ## Releases
 

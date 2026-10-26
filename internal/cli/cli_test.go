@@ -5,11 +5,15 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"errors"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/TigranOhanyan/gh-gcf/internal/build"
 	"github.com/TigranOhanyan/gh-gcf/internal/pull"
 	"github.com/TigranOhanyan/gh-gcf/internal/source"
 )
@@ -52,7 +56,7 @@ func TestRunHelpAndUsage(t *testing.T) {
 	if err := Run([]string{"--help"}, t.TempDir(), &out, &errb, fetch); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "gh gcf pull <ref>") || fetch.called {
+	if !strings.Contains(out.String(), "gh gcf pull <ref>") || !strings.Contains(out.String(), "gh gcf build") || fetch.called {
 		t.Fatalf("help out %q called %v", out.String(), fetch.called)
 	}
 	out.Reset()
@@ -166,6 +170,134 @@ func TestRunLatestPrintsReleaseAndWarns(t *testing.T) {
 	if string(body) != "edited" {
 		t.Fatalf("edited file was overwritten: %q", body)
 	}
+}
+
+func TestParseBuildArgs(t *testing.T) {
+	opts, help, err := parseBuildArgs([]string{"--repo", "acme/widgets", "--max", "3", "--dry-run"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if help || opts.Repo != "acme/widgets" || opts.Max != 3 || !opts.DryRun {
+		t.Fatalf("opts %+v help %v", opts, help)
+	}
+
+	opts, help, err = parseBuildArgs([]string{"--max=2", "--repo=acme/widgets", "--dry-run=false"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if help || opts.Repo != "acme/widgets" || opts.Max != 2 || opts.DryRun {
+		t.Fatalf("flags after form: %+v help %v", opts, help)
+	}
+
+	opts, _, err = parseBuildArgs(nil)
+	if err != nil || opts.Max != 1 || opts.Repo != "" || opts.DryRun {
+		t.Fatalf("defaults: %+v %v", opts, err)
+	}
+	for _, args := range [][]string{
+		{"--max"},
+		{"--max", "0"},
+		{"--max", "-1"},
+		{"--max", "nope"},
+		{"--repo"},
+		{"--bogus"},
+		{"extra"},
+	} {
+		if _, _, err := parseBuildArgs(args); err == nil {
+			t.Fatalf("parse %q succeeded", args)
+		}
+	}
+	_, help, err = parseBuildArgs([]string{"--help"})
+	if err != nil || !help {
+		t.Fatalf("help: %v %v", help, err)
+	}
+}
+
+func TestRunBuildHelp(t *testing.T) {
+	fetch := &failFetcher{}
+	var out, errb bytes.Buffer
+	if err := Run([]string{"build", "--help"}, t.TempDir(), &out, &errb, fetch); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "gh gcf build") || !strings.Contains(out.String(), "--dry-run") || fetch.called {
+		t.Fatalf("out %q called %v", out.String(), fetch.called)
+	}
+	if err := Run([]string{"build", "--bogus"}, t.TempDir(), &out, &errb, fetch); err == nil || fetch.called {
+		t.Fatalf("unknown flag: %v called %v", err, fetch.called)
+	}
+}
+
+func TestRunBuildDryRunUsesFlags(t *testing.T) {
+	issues := []byte(`[
+		{"number":2,"title":"beta-unique","body":"later","state":"open","created_at":"2026-02-01T00:00:00Z","labels":[{"name":"todo"}]},
+		{"number":1,"title":"alpha-unique","body":"earlier","state":"open","created_at":"2026-01-01T00:00:00Z","labels":[{"name":"todo"}]}
+	]`)
+	gh := &scriptREST{issues: issues}
+	var out, errb bytes.Buffer
+	err := runBuild([]string{"--repo", "acme/widgets", "--max", "1", "--dry-run"}, &out, &errb, &build.Deps{
+		REST: gh,
+		Getenv: func(string) string {
+			return ""
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := out.String()
+	if !strings.Contains(text, "repo: acme/widgets") || !strings.Contains(text, "alpha-unique") || !strings.Contains(text, "earlier") {
+		t.Fatalf("stdout:\n%s", text)
+	}
+	if strings.Contains(text, "beta-unique") {
+		t.Fatalf("max was not applied:\n%s", text)
+	}
+	if !strings.Contains(text, "POST https://api.cursor.com/v1/agents") || !strings.Contains(text, `"autoCreatePR": true`) {
+		t.Fatalf("request:\n%s", text)
+	}
+	for _, call := range gh.calls {
+		if !strings.HasPrefix(call, "GET ") {
+			t.Fatalf("dry-run write: %s", call)
+		}
+	}
+
+	gh.calls = nil
+	out.Reset()
+	err = runBuild([]string{"--repo", "acme/widgets"}, &out, &errb, &build.Deps{
+		REST: gh,
+		Getenv: func(string) string {
+			return " \n"
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "CURSOR_API_KEY is not set") {
+		t.Fatalf("missing key: %v", err)
+	}
+	if len(gh.calls) != 0 {
+		t.Fatalf("missing key called GitHub: %v", gh.calls)
+	}
+}
+
+type scriptREST struct {
+	issues []byte
+	calls  []string
+}
+
+func (s *scriptREST) RequestWithContext(_ context.Context, method, path string, body io.Reader) (*http.Response, error) {
+	s.calls = append(s.calls, method+" "+path)
+	if body != nil {
+		if _, err := io.Copy(io.Discard, body); err != nil {
+			return nil, err
+		}
+	}
+	if method != http.MethodGet {
+		return nil, errors.New("unexpected write " + method + " " + path)
+	}
+	payload := []byte(`{"default_branch":"main"}`)
+	if strings.Contains(path, "/issues?") {
+		payload = s.issues
+	}
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(bytes.NewReader(payload)),
+		Header:     make(http.Header),
+	}, nil
 }
 
 func TestFormatSummaryOmitsEmptyRelease(t *testing.T) {
