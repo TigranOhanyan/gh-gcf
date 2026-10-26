@@ -85,6 +85,7 @@ type Issue struct {
 // Run starts cloud agents for issues that are ready to build.
 // A failed issue makes Run return an error after the other selected issues are processed.
 // An HTTP 429 from GitHub or Cursor stops the run immediately.
+// A Cursor 429 means no agent was created, so the in-progress claim is removed.
 func Run(ctx context.Context, opts Options, deps Deps, stdout, stderr io.Writer) error {
 	if opts.Max < 1 {
 		return errors.New("max must be at least 1")
@@ -247,7 +248,7 @@ type oneResult struct {
 
 func startOne(ctx context.Context, gh *githubAPI, cursor *cursorAPI, repo Repository, branch string, issue Issue, model, key string, stdout, stderr io.Writer) oneResult {
 	fmt.Fprintf(stdout, "\n#%d %s\n", issue.Number, issue.Title)
-	// Claim before calling Cursor. Factory labels are only ever added, so todo stays.
+	// Claim before calling Cursor. todo is left in place.
 	if err := gh.addLabel(ctx, repo, issue.Number, labelInProgress); err != nil {
 		if stop := asRateLimit("GitHub", err, key); stop != nil {
 			fmt.Fprintf(stdout, "  failed: HTTP 429: %s\n", publicMessage(err, key))
@@ -261,13 +262,17 @@ func startOne(ctx context.Context, gh *githubAPI, cursor *cursorAPI, repo Reposi
 	if err != nil {
 		status, message := classify(err, key)
 		fmt.Fprintf(stdout, "  failed: %s\n", formatFailure(status, message))
+		if status == http.StatusTooManyRequests {
+			// No agent was created. Drop the claim and stop; do not mark the issue.
+			if rmErr := gh.removeLabel(ctx, repo, issue.Number, labelInProgress); rmErr != nil {
+				fmt.Fprintf(stderr, "warning: #%d: could not remove %s: %s\n", issue.Number, labelInProgress, redact(rmErr.Error(), key))
+			}
+			return oneResult{failed: true, stop: &rateLimitError{service: "Cursor", message: message}}
+		}
 		if markErr := markFailed(ctx, gh, repo, issue.Number, status, message, key, stderr); markErr != nil {
 			if stop := asRateLimit("GitHub", markErr, key); stop != nil {
 				return oneResult{failed: true, stop: stop}
 			}
-		}
-		if status == http.StatusTooManyRequests {
-			return oneResult{failed: true, stop: &rateLimitError{service: "Cursor", message: message}}
 		}
 		return oneResult{failed: true}
 	}

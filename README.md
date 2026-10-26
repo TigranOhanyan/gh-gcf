@@ -113,13 +113,13 @@ gh gcf build [--repo OWNER/REPO] [--max N] [--dry-run]
 
 `--repo` is the host repository in `OWNER/REPO` form. It defaults to the current repository, the same way other `gh` commands do. `--max` is the maximum number of agents to start in this run. The default is 1. Issues are taken oldest first. `--dry-run` prints each issue that would be built and the request that would be sent. It still reads the repository. It does not add labels, post comments, or call Cursor, and it does not need `CURSOR_API_KEY`.
 
-An issue is ready when it is open, is not a pull request, has the `todo` label, and has neither `in-progress` nor `needs-attention`. Those labels come from the factory's `labels.tf`. This command does not create them. It only adds labels, and it leaves `todo` in place.
+An issue is ready when it is open, is not a pull request, has the `todo` label, and has neither `in-progress` nor `needs-attention`. Those labels come from the factory's `labels.tf`. This command does not create them. It leaves `todo` in place. It adds `in-progress` to claim an issue, and removes that label only when Cursor returns HTTP 429.
 
 For each selected issue, the command adds `in-progress`, then sends `POST https://api.cursor.com/v1/agents`. The request includes the issue number, title, and body, because the agent's own GitHub token cannot read issues. It also tells the agent to implement only what the issue asks, keep the change small, follow the repository's conventions, run the repository's tests or checks if any exist, never edit `.factory/` or `.github/workflows/`, and write a pull request body that says what changed, how it was checked, and includes `Closes #<n>`. The agent starts from the repository's default branch. On success, the command comments on the issue with the agent's URL.
 
 The pull request is opened under the GitHub account of the Cursor API key's owner.
 
-If Cursor rejects the request, the command adds `needs-attention`, comments on the issue with the HTTP status and the API error message, and continues with the next issue. The command exits non-zero if any issue failed. An HTTP 429 from GitHub or Cursor stops the run. When the limit is hit while starting an agent, that issue is still marked `needs-attention` and commented, and no further agents are started.
+If Cursor rejects the request, the command adds `needs-attention`, comments on the issue with the HTTP status and the API error message, and continues with the next issue. Timeouts and network errors take that same path, because an agent may already exist. The command exits non-zero if any issue failed. An HTTP 429 from Cursor means no agent was created: the command removes `in-progress`, does not add `needs-attention`, does not comment, and stops the run. An HTTP 429 from GitHub also stops the run.
 
 ### Credentials
 

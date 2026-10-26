@@ -424,15 +424,63 @@ func TestRunRateLimitStops(t *testing.T) {
 			"GET issues",
 			"POST labels #1 in-progress",
 			"POST cursor",
-			"POST labels #1 needs-attention",
-			"POST comment #1",
+			"DELETE labels #1 in-progress",
 		}
 		if got := strings.Join(res.rec.events(), "\n"); got != strings.Join(want, "\n") {
 			t.Fatalf("events:\n%s", got)
 		}
-		comments := res.rest.comments()
-		if len(comments) != 1 || !strings.Contains(comments[0], "HTTP 429") || !strings.Contains(comments[0], "too many agents") {
+		if comments := res.rest.comments(); len(comments) != 0 {
 			t.Fatalf("comments: %#v", comments)
+		}
+		for _, call := range res.rest.snapshot() {
+			if strings.Contains(call.Path, "needs-attention") || strings.Contains(call.Body, "needs-attention") {
+				t.Fatalf("marked the issue: %s %s %s", call.Method, call.Path, call.Body)
+			}
+			if call.Method == http.MethodDelete && call.Path != "repos/acme/widgets/issues/1/labels/in-progress" {
+				t.Fatalf("deleted %s", call.Path)
+			}
+		}
+	})
+
+	t.Run("cursor release failure still does not mark", func(t *testing.T) {
+		rec := &recorder{}
+		rest := &fakeREST{
+			events: rec,
+			branch: "main",
+			pages:  map[int][]byte{1: twoIssues(t)},
+			fail: func(method, path string) error {
+				if method == http.MethodDelete {
+					return &api.HTTPError{StatusCode: http.StatusInternalServerError, Message: "unavailable"}
+				}
+				return nil
+			},
+		}
+		srv := cursorServer(t, rec, func(w http.ResponseWriter, r *http.Request, body []byte, n int) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			io.WriteString(w, `{"error":{"code":"rate_limit_exceeded","message":"too many agents"}}`)
+		})
+		var stdout, stderr bytes.Buffer
+		err := Run(context.Background(), Options{Repo: "acme/widgets", Max: 2}, Deps{
+			REST:     rest,
+			Endpoint: srv.URL + "/v1/agents",
+			Getenv:   func(name string) string { return envWith(testKey, "")[name] },
+		}, &stdout, &stderr)
+		if err == nil || !strings.Contains(err.Error(), "stopped:") || !strings.Contains(err.Error(), "Cursor") {
+			t.Fatalf("err: %v", err)
+		}
+		if comments := rest.comments(); len(comments) != 0 {
+			t.Fatalf("comments: %#v", comments)
+		}
+		events := strings.Join(rec.events(), "\n")
+		if strings.Contains(events, "needs-attention") || strings.Contains(events, "POST comment") || strings.Contains(events, "#2") {
+			t.Fatalf("events:\n%s", events)
+		}
+		if !strings.Contains(events, "DELETE labels #1 in-progress") {
+			t.Fatalf("events:\n%s", events)
+		}
+		if !strings.Contains(stderr.String(), "could not remove in-progress") {
+			t.Fatalf("stderr:\n%s", stderr.String())
 		}
 	})
 
@@ -477,6 +525,65 @@ func TestRunRateLimitStops(t *testing.T) {
 			t.Fatalf("stdout:\n%s", stdout.String())
 		}
 	})
+}
+
+func TestRunTransportErrorMarksIssueAndContinues(t *testing.T) {
+	cases := []struct {
+		name    string
+		err     error
+		message string
+	}{
+		{name: "network", err: errors.New("dial tcp: connection refused"), message: "connection refused"},
+		{name: "timeout", err: context.DeadlineExceeded, message: "deadline exceeded"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := &recorder{}
+			rest := &fakeREST{events: rec, branch: "main", pages: map[int][]byte{1: twoIssues(t)}}
+			var stdout, stderr bytes.Buffer
+			err := Run(context.Background(), Options{Repo: "acme/widgets", Max: 2}, Deps{
+				REST:     rest,
+				Endpoint: "https://api.cursor.com/v1/agents",
+				HTTP: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+					return nil, tc.err
+				})},
+				Getenv: func(name string) string {
+					if name == "CURSOR_API_KEY" {
+						return testKey
+					}
+					return ""
+				},
+			}, &stdout, &stderr)
+			if err == nil || err.Error() != "2 issues failed" {
+				t.Fatalf("err %v\nstdout:\n%s", err, stdout.String())
+			}
+			want := []string{
+				"GET repo",
+				"GET issues",
+				"POST labels #1 in-progress",
+				"POST labels #1 needs-attention",
+				"POST comment #1",
+				"POST labels #2 in-progress",
+				"POST labels #2 needs-attention",
+				"POST comment #2",
+			}
+			if got := strings.Join(rec.events(), "\n"); got != strings.Join(want, "\n") {
+				t.Fatalf("events:\n%s", got)
+			}
+			comments := rest.comments()
+			if len(comments) != 2 {
+				t.Fatalf("comments: %#v", comments)
+			}
+			for _, comment := range comments {
+				if !strings.Contains(comment, tc.message) || strings.Contains(comment, testKey) {
+					t.Fatalf("comment: %s", comment)
+				}
+			}
+			if strings.Contains(stdout.String(), testKey) || strings.Contains(stderr.String(), testKey) {
+				t.Fatal("API key leaked")
+			}
+		})
+	}
 }
 
 func TestListContinuesPastIneligiblePage(t *testing.T) {
@@ -821,6 +928,8 @@ func (f *fakeREST) RequestWithContext(_ context.Context, method, path string, bo
 		return jsonResponse([]byte(`{"default_branch":"` + branch + `"}`)), nil
 	case method == http.MethodPost:
 		return jsonResponse([]byte(`{}`)), nil
+	case method == http.MethodDelete:
+		return jsonResponse([]byte(`[]`)), nil
 	default:
 		return nil, fmt.Errorf("unexpected %s %s", method, path)
 	}
@@ -870,6 +979,12 @@ func eventName(method, path string, body []byte) string {
 		var payload labelsPayload
 		_ = json.Unmarshal(body, &payload)
 		return fmt.Sprintf("POST labels #%s %s", issueNumber(path), strings.Join(payload.Labels, ","))
+	case method == http.MethodDelete && strings.Contains(path, "/labels/"):
+		label := path[strings.LastIndex(path, "/")+1:]
+		if unescaped, err := url.PathUnescape(label); err == nil {
+			label = unescaped
+		}
+		return fmt.Sprintf("DELETE labels #%s %s", issueNumber(path), label)
 	case method == http.MethodPost && strings.Contains(path, "/comments"):
 		return "POST comment #" + issueNumber(path)
 	default:

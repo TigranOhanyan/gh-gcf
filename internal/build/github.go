@@ -117,6 +117,21 @@ func (g *githubAPI) addLabel(ctx context.Context, repo Repository, number int, l
 	return nil
 }
 
+// removeLabel removes one label and leaves every other label in place.
+func (g *githubAPI) removeLabel(ctx context.Context, repo Repository, number int, label string) error {
+	path := fmt.Sprintf("%s/issues/%d/labels/%s", repoPath(repo), number, url.PathEscape(label))
+	resp, err := g.rest.RequestWithContext(ctx, http.MethodDelete, path, nil)
+	if err != nil {
+		return fmt.Errorf("remove label %s from %s#%d: %w", label, repo.slug(), number, err)
+	}
+	defer resp.Body.Close()
+	_, err = io.Copy(io.Discard, resp.Body)
+	if err != nil {
+		return fmt.Errorf("remove label %s from %s#%d: %w", label, repo.slug(), number, err)
+	}
+	return nil
+}
+
 func (g *githubAPI) comment(ctx context.Context, repo Repository, number int, body string) error {
 	path := fmt.Sprintf("%s/issues/%d/comments", repoPath(repo), number)
 	err := postJSON(ctx, g.rest, path, commentPayload{Body: body})
