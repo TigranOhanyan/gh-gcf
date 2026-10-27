@@ -1,6 +1,6 @@
 # Config and state are two SQLite files, each with one writer
 
-`config.db` on `main` is written only by the user, and `state.db` on the `state` branch is written only by the tick. Git cannot merge binary files, so a single shared file would let a user's push silently erase rows the tick recorded meanwhile, such as a running agent. SQLite was chosen over TOML or JSON for config because it is queryable and shares migrations with state.
+`config.db` on `main` is written only by the user, and `state.db` on the `state` branch is written only by the tick. Git cannot merge binary files, so a single shared file would let a user's push silently erase rows the tick recorded meanwhile, such as a running agent. SQLite was chosen over TOML or JSON for config because it is queryable and shares migrations with state. The shared-migration reason no longer holds: the files have separate schemas, and compilation carries data from config into state. See `0005-separate-schemas-compilation.md`.
 
 ## Considered Options
 
