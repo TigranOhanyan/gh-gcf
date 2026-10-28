@@ -2,7 +2,8 @@
 name: testing
 description: >-
   Go test style: one behavior per test, assert stored state,
-  accumulative setup, WireMock for HTTP, and real local Postgres.
+  accumulative setup, WireMock for HTTP, real local Postgres, and a
+  per-test git repo for the factory's main and state branches.
   Use when writing, editing, or reviewing tests, *_test.go files, or
   when the user mentions accumulative testing, WireMock, or test setup.
 ---
@@ -96,3 +97,15 @@ The example is [knowledge/embedder/embedder_test.go](../../../knowledge/embedder
 The argument for the approach is in [accumulative_testing.md](accumulative_testing.md). Read that for the why, not for how to write a test here. The essay's recipe is for a team that uses accumulative testing only sometimes. Tests in this repository follow the always-accumulative preference.
 
 Take examples from this repository. Do not copy tests from another codebase. A short index is in [examples.md](examples.md).
+
+## Factory branches
+
+A test that reads `config.db` from `main` and `state.db` from `state` builds that repository in its setup, under `testdata/junk/<test name>`. See [0016-worktrees-for-config-and-state.md](../../../docs/adrs/0016-worktrees-for-config-and-state.md).
+
+1. `git init -b main`.
+2. Create `repos/<owner>/<name>/config.db` with `configdb.Open` and this test's rows, then commit it.
+3. `git checkout -b state`.
+4. Create `state.db` there with `statedb.Open` and this test's rows, then commit it.
+5. Call the code under test on that folder.
+
+Each test gets its own `main` and `state`. Do not check in a factory repository. The databases differ per test.
