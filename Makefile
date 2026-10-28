@@ -3,7 +3,7 @@
 generate:
 	@echo "🔄 Generating SQLC code..."
 	@cd configdb && make reset
-# 	@cd state && make reset
+	@cd statedb && make reset
 	@echo "✅ SQLC code generated"
 # Show available commands
 help:

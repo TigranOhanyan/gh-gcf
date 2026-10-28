@@ -1,0 +1,13 @@
+version: "2"
+sql:
+  - engine: "sqlite"
+    queries: "access_patterns/"
+    schema: "migrations/"
+    gen:
+      go:
+        package: "entities"
+        out: "entities"
+        emit_json_tags: true
+        emit_prepared_queries: false
+        emit_interface: false
+        emit_exact_table_names: false
