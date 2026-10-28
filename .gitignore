@@ -2,5 +2,5 @@
 /dist/
 
 temp_src/
-configs/testdata/junk/*
-!configs/testdata/junk/_keepme
+configdb/testdata/junk/*
+!configdb/testdata/junk/_keepme

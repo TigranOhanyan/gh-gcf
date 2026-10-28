@@ -1,4 +1,4 @@
-package configs
+package configdb
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 
-	"github.com/TigranOhanyan/gh-gcf/configs/entities"
+	"github.com/TigranOhanyan/gh-gcf/configdb/entities"
 	"github.com/ncruces/go-sqlite3"
 	"github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"

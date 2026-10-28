@@ -1,18 +1,28 @@
-package configs
+package configdb
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/TigranOhanyan/gh-gcf/configs/entities"
+	"github.com/TigranOhanyan/gh-gcf/configdb/entities"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+func removeDatabase(t *testing.T, path string) {
+	t.Helper()
+	err := os.Remove(path)
+	missing := os.IsNotExist(err)
+	if err != nil && !missing {
+		require.NoError(t, err)
+	}
+}
+
 func Test_Open_should_migrate_a_new_database(t *testing.T) {
 	ctx := t.Context()
 	path := filepath.Join(JunkDir, "Test_Open_should_migrate_a_new_database.db")
+	removeDatabase(t, path)
 
 	db, err := Open(ctx, path)
 	require.NoError(t, err)
@@ -33,6 +43,7 @@ func Test_Open_should_migrate_a_new_database(t *testing.T) {
 func Test_Open_should_leave_an_existing_database_unchanged(t *testing.T) {
 	ctx := t.Context()
 	path := filepath.Join(JunkDir, "Test_Open_should_leave_an_existing_database_unchanged.db")
+	removeDatabase(t, path)
 
 	db, err := Open(ctx, path)
 	require.NoError(t, err)
