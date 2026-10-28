@@ -1,2 +1,6 @@
 /gh-gcf
 /dist/
+
+temp_src/
+configs/testdata/junk/*
+!configs/testdata/junk/_keepme
