@@ -2,7 +2,9 @@ version: "2"
 sql:
   - engine: "sqlite"
     queries: "access_patterns/"
-    schema: "migrations/"
+    schema:
+      - "migrations/"
+      - "schema/goose_db_version.sql"
     gen:
       go:
         package: "entities"

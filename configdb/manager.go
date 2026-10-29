@@ -6,6 +6,7 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"os"
 
 	"github.com/TigranOhanyan/gh-gcf/configdb/entities"
 	"github.com/ncruces/go-sqlite3"
@@ -25,13 +26,40 @@ type DB struct {
 	isClosed     bool
 }
 
-// Open opens the SQLite file at path, turns foreign keys on, and applies this package's migrations.
-// An existing file is migrated in place.
-func Open(ctx context.Context, path string) (db *DB, err error) {
+type migrationStrategy int
+
+const (
+	migrate migrationStrategy = iota
+	fail
+)
+
+// OpenAndMigrate opens the SQLite file at path, turns foreign keys on, and applies this package's migrations.
+// An existing file is migrated in place. A missing file is created.
+func OpenAndMigrate(ctx context.Context, path string) (db *DB, err error) {
+	db, err = open(ctx, path, migrate)
+	return
+}
+
+// OpenIfMigrated opens the SQLite file at path when every migration in this binary is already applied.
+// A file that is behind is left unchanged, and a missing file is not created.
+func OpenIfMigrated(ctx context.Context, path string) (db *DB, err error) {
+	db, err = open(ctx, path, fail)
+	return
+}
+
+func open(ctx context.Context, path string, strategy migrationStrategy) (db *DB, err error) {
 	missing := path == ""
 	if missing {
 		err = fmt.Errorf("database path cannot be empty")
 		return
+	}
+
+	mustExist := strategy == fail
+	if mustExist {
+		_, err = os.Stat(path)
+		if err != nil {
+			return
+		}
 	}
 
 	sqlDB, err := driver.Open(path, applyPragmas)
@@ -52,7 +80,7 @@ func Open(ctx context.Context, path string) (db *DB, err error) {
 		return
 	}
 
-	_, err = provider.Up(ctx)
+	err = applyStrategy(ctx, sqlDB, provider, strategy)
 	if err != nil {
 		sqlDB.Close()
 		return
@@ -63,6 +91,43 @@ func Open(ctx context.Context, path string) (db *DB, err error) {
 		DB:           sqlDB,
 		Queries:      queries,
 		FileFullPath: path,
+	}
+	return
+}
+
+func applyStrategy(ctx context.Context, sqlDB *sql.DB, provider *goose.Provider, strategy migrationStrategy) (err error) {
+	switch strategy {
+	case migrate:
+		_, err = provider.Up(ctx)
+	case fail:
+		err = requireApplied(ctx, sqlDB, provider)
+	default:
+		err = fmt.Errorf("unknown migration strategy")
+	}
+	return
+}
+
+func requireApplied(ctx context.Context, sqlDB *sql.DB, provider *goose.Provider) (err error) {
+	queries := entities.New(sqlDB)
+	versions, err := queries.GetAppliedMigrationVersions(ctx)
+	if err != nil {
+		err = fmt.Errorf("database migrations are not applied: %w", err)
+		return
+	}
+
+	applied := map[int64]struct{}{}
+	for _, version := range versions {
+		applied[version] = struct{}{}
+	}
+
+	sources := provider.ListSources()
+	for _, source := range sources {
+		_, found := applied[source.Version]
+		missing := !found
+		if missing {
+			err = fmt.Errorf("database migration %d is not applied", source.Version)
+			return
+		}
 	}
 	return
 }

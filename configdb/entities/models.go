@@ -4,7 +4,18 @@
 
 package entities
 
+import (
+	"database/sql"
+)
+
 type Config struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
+}
+
+type GooseDbVersion struct {
+	ID        int64        `json:"id"`
+	VersionID int64        `json:"version_id"`
+	IsApplied int64        `json:"is_applied"`
+	Tstamp    sql.NullTime `json:"tstamp"`
 }

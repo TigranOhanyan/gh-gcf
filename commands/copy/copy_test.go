@@ -68,7 +68,7 @@ func setupFactory(t *testing.T) (repoDir string) {
 	_ = mustGit(t, repoDir, "config", "user.name", "test")
 
 	configPath := filepath.Join(repoDir, "config.db")
-	configDB, err := configdb.Open(ctx, configPath)
+	configDB, err := configdb.OpenAndMigrate(ctx, configPath)
 	require.NoError(t, err)
 
 	starting := configentities.CreateConfigParams{

@@ -23,6 +23,33 @@ func (q *Queries) CreateConfig(ctx context.Context, arg CreateConfigParams) erro
 	return err
 }
 
+const getAppliedMigrationVersions = `-- name: GetAppliedMigrationVersions :many
+SELECT version_id FROM goose_db_version WHERE is_applied = 1
+`
+
+func (q *Queries) GetAppliedMigrationVersions(ctx context.Context) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, getAppliedMigrationVersions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var version_id int64
+		if err := rows.Scan(&version_id); err != nil {
+			return nil, err
+		}
+		items = append(items, version_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getConfig = `-- name: GetConfig :one
 SELECT name, value FROM config WHERE name = ? LIMIT 1
 `

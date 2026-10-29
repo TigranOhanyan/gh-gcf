@@ -125,7 +125,7 @@ func removeWorktree(ctx context.Context, factoryDir string, worktreePath string)
 }
 
 func copyRows(ctx context.Context, configPath string, statePath string) (err error) {
-	configDB, err := configdb.Open(ctx, configPath)
+	configDB, err := configdb.OpenIfMigrated(ctx, configPath)
 	if err != nil {
 		log.Error("open config", "path", configPath, "err", err)
 		return
