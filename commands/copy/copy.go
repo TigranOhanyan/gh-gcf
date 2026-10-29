@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"charm.land/log/v2"
 	"github.com/spf13/cobra"
@@ -38,6 +39,12 @@ func NewCopy() (cmd *cobra.Command) {
 	return
 }
 
+type appRepo struct {
+	owner string
+	name  string
+	rel   string
+}
+
 func Copy(ctx context.Context, factoryDir string, configBranch string, stateBranch string) (err error) {
 	missingFactory := factoryDir == ""
 	if missingFactory {
@@ -56,6 +63,69 @@ func Copy(ctx context.Context, factoryDir string, configBranch string, stateBran
 		return
 	}
 
+	apps, err := listApps(factoryDir)
+	if err != nil {
+		log.Error("list repos", "path", factoryDir, "err", err)
+		return
+	}
+
+	for _, app := range apps {
+		err = copyRepo(ctx, factoryDir, configBranch, stateBranch, app)
+		if err != nil {
+			log.Warn("copy repo", "owner", app.owner, "name", app.name, "err", err)
+			err = nil
+		}
+	}
+	return
+}
+
+func listApps(factoryDir string) (apps []appRepo, err error) {
+	reposDir := filepath.Join(factoryDir, "repos")
+	owners, err := os.ReadDir(reposDir)
+	missing := os.IsNotExist(err)
+	if missing {
+		err = nil
+		return
+	}
+	if err != nil {
+		return
+	}
+
+	for _, owner := range owners {
+		ownerIsDir := owner.IsDir()
+		if !ownerIsDir {
+			continue
+		}
+		ownerName := owner.Name()
+		ownerDir := filepath.Join(reposDir, ownerName)
+		names, readErr := os.ReadDir(ownerDir)
+		if readErr != nil {
+			err = readErr
+			return
+		}
+		for _, name := range names {
+			nameIsDir := name.IsDir()
+			if !nameIsDir {
+				continue
+			}
+			nameText := name.Name()
+			rel := filepath.Join("repos", ownerName, nameText)
+			app := appRepo{
+				owner: ownerName,
+				name:  nameText,
+				rel:   rel,
+			}
+			apps = append(apps, app)
+		}
+	}
+
+	sort.Slice(apps, func(i int, j int) bool {
+		return apps[i].rel < apps[j].rel
+	})
+	return
+}
+
+func copyRepo(ctx context.Context, factoryDir string, configBranch string, stateBranch string, app appRepo) (err error) {
 	configDir, configAdded, err := ensureCheckout(ctx, factoryDir, configBranch)
 	if err != nil {
 		return
@@ -72,11 +142,11 @@ func Copy(ctx context.Context, factoryDir string, configBranch string, stateBran
 		defer removeWorktree(ctx, factoryDir, stateDir)
 	}
 
-	configPath := filepath.Join(configDir, "config.db")
+	configPath := filepath.Join(configDir, app.rel, "config.db")
 	_, err = os.Stat(configPath)
 	missingConfig := os.IsNotExist(err)
 	if missingConfig {
-		log.Warn("config database is missing", "path", configPath)
+		log.Warn("config database is missing", "owner", app.owner, "name", app.name, "path", configPath)
 		err = fmt.Errorf("config database is missing")
 		return
 	}
@@ -85,12 +155,13 @@ func Copy(ctx context.Context, factoryDir string, configBranch string, stateBran
 		return
 	}
 
-	err = copyRows(ctx, configPath, filepath.Join(stateDir, "state.db"))
+	statePath := filepath.Join(stateDir, app.rel, "state.db")
+	err = copyRows(ctx, configPath, statePath)
 	if err != nil {
 		return
 	}
 
-	err = commitState(ctx, stateDir)
+	err = commitState(ctx, stateDir, app.rel)
 	return
 }
 
@@ -174,14 +245,16 @@ func copyRows(ctx context.Context, configPath string, statePath string) (err err
 	return
 }
 
-func commitState(ctx context.Context, stateDir string) (err error) {
-	_, err = git(ctx, stateDir, "add", "--", "state.db")
+func commitState(ctx context.Context, stateDir string, rel string) (err error) {
+	statePath := filepath.Join(rel, "state.db")
+	stateFile := filepath.ToSlash(statePath)
+	_, err = git(ctx, stateDir, "add", "--", stateFile)
 	if err != nil {
 		log.Error("stage state", "dir", stateDir, "err", err)
 		return
 	}
 
-	output, err := git(ctx, stateDir, "commit", "-m", "copy config into state", "--", "state.db")
+	output, err := git(ctx, stateDir, "commit", "-m", "copy config into state", "--", stateFile)
 	if err == nil {
 		log.Info("committed state", "dir", stateDir)
 		return

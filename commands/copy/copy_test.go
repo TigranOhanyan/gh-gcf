@@ -37,6 +37,21 @@ func Test_Copy_should_apply_config_rows_on_the_state_branch(t *testing.T) {
 	assert.ElementsMatch(t, expected, rows)
 }
 
+func Test_Copy_should_commit_once_for_each_repo(t *testing.T) {
+	app := appSetup{owner: "octo", name: "app"}
+	other := appSetup{owner: "octo", name: "other"}
+	apps := []appSetup{app, other}
+	repoDir := setupRepos(t, apps)
+
+	runCopy(t, repoDir)
+
+	output := mustGit(t, repoDir, "log", "-2", "--format=%s", "state")
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	require.Len(t, lines, 2)
+	assert.Equal(t, "copy config into state", lines[0])
+	assert.Equal(t, "copy config into state", lines[1])
+}
+
 func runCopy(t *testing.T, repoDir string) {
 	t.Helper()
 	cmd := NewCopy()
@@ -54,7 +69,20 @@ func runCopy(t *testing.T, repoDir string) {
 	require.NoError(t, err)
 }
 
+type appSetup struct {
+	owner string
+	name  string
+}
+
 func setupFactory(t *testing.T) (repoDir string) {
+	t.Helper()
+	app := appSetup{owner: "octo", name: "app"}
+	apps := []appSetup{app}
+	repoDir = setupRepos(t, apps)
+	return
+}
+
+func setupRepos(t *testing.T, apps []appSetup) (repoDir string) {
 	t.Helper()
 	ctx := t.Context()
 	repoDir = filepath.Join(JunkDir, t.Name())
@@ -67,36 +95,45 @@ func setupFactory(t *testing.T) (repoDir string) {
 	_ = mustGit(t, repoDir, "config", "user.email", "test@example.com")
 	_ = mustGit(t, repoDir, "config", "user.name", "test")
 
-	configPath := filepath.Join(repoDir, "config.db")
-	configDB, err := configdb.OpenAndMigrate(ctx, configPath)
-	require.NoError(t, err)
+	for _, app := range apps {
+		configPath := filepath.Join(repoDir, "repos", app.owner, app.name, "config.db")
+		configDir := filepath.Dir(configPath)
+		err = os.MkdirAll(configDir, 0755)
+		require.NoError(t, err)
+		configDB, openErr := configdb.OpenAndMigrate(ctx, configPath)
+		require.NoError(t, openErr)
 
-	starting := configentities.CreateConfigParams{
-		Name:  "starting-label",
-		Value: "todo",
+		starting := configentities.CreateConfigParams{
+			Name:  "starting-label",
+			Value: "todo",
+		}
+		err = configDB.Queries.CreateConfig(ctx, starting)
+		require.NoError(t, err)
+
+		attention := configentities.CreateConfigParams{
+			Name:  "attention-label",
+			Value: "needs-attention",
+		}
+		err = configDB.Queries.CreateConfig(ctx, attention)
+		require.NoError(t, err)
+
+		err = configDB.Close()
+		require.NoError(t, err)
+		configRel := filepath.Join("repos", app.owner, app.name, "config.db")
+		_ = mustGit(t, repoDir, "add", configRel)
 	}
-	err = configDB.Queries.CreateConfig(ctx, starting)
-	require.NoError(t, err)
-
-	attention := configentities.CreateConfigParams{
-		Name:  "attention-label",
-		Value: "needs-attention",
-	}
-	err = configDB.Queries.CreateConfig(ctx, attention)
-	require.NoError(t, err)
-
-	err = configDB.Close()
-	require.NoError(t, err)
-	_ = mustGit(t, repoDir, "add", "config.db")
 	_ = mustGit(t, repoDir, "commit", "-m", "config")
 
 	_ = mustGit(t, repoDir, "checkout", "-b", "state")
-	statePath := filepath.Join(repoDir, "state.db")
-	stateDB, err := statedb.Open(ctx, statePath)
-	require.NoError(t, err)
-	err = stateDB.Close()
-	require.NoError(t, err)
-	_ = mustGit(t, repoDir, "add", "state.db")
+	for _, app := range apps {
+		statePath := filepath.Join(repoDir, "repos", app.owner, app.name, "state.db")
+		stateDB, openErr := statedb.Open(ctx, statePath)
+		require.NoError(t, openErr)
+		err = stateDB.Close()
+		require.NoError(t, err)
+		stateRel := filepath.Join("repos", app.owner, app.name, "state.db")
+		_ = mustGit(t, repoDir, "add", stateRel)
+	}
 	_ = mustGit(t, repoDir, "commit", "-m", "state")
 
 	_ = mustGit(t, repoDir, "checkout", "main")
@@ -106,7 +143,7 @@ func setupFactory(t *testing.T) (repoDir string) {
 func readCommittedStates(t *testing.T, repoDir string) (rows []stateentities.State) {
 	t.Helper()
 	tipPath := filepath.Join(JunkDir, t.Name()+"-state-tip.db")
-	blob := mustGit(t, repoDir, "show", "state:state.db")
+	blob := mustGit(t, repoDir, "show", "state:repos/octo/app/state.db")
 	err := os.WriteFile(tipPath, blob, 0644)
 	require.NoError(t, err)
 	rows = readStates(t, tipPath)
