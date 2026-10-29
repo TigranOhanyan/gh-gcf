@@ -20,7 +20,7 @@ func Test_Copy_should_commit_on_the_state_branch(t *testing.T) {
 
 	runCopy(t, repoDir)
 
-	message := git(t, repoDir, "log", "-1", "--format=%s", "state")
+	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
 	assert.Equal(t, "copy config into state", strings.TrimSpace(string(message)))
 }
 
@@ -63,9 +63,9 @@ func setupFactory(t *testing.T) (repoDir string) {
 	err = os.MkdirAll(repoDir, 0755)
 	require.NoError(t, err)
 
-	_ = git(t, repoDir, "init", "-b", "main")
-	_ = git(t, repoDir, "config", "user.email", "test@example.com")
-	_ = git(t, repoDir, "config", "user.name", "test")
+	_ = mustGit(t, repoDir, "init", "-b", "main")
+	_ = mustGit(t, repoDir, "config", "user.email", "test@example.com")
+	_ = mustGit(t, repoDir, "config", "user.name", "test")
 
 	configPath := filepath.Join(repoDir, "config.db")
 	configDB, err := configdb.Open(ctx, configPath)
@@ -87,26 +87,26 @@ func setupFactory(t *testing.T) (repoDir string) {
 
 	err = configDB.Close()
 	require.NoError(t, err)
-	_ = git(t, repoDir, "add", "config.db")
-	_ = git(t, repoDir, "commit", "-m", "config")
+	_ = mustGit(t, repoDir, "add", "config.db")
+	_ = mustGit(t, repoDir, "commit", "-m", "config")
 
-	_ = git(t, repoDir, "checkout", "-b", "state")
+	_ = mustGit(t, repoDir, "checkout", "-b", "state")
 	statePath := filepath.Join(repoDir, "state.db")
 	stateDB, err := statedb.Open(ctx, statePath)
 	require.NoError(t, err)
 	err = stateDB.Close()
 	require.NoError(t, err)
-	_ = git(t, repoDir, "add", "state.db")
-	_ = git(t, repoDir, "commit", "-m", "state")
+	_ = mustGit(t, repoDir, "add", "state.db")
+	_ = mustGit(t, repoDir, "commit", "-m", "state")
 
-	_ = git(t, repoDir, "checkout", "main")
+	_ = mustGit(t, repoDir, "checkout", "main")
 	return
 }
 
 func readCommittedStates(t *testing.T, repoDir string) (rows []stateentities.State) {
 	t.Helper()
 	tipPath := filepath.Join(JunkDir, t.Name()+"-state-tip.db")
-	blob := git(t, repoDir, "show", "state:state.db")
+	blob := mustGit(t, repoDir, "show", "state:state.db")
 	err := os.WriteFile(tipPath, blob, 0644)
 	require.NoError(t, err)
 	rows = readStates(t, tipPath)

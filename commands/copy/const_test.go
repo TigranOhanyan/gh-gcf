@@ -2,7 +2,6 @@ package copy
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -26,15 +25,9 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func git(t *testing.T, dir string, args ...string) (output []byte) {
+func mustGit(t *testing.T, dir string, args ...string) (output []byte) {
 	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	output, err := cmd.Output()
-	exitErr, isExit := err.(*exec.ExitError)
-	if isExit {
-		require.NoError(t, err, string(exitErr.Stderr))
-	}
+	output, err := git(t.Context(), dir, args...)
 	require.NoError(t, err)
 	return
 }

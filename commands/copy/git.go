@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func runGit(ctx context.Context, dir string, args ...string) (output []byte, err error) {
+func git(ctx context.Context, dir string, args ...string) (output []byte, err error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
 	output, err = cmd.Output()

@@ -95,7 +95,7 @@ func Copy(ctx context.Context, factoryDir string, configBranch string, stateBran
 }
 
 func ensureCheckout(ctx context.Context, factoryDir string, branch string) (dir string, added bool, err error) {
-	list, err := runGit(ctx, factoryDir, "worktree", "list", "--porcelain")
+	list, err := git(ctx, factoryDir, "worktree", "list", "--porcelain")
 	if err != nil {
 		log.Error("list worktrees", "err", err)
 		return
@@ -107,7 +107,7 @@ func ensureCheckout(ctx context.Context, factoryDir string, branch string) (dir 
 	}
 
 	dir = filepath.Join(factoryDir, ".worktrees", branch)
-	_, err = runGit(ctx, factoryDir, "worktree", "add", dir, branch)
+	_, err = git(ctx, factoryDir, "worktree", "add", dir, branch)
 	if err != nil {
 		log.Error("add worktree", "branch", branch, "path", dir, "err", err)
 		return
@@ -118,7 +118,7 @@ func ensureCheckout(ctx context.Context, factoryDir string, branch string) (dir 
 }
 
 func removeWorktree(ctx context.Context, factoryDir string, worktreePath string) {
-	_, err := runGit(ctx, factoryDir, "worktree", "remove", "--force", worktreePath)
+	_, err := git(ctx, factoryDir, "worktree", "remove", "--force", worktreePath)
 	if err != nil {
 		log.Warn("remove worktree", "path", worktreePath, "err", err)
 	}
@@ -175,13 +175,13 @@ func copyRows(ctx context.Context, configPath string, statePath string) (err err
 }
 
 func commitState(ctx context.Context, stateDir string) (err error) {
-	_, err = runGit(ctx, stateDir, "add", "--", "state.db")
+	_, err = git(ctx, stateDir, "add", "--", "state.db")
 	if err != nil {
 		log.Error("stage state", "dir", stateDir, "err", err)
 		return
 	}
 
-	output, err := runGit(ctx, stateDir, "commit", "-m", "copy config into state", "--", "state.db")
+	output, err := git(ctx, stateDir, "commit", "-m", "copy config into state", "--", "state.db")
 	if err == nil {
 		log.Info("committed state", "dir", stateDir)
 		return
