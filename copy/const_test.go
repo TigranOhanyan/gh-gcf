@@ -1,10 +1,13 @@
-package commands
+package copy
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 var JunkDir string
@@ -21,4 +24,17 @@ func TestMain(m *testing.M) {
 	}
 
 	os.Exit(m.Run())
+}
+
+func git(t *testing.T, dir string, args ...string) (output []byte) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	output, err := cmd.Output()
+	exitErr, isExit := err.(*exec.ExitError)
+	if isExit {
+		require.NoError(t, err, string(exitErr.Stderr))
+	}
+	require.NoError(t, err)
+	return
 }

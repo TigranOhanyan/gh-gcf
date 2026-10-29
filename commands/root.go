@@ -1,13 +1,17 @@
 package commands
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/spf13/cobra"
+
+	"github.com/TigranOhanyan/gh-gcf/copy"
+)
 
 func NewRoot() (cmd *cobra.Command) {
 	cmd = &cobra.Command{
 		Use:   "gh-gcf",
 		Short: "Software factory",
 	}
-	copyCmd := NewCopy()
+	copyCmd := copy.NewCopy()
 	cmd.AddCommand(copyCmd)
 	return
 }

@@ -12,6 +12,10 @@ _Avoid_: host factory, control repo
 A repo whose issues a factory builds. It holds only its own code, CI and agent rules, and does not know the factory exists.
 _Avoid_: host, host repo, target repo
 
+**Bind**:
+The commit on a factory repo's main branch that installs that factory.
+_Avoid_: setup, init
+
 ## Running
 
 **Tick**:
