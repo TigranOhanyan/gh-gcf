@@ -3,7 +3,7 @@ package commands
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/TigranOhanyan/gh-gcf/copy"
+	"github.com/TigranOhanyan/gh-gcf/commands/copy"
 )
 
 func NewRoot() (cmd *cobra.Command) {
