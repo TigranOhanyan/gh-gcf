@@ -21,7 +21,13 @@ const (
 	gitignoreRel  = ".worktrees/.gitignore"
 	hintRel       = ".worktrees/internal_use_only"
 	commitMessage = "bind factory"
+	versionToken  = "__GCF_VERSION__"
+	devVersion    = "dev"
 )
+
+// Version is the release tag of this binary. The release build sets it with -X.
+// A local build leaves it as dev, and bind refuses to run.
+var Version = devVersion
 
 func NewBind() (cmd *cobra.Command) {
 	var factoryRepo string
@@ -41,6 +47,12 @@ func NewBind() (cmd *cobra.Command) {
 }
 
 func Bind(ctx context.Context, factoryDir string) (err error) {
+	err = requireRelease()
+	if err != nil {
+		log.Error("gh-gcf version", "version", Version, "err", err)
+		return
+	}
+
 	missingFactory := factoryDir == ""
 	if missingFactory {
 		factoryDir, err = os.Getwd()
@@ -134,7 +146,31 @@ func installWorkflow(mainDir string) (err error) {
 	if err != nil {
 		return
 	}
-	err = os.WriteFile(workflowPath, workflowfile.FactoryTick, 0644)
+	contents, err := workflowContents()
+	if err != nil {
+		return
+	}
+	err = os.WriteFile(workflowPath, contents, 0644)
+	return
+}
+
+func requireRelease() (err error) {
+	missing := Version == "" || Version == devVersion
+	if missing {
+		err = fmt.Errorf("gh-gcf version is not a release")
+	}
+	return
+}
+
+func workflowContents() (contents []byte, err error) {
+	token := []byte(versionToken)
+	hasToken := bytes.Contains(workflowfile.FactoryTick, token)
+	if !hasToken {
+		err = fmt.Errorf("workflow template has no version token")
+		return
+	}
+	version := []byte(Version)
+	contents = bytes.ReplaceAll(workflowfile.FactoryTick, token, version)
 	return
 }
 

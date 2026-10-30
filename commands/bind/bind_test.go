@@ -26,7 +26,27 @@ func Test_Bind_should_commit_the_workflow_on_main(t *testing.T) {
 	assert.Equal(t, commitMessage, strings.TrimSpace(string(message)))
 
 	committed := mustGit(t, repoDir, "show", "main:"+workflowRel)
-	assert.Equal(t, workflowfile.FactoryTick, committed)
+	expected := pinnedWorkflow()
+	assert.Equal(t, expected, committed)
+}
+
+func Test_Bind_should_refuse_a_dev_version(t *testing.T) {
+	repoDir := setupMain(t)
+	previous := Version
+	Version = devVersion
+	t.Cleanup(func() {
+		Version = previous
+	})
+
+	err := runBind(t, repoDir)
+	require.Error(t, err)
+
+	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "main")
+	assert.Equal(t, "init", strings.TrimSpace(string(message)))
+
+	_, err = os.Stat(filepath.Join(repoDir, filepath.FromSlash(workflowRel)))
+	assert.Error(t, err)
+	assert.True(t, os.IsNotExist(err))
 }
 
 func Test_Bind_should_migrate_config_and_commit_it_on_main(t *testing.T) {
@@ -65,7 +85,8 @@ func Test_Bind_should_replace_the_previous_workflow(t *testing.T) {
 	require.NoError(t, err)
 
 	committed := mustGit(t, repoDir, "show", "main:"+workflowRel)
-	assert.Equal(t, workflowfile.FactoryTick, committed)
+	expected := pinnedWorkflow()
+	assert.Equal(t, expected, committed)
 }
 
 func Test_Bind_should_commit_the_worktrees_hint_on_main(t *testing.T) {
@@ -98,6 +119,13 @@ func Test_Bind_should_refuse_a_directory_that_is_not_a_git_repo(t *testing.T) {
 	_, err = os.Stat(filepath.Join(repoDir, ".worktrees"))
 	assert.Error(t, err)
 	assert.True(t, os.IsNotExist(err))
+}
+
+func pinnedWorkflow() (contents []byte) {
+	token := []byte(versionToken)
+	version := []byte(Version)
+	contents = bytes.ReplaceAll(workflowfile.FactoryTick, token, version)
+	return
 }
 
 func runBind(t *testing.T, repoDir string) (err error) {

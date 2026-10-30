@@ -12,6 +12,8 @@ import (
 var JunkDir string
 
 func TestMain(m *testing.M) {
+	Version = "v9.9.9"
+
 	_, filename, _, _ := runtime.Caller(0)
 	helperDir := filepath.Dir(filename)
 	testDataDir := filepath.Join(helperDir, "testdata")

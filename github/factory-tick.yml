@@ -2,13 +2,14 @@
 # in the factory repo. Actions runs it there.
 #
 # GH_GCF_VERSION is the pin passed to `gh extension install --pin`.
+# Bind replaces __GCF_VERSION__ with the release tag of the binary that runs it.
 # The tick checks out main and state, runs `gh gcf copy`, and pushes state.
 # CURSOR_API_KEY is available for later steps. It is never printed.
 
 name: Factory Tick
 
 env:
-  GH_GCF_VERSION: v0.2.0
+  GH_GCF_VERSION: __GCF_VERSION__
 
 on:
   schedule:
