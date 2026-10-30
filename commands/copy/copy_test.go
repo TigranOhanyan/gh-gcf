@@ -18,7 +18,8 @@ import (
 func Test_Copy_should_commit_on_the_state_branch(t *testing.T) {
 	repoDir := setupFactory(t)
 
-	runCopy(t, repoDir)
+	err := runCopy(t, repoDir)
+	require.NoError(t, err)
 
 	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
 	assert.Equal(t, "copy config into state", strings.TrimSpace(string(message)))
@@ -27,7 +28,8 @@ func Test_Copy_should_commit_on_the_state_branch(t *testing.T) {
 func Test_Copy_should_apply_config_rows_on_the_state_branch(t *testing.T) {
 	repoDir := setupFactory(t)
 
-	runCopy(t, repoDir)
+	err := runCopy(t, repoDir)
+	require.NoError(t, err)
 
 	rows := readCommittedStates(t, repoDir)
 	expected := []stateentities.State{
@@ -43,7 +45,8 @@ func Test_Copy_should_commit_once_for_each_repo(t *testing.T) {
 	apps := []appSetup{app, other}
 	repoDir := setupRepos(t, apps)
 
-	runCopy(t, repoDir)
+	err := runCopy(t, repoDir)
+	require.NoError(t, err)
 
 	output := mustGit(t, repoDir, "log", "-2", "--format=%s", "state")
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
@@ -52,7 +55,20 @@ func Test_Copy_should_commit_once_for_each_repo(t *testing.T) {
 	assert.Equal(t, "copy config into state", lines[1])
 }
 
-func runCopy(t *testing.T, repoDir string) {
+func Test_Copy_should_refuse_a_path_that_is_not_repos_owner_name(t *testing.T) {
+	repoDir := setupFactory(t)
+	stray := filepath.Join(repoDir, "repos", "stray.txt")
+	err := os.WriteFile(stray, []byte("x"), 0644)
+	require.NoError(t, err)
+
+	err = runCopy(t, repoDir)
+	require.Error(t, err)
+
+	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
+	assert.Equal(t, "state", strings.TrimSpace(string(message)))
+}
+
+func runCopy(t *testing.T, repoDir string) (err error) {
 	t.Helper()
 	cmd := NewCopy()
 	var output bytes.Buffer
@@ -65,8 +81,8 @@ func runCopy(t *testing.T, repoDir string) {
 	}
 	cmd.SetArgs(args)
 
-	err := cmd.ExecuteContext(t.Context())
-	require.NoError(t, err)
+	err = cmd.ExecuteContext(t.Context())
+	return
 }
 
 type appSetup struct {

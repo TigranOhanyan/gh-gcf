@@ -92,11 +92,13 @@ func listApps(factoryDir string) (apps []appRepo, err error) {
 	}
 
 	for _, owner := range owners {
+		ownerName := owner.Name()
+		ownerRel := filepath.ToSlash(filepath.Join("repos", ownerName))
 		ownerIsDir := owner.IsDir()
 		if !ownerIsDir {
-			continue
+			err = fmt.Errorf("path is not repos/<owner>/<name>: %s", ownerRel)
+			return
 		}
-		ownerName := owner.Name()
 		ownerDir := filepath.Join(reposDir, ownerName)
 		names, readErr := os.ReadDir(ownerDir)
 		if readErr != nil {
@@ -104,12 +106,13 @@ func listApps(factoryDir string) (apps []appRepo, err error) {
 			return
 		}
 		for _, name := range names {
+			nameText := name.Name()
+			rel := filepath.ToSlash(filepath.Join("repos", ownerName, nameText))
 			nameIsDir := name.IsDir()
 			if !nameIsDir {
-				continue
+				err = fmt.Errorf("path is not repos/<owner>/<name>: %s", rel)
+				return
 			}
-			nameText := name.Name()
-			rel := filepath.Join("repos", ownerName, nameText)
 			app := appRepo{
 				owner: ownerName,
 				name:  nameText,
