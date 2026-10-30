@@ -3,6 +3,7 @@ package commands
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/TigranOhanyan/gh-gcf/commands/bind"
 	"github.com/TigranOhanyan/gh-gcf/commands/copy"
 )
 
@@ -13,5 +14,7 @@ func NewRoot() (cmd *cobra.Command) {
 	}
 	copyCmd := copy.NewCopy()
 	cmd.AddCommand(copyCmd)
+	bindCmd := bind.NewBind()
+	cmd.AddCommand(bindCmd)
 	return
 }

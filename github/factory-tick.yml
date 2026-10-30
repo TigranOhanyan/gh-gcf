@@ -1,0 +1,49 @@
+# Scheduled tick. Bind copies this file to .github/workflows/factory-tick.yml
+# in the factory repo. Actions runs it there.
+#
+# GH_GCF_VERSION is the pin passed to `gh extension install --pin`.
+# The tick checks out main and state, runs `gh gcf copy`, and pushes state.
+# CURSOR_API_KEY is available for later steps. It is never printed.
+
+name: Factory Tick
+
+env:
+  GH_GCF_VERSION: v0.2.0
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: factory-tick
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+
+    steps:
+      - name: Checkout factory
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Tick
+        run: |
+          set -euo pipefail
+
+          git checkout -B main
+          git fetch origin state:refs/heads/state
+
+          echo "Installing gh-gcf ${GH_GCF_VERSION}."
+          gh extension install TigranOhanyan/gh-gcf --pin "${GH_GCF_VERSION}"
+
+          gh gcf copy
+          git push origin state
