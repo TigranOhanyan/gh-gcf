@@ -1,6 +1,6 @@
 # Bind keeps worktrees inside the factory repo
 
-Bind commits `.worktrees/.gitignore` and an empty `.worktrees/internal_use_only` on `main`. That gitignore ignores every other file in `.worktrees`, including a checkout such as `.worktrees/state`. The root `.gitignore` is left alone, and `copy` does not create or require these files.
+Bind commits `.worktrees/.gitignore` and an empty `.worktrees/internal_use_only` on `main`. That gitignore ignores every other file in `.worktrees`, including a checkout such as `.worktrees/state`. The root `.gitignore` is left alone.
 
 ## Considered Options
 

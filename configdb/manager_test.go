@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/TigranOhanyan/gh-gcf/configdb/entities"
 	"github.com/ncruces/go-sqlite3/driver"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,9 +28,10 @@ func Test_OpenAndMigrate_should_migrate_a_new_database(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, db.Queries)
 
-	rows, err := db.Queries.GetConfigs(ctx)
+	versions, err := db.Queries.GetAppliedMigrationVersions(ctx)
 	require.NoError(t, err)
-	assert.Empty(t, rows)
+	expected := []int64{0, 1}
+	assert.Equal(t, expected, versions)
 
 	err = db.Close()
 	require.NoError(t, err)
@@ -39,6 +39,20 @@ func Test_OpenAndMigrate_should_migrate_a_new_database(t *testing.T) {
 	stat, err := os.Stat(path)
 	require.NoError(t, err)
 	assert.Greater(t, stat.Size(), int64(0))
+}
+
+func Test_OpenAndMigrate_should_not_create_a_config_table(t *testing.T) {
+	ctx := t.Context()
+	path := filepath.Join(JunkDir, "Test_OpenAndMigrate_should_not_create_a_config_table.db")
+	removeDatabase(t, path)
+
+	db, err := OpenAndMigrate(ctx, path)
+	require.NoError(t, err)
+	defer db.Close()
+
+	var name string
+	err = db.DB.QueryRowContext(ctx, `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'config'`).Scan(&name)
+	assert.Error(t, err)
 }
 
 func Test_OpenAndMigrate_should_leave_an_existing_database_unchanged(t *testing.T) {
@@ -49,13 +63,8 @@ func Test_OpenAndMigrate_should_leave_an_existing_database_unchanged(t *testing.
 	db, err := OpenAndMigrate(ctx, path)
 	require.NoError(t, err)
 
-	params := entities.CreateConfigParams{
-		Name:  "starting-label",
-		Value: "todo",
-	}
-	err = db.Queries.CreateConfig(ctx, params)
+	before, err := db.Queries.GetAppliedMigrationVersions(ctx)
 	require.NoError(t, err)
-
 	err = db.Close()
 	require.NoError(t, err)
 
@@ -63,10 +72,9 @@ func Test_OpenAndMigrate_should_leave_an_existing_database_unchanged(t *testing.
 	require.NoError(t, err)
 	defer db.Close()
 
-	row, err := db.Queries.GetConfig(ctx, "starting-label")
+	after, err := db.Queries.GetAppliedMigrationVersions(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, "starting-label", row.Name)
-	assert.Equal(t, "todo", row.Value)
+	assert.Equal(t, before, after)
 }
 
 func Test_OpenAndMigrate_should_refuse_an_empty_path(t *testing.T) {
@@ -85,11 +93,7 @@ func Test_OpenIfMigrated_should_open_a_database_at_the_current_version(t *testin
 	db, err := OpenAndMigrate(ctx, path)
 	require.NoError(t, err)
 
-	params := entities.CreateConfigParams{
-		Name:  "starting-label",
-		Value: "todo",
-	}
-	err = db.Queries.CreateConfig(ctx, params)
+	before, err := db.Queries.GetAppliedMigrationVersions(ctx)
 	require.NoError(t, err)
 	err = db.Close()
 	require.NoError(t, err)
@@ -98,10 +102,9 @@ func Test_OpenIfMigrated_should_open_a_database_at_the_current_version(t *testin
 	require.NoError(t, err)
 	defer db.Close()
 
-	row, err := db.Queries.GetConfig(ctx, "starting-label")
+	after, err := db.Queries.GetAppliedMigrationVersions(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, "starting-label", row.Name)
-	assert.Equal(t, "todo", row.Value)
+	assert.Equal(t, before, after)
 }
 
 func Test_OpenIfMigrated_should_refuse_a_database_that_is_behind(t *testing.T) {

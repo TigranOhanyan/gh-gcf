@@ -4,7 +4,6 @@
 
 package entities
 
-type State struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
+type Tick struct {
+	ID string `json:"id"`
 }

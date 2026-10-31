@@ -5,10 +5,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/TigranOhanyan/gh-gcf/statedb/entities"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+const tickID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 
 func removeDatabase(t *testing.T, path string) {
 	t.Helper()
@@ -28,9 +29,9 @@ func Test_Open_should_migrate_a_new_database(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, db.Queries)
 
-	rows, err := db.Queries.GetStates(ctx)
+	ids, err := db.Queries.GetTicks(ctx)
 	require.NoError(t, err)
-	assert.Empty(t, rows)
+	assert.Empty(t, ids)
 
 	err = db.Close()
 	require.NoError(t, err)
@@ -48,11 +49,7 @@ func Test_Open_should_leave_an_existing_database_unchanged(t *testing.T) {
 	db, err := Open(ctx, path)
 	require.NoError(t, err)
 
-	params := entities.CreateStateParams{
-		Name:  "starting-label",
-		Value: "todo",
-	}
-	err = db.Queries.CreateState(ctx, params)
+	err = db.Queries.CreateTick(ctx, tickID)
 	require.NoError(t, err)
 
 	err = db.Close()
@@ -62,10 +59,28 @@ func Test_Open_should_leave_an_existing_database_unchanged(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	row, err := db.Queries.GetState(ctx, "starting-label")
+	ids, err := db.Queries.GetTicks(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, "starting-label", row.Name)
-	assert.Equal(t, "todo", row.Value)
+	require.Len(t, ids, 1)
+	assert.Equal(t, tickID, ids[0])
+}
+
+func Test_CreateTick_should_refuse_an_id_that_is_not_26_characters(t *testing.T) {
+	ctx := t.Context()
+	path := filepath.Join(JunkDir, "Test_CreateTick_should_refuse_an_id_that_is_not_26_characters.db")
+	removeDatabase(t, path)
+
+	db, err := Open(ctx, path)
+	require.NoError(t, err)
+	defer db.Close()
+
+	shortID := "short"
+	err = db.Queries.CreateTick(ctx, shortID)
+	require.Error(t, err)
+
+	ids, err := db.Queries.GetTicks(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, ids)
 }
 
 func Test_Open_should_refuse_an_empty_path(t *testing.T) {

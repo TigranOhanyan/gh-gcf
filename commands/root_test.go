@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func Test_NewRoot_should_list_copy_and_bind(t *testing.T) {
+func Test_NewRoot_should_list_bind(t *testing.T) {
 	cmd := NewRoot()
 	var output bytes.Buffer
 	cmd.SetOut(&output)
@@ -19,8 +19,20 @@ func Test_NewRoot_should_list_copy_and_bind(t *testing.T) {
 	require.NoError(t, err)
 
 	text := output.String()
-	assert.Contains(t, text, "copy")
-	assert.Contains(t, text, "Copy config values into state")
 	assert.Contains(t, text, "bind")
 	assert.Contains(t, text, "Install the tick workflow and migrate config")
+}
+
+func Test_NewRoot_should_not_list_copy(t *testing.T) {
+	cmd := NewRoot()
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+	cmd.SetArgs([]string{"--help"})
+
+	err := cmd.ExecuteContext(t.Context())
+	require.NoError(t, err)
+
+	text := output.String()
+	assert.NotContains(t, text, "copy")
 }

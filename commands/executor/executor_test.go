@@ -2,7 +2,6 @@ package executor
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,18 +10,13 @@ import (
 
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 	"github.com/TigranOhanyan/gh-gcf/statedb"
-	_ "github.com/ncruces/go-sqlite3/driver"
-	_ "github.com/ncruces/go-sqlite3/embed"
+	stateentities "github.com/TigranOhanyan/gh-gcf/statedb/entities"
+	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	insertGooseVersion = `INSERT INTO goose_db_version (version_id, is_applied) VALUES (?, ?)`
-	actionVersion      = int64(99999)
-)
-
-func Test_Execute_should_commit_on_the_state_branch(t *testing.T) {
+func Test_Execute_should_commit_the_tick_subject_on_the_state_branch(t *testing.T) {
 	repoDir := setupFactory(t)
 	action := recordAction{}
 
@@ -35,14 +29,17 @@ func Test_Execute_should_commit_on_the_state_branch(t *testing.T) {
 	require.NoError(t, err)
 
 	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
-	assert.Equal(t, "record state", strings.TrimSpace(string(message)))
+	ids := ticksAtTip(t, repoDir, "repos/octo/app")
+	require.Len(t, ids, 1)
+	id := ids[0]
+	expected := fmt.Sprintf("[%s] [record] [octo/app] recorded tick %s", id, id)
+	assert.Equal(t, expected, strings.TrimSpace(string(message)))
 }
 
-func Test_Execute_should_record_the_action_row_on_the_state_branch(t *testing.T) {
+func Test_Execute_should_store_one_tick_on_the_state_branch(t *testing.T) {
 	repoDir := setupFactory(t)
 	action := recordAction{}
 	rel := "repos/octo/app"
-	before := countGooseVersions(t, repoDir, rel)
 
 	exec := Executor{
 		FactoryDir:   repoDir,
@@ -52,9 +49,10 @@ func Test_Execute_should_record_the_action_row_on_the_state_branch(t *testing.T)
 	err := exec.Execute(t.Context(), action)
 	require.NoError(t, err)
 
-	after := countGooseVersions(t, repoDir, rel)
-	expected := before + 1
-	assert.Equal(t, expected, after)
+	ids := ticksAtTip(t, repoDir, rel)
+	require.Len(t, ids, 1)
+	_, err = ulid.Parse(ids[0])
+	assert.NoError(t, err)
 }
 
 func Test_Execute_should_commit_once_for_each_repo(t *testing.T) {
@@ -75,11 +73,19 @@ func Test_Execute_should_commit_once_for_each_repo(t *testing.T) {
 	output := mustGit(t, repoDir, "log", "-2", "--format=%s", "state")
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	require.Len(t, lines, 2)
-	assert.Equal(t, "record state", lines[0])
-	assert.Equal(t, "record state", lines[1])
+	appIDs := ticksAtTip(t, repoDir, "repos/octo/app")
+	otherIDs := ticksAtTip(t, repoDir, "repos/octo/other")
+	require.Len(t, appIDs, 1)
+	require.Len(t, otherIDs, 1)
+	appID := appIDs[0]
+	otherID := otherIDs[0]
+	appSubject := fmt.Sprintf("[%s] [record] [octo/app] recorded tick %s", appID, appID)
+	otherSubject := fmt.Sprintf("[%s] [record] [octo/other] recorded tick %s", otherID, otherID)
+	assert.Equal(t, otherSubject, lines[0])
+	assert.Equal(t, appSubject, lines[1])
 }
 
-func Test_Execute_should_record_the_action_row_for_each_repo(t *testing.T) {
+func Test_Execute_should_store_one_tick_for_each_repo(t *testing.T) {
 	app := appSetup{owner: "octo", name: "app"}
 	other := appSetup{owner: "octo", name: "other"}
 	apps := []appSetup{app, other}
@@ -87,8 +93,6 @@ func Test_Execute_should_record_the_action_row_for_each_repo(t *testing.T) {
 	action := recordAction{}
 	appRel := "repos/octo/app"
 	otherRel := "repos/octo/other"
-	appBefore := countGooseVersions(t, repoDir, appRel)
-	otherBefore := countGooseVersions(t, repoDir, otherRel)
 
 	exec := Executor{
 		FactoryDir:   repoDir,
@@ -98,12 +102,15 @@ func Test_Execute_should_record_the_action_row_for_each_repo(t *testing.T) {
 	err := exec.Execute(t.Context(), action)
 	require.NoError(t, err)
 
-	appAfter := countGooseVersions(t, repoDir, appRel)
-	otherAfter := countGooseVersions(t, repoDir, otherRel)
-	appExpected := appBefore + 1
-	otherExpected := otherBefore + 1
-	assert.Equal(t, appExpected, appAfter)
-	assert.Equal(t, otherExpected, otherAfter)
+	appIDs := ticksAtTip(t, repoDir, appRel)
+	otherIDs := ticksAtTip(t, repoDir, otherRel)
+	require.Len(t, appIDs, 1)
+	require.Len(t, otherIDs, 1)
+	_, err = ulid.Parse(appIDs[0])
+	assert.NoError(t, err)
+	_, err = ulid.Parse(otherIDs[0])
+	assert.NoError(t, err)
+	assert.NotEqual(t, appIDs[0], otherIDs[0])
 }
 
 func Test_Execute_should_refuse_a_path_that_is_not_repos_owner_name(t *testing.T) {
@@ -138,14 +145,17 @@ func Test_Execute_should_commit_when_the_action_writes_nothing(t *testing.T) {
 	require.NoError(t, err)
 
 	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
-	assert.Equal(t, "record state", strings.TrimSpace(string(message)))
+	ids := ticksAtTip(t, repoDir, "repos/octo/app")
+	require.Len(t, ids, 1)
+	id := ids[0]
+	expected := fmt.Sprintf("[%s] [quiet] [octo/app] wrote nothing", id)
+	assert.Equal(t, expected, strings.TrimSpace(string(message)))
 }
 
-func Test_Execute_should_leave_the_rows_when_the_action_writes_nothing(t *testing.T) {
+func Test_Execute_should_store_one_tick_when_the_action_writes_nothing(t *testing.T) {
 	repoDir := setupFactory(t)
 	action := quietAction{}
 	rel := "repos/octo/app"
-	before := countGooseVersions(t, repoDir, rel)
 
 	exec := Executor{
 		FactoryDir:   repoDir,
@@ -155,8 +165,10 @@ func Test_Execute_should_leave_the_rows_when_the_action_writes_nothing(t *testin
 	err := exec.Execute(t.Context(), action)
 	require.NoError(t, err)
 
-	after := countGooseVersions(t, repoDir, rel)
-	assert.Equal(t, before, after)
+	ids := ticksAtTip(t, repoDir, rel)
+	require.Len(t, ids, 1)
+	_, err = ulid.Parse(ids[0])
+	assert.NoError(t, err)
 }
 
 func Test_Execute_should_leave_the_branch_when_the_action_returns_an_error(t *testing.T) {
@@ -175,51 +187,64 @@ func Test_Execute_should_leave_the_branch_when_the_action_returns_an_error(t *te
 	assert.Equal(t, "state", strings.TrimSpace(string(message)))
 }
 
-const actionMessage = "record state"
+func Test_Execute_should_not_store_a_tick_when_the_action_returns_an_error(t *testing.T) {
+	repoDir := setupFactory(t)
+	action := failAction{}
+	rel := "repos/octo/app"
+
+	exec := Executor{
+		FactoryDir:   repoDir,
+		ConfigBranch: "main",
+		StateBranch:  "state",
+	}
+	err := exec.Execute(t.Context(), action)
+	require.Error(t, err)
+
+	ids := ticksAtTip(t, repoDir, rel)
+	assert.Empty(t, ids)
+}
+
+const recordName = "record"
 
 type recordAction struct{}
 
-func (recordAction) Message() (message string) {
-	message = actionMessage
+func (recordAction) Name() (name string) {
+	name = recordName
 	return
 }
 
-func (recordAction) Apply(ctx context.Context, repo Repo) (err error) {
-	err = insertActionVersion(ctx, repo)
+func (recordAction) Apply(_ context.Context, _ Repo, tick stateentities.Tick) (message string, err error) {
+	id := tick.ID
+	message = fmt.Sprintf("recorded tick %s", id)
 	return
 }
+
+const quietName = "quiet"
+const quietMessage = "wrote nothing"
 
 type quietAction struct{}
 
-func (quietAction) Message() (message string) {
-	message = actionMessage
+func (quietAction) Name() (name string) {
+	name = quietName
 	return
 }
 
-func (quietAction) Apply(context.Context, Repo) (err error) {
+func (quietAction) Apply(context.Context, Repo, stateentities.Tick) (message string, err error) {
+	message = quietMessage
 	return
 }
+
+const failName = "fail"
 
 type failAction struct{}
 
-func (failAction) Message() (message string) {
-	message = actionMessage
+func (failAction) Name() (name string) {
+	name = failName
 	return
 }
 
-func (failAction) Apply(ctx context.Context, repo Repo) (err error) {
-	err = insertActionVersion(ctx, repo)
-	if err != nil {
-		return
-	}
+func (failAction) Apply(context.Context, Repo, stateentities.Tick) (message string, err error) {
 	err = fmt.Errorf("label is missing")
-	return
-}
-
-func insertActionVersion(ctx context.Context, repo Repo) (err error) {
-	versionID := int64(actionVersion)
-	applied := int64(1)
-	_, err = repo.State.DB.ExecContext(ctx, insertGooseVersion, versionID, applied)
 	return
 }
 
@@ -279,7 +304,7 @@ func setupRepos(t *testing.T, apps []appSetup) (repoDir string) {
 	return
 }
 
-func countGooseVersions(t *testing.T, repoDir string, rel string) (count int) {
+func ticksAtTip(t *testing.T, repoDir string, rel string) (ids []string) {
 	t.Helper()
 	tipPath := filepath.Join(JunkDir, t.Name()+"-state-tip.db")
 	spec := "state:" + filepath.ToSlash(rel) + "/state.db"
@@ -287,11 +312,11 @@ func countGooseVersions(t *testing.T, repoDir string, rel string) (count int) {
 	err := os.WriteFile(tipPath, blob, 0644)
 	require.NoError(t, err)
 
-	db, err := sql.Open("sqlite3", tipPath)
+	db, err := statedb.Open(t.Context(), tipPath)
 	require.NoError(t, err)
 	defer db.Close()
 
-	err = db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM goose_db_version`).Scan(&count)
+	ids, err = db.Queries.GetTicks(t.Context())
 	require.NoError(t, err)
 	return
 }

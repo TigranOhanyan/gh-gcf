@@ -2,15 +2,20 @@ package executor
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
+	"time"
 
 	"charm.land/log/v2"
+	"github.com/oklog/ulid/v2"
 
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 	"github.com/TigranOhanyan/gh-gcf/statedb"
+	stateentities "github.com/TigranOhanyan/gh-gcf/statedb/entities"
 )
 
 // Repo is one app repo with config and state open.
@@ -23,10 +28,11 @@ type Repo struct {
 }
 
 // Action is the work one command does for a single app repo.
-// Message is the state commit message for that work.
+// Name is the action name in the state commit subject.
+// Apply returns the message for that subject, formed from what the action did.
 type Action interface {
-	Apply(ctx context.Context, repo Repo) (err error)
-	Message() (message string)
+	Name() (name string)
+	Apply(ctx context.Context, repo Repo, tick stateentities.Tick) (message string, err error)
 }
 
 // Executor carries one action across every app repo in FactoryDir.
@@ -43,15 +49,14 @@ type repoFolder struct {
 	rel   string
 }
 
-// Execute opens every app repo, applies action, and commits state.db.
+// Execute opens every app repo, inserts one tick, applies action, and commits state.db.
 // Config is opened from ConfigBranch and is not committed. State is opened from StateBranch.
-// The commit message is action.Message. An unchanged state.db is still committed.
+// The commit subject is [tick id] [action name] [owner/name] and the message Apply returned.
 // The first action error stops the walk. Repos already committed stay committed.
 func (executor Executor) Execute(ctx context.Context, action Action) (err error) {
 	factoryDir := executor.FactoryDir
 	configBranch := executor.ConfigBranch
 	stateBranch := executor.StateBranch
-	message := action.Message()
 	missingFactory := factoryDir == ""
 	if missingFactory {
 		factoryDir, err = os.Getwd()
@@ -96,7 +101,7 @@ func (executor Executor) Execute(ctx context.Context, action Action) (err error)
 	}
 
 	for _, folder := range folders {
-		err = apply(ctx, configDir, stateDir, message, action, folder)
+		err = apply(ctx, configDir, stateDir, action, folder)
 		if err != nil {
 			log.Error("apply", "owner", folder.owner, "name", folder.name, "err", err)
 			return
@@ -154,7 +159,7 @@ func listRepos(factoryDir string) (folders []repoFolder, err error) {
 	return
 }
 
-func apply(ctx context.Context, configDir string, stateDir string, message string, action Action, folder repoFolder) (err error) {
+func apply(ctx context.Context, configDir string, stateDir string, action Action, folder repoFolder) (err error) {
 	configPath := filepath.Join(configDir, folder.rel, "config.db")
 	_, err = os.Stat(configPath)
 	missingConfig := os.IsNotExist(err)
@@ -189,7 +194,17 @@ func apply(ctx context.Context, configDir string, stateDir string, message strin
 		Config: configDB,
 		State:  stateDB,
 	}
-	err = action.Apply(ctx, repo)
+	id, err := newTickID()
+	if err != nil {
+		return
+	}
+	err = stateDB.Queries.CreateTick(ctx, id)
+	if err != nil {
+		log.Error("insert tick", "owner", folder.owner, "name", folder.name, "err", err)
+		return
+	}
+	tick := stateentities.Tick{ID: id}
+	message, err := action.Apply(ctx, repo, tick)
 	if err != nil {
 		return
 	}
@@ -199,7 +214,29 @@ func apply(ctx context.Context, configDir string, stateDir string, message strin
 		log.Error("close state", "path", statePath, "err", err)
 		return
 	}
-	err = commitState(ctx, stateDir, folder.rel, message)
+	storedID := tick.ID
+	name := action.Name()
+	repoName := folder.owner + "/" + folder.name
+	subject := commitSubject(storedID, name, repoName, message)
+	err = commitState(ctx, stateDir, folder.rel, subject)
+	return
+}
+
+func newTickID() (id string, err error) {
+	now := time.Now()
+	timestamp := ulid.Timestamp(now)
+	value, err := ulid.New(timestamp, rand.Reader)
+	if err != nil {
+		log.Error("new tick id", "err", err)
+		return
+	}
+	id = value.String()
+	return
+}
+
+func commitSubject(id string, name string, repoName string, message string) (subject string) {
+	subject = fmt.Sprintf("[%s] [%s] [%s] %s", id, name, repoName, message)
+	subject = strings.TrimSpace(subject)
 	return
 }
 
