@@ -22,6 +22,10 @@ _Avoid_: setup, init
 One scheduled run of the factory that looks at every app repo and takes the next action for each issue and pull request.
 _Avoid_: reconcile, cycle, job
 
+**Executor**:
+The part of the factory that carries one command across every app repo.
+_Avoid_: engine, runner
+
 **Config**:
 What the user wants the factory to do: its labels, Apps, blueprints, and the CI checks that can claim a fixer. Only the user changes it.
 _Avoid_: settings, desired state

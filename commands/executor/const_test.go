@@ -1,4 +1,4 @@
-package repos
+package executor
 
 import (
 	"os"

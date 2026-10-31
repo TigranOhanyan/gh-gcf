@@ -1,4 +1,4 @@
-package repos
+package executor
 
 import (
 	"context"
@@ -22,24 +22,34 @@ const (
 	actionVersion      = int64(99999)
 )
 
-func Test_Run_should_commit_on_the_state_branch(t *testing.T) {
+func Test_Execute_should_commit_on_the_state_branch(t *testing.T) {
 	repoDir := setupFactory(t)
 	action := recordAction{}
 
-	err := Run(t.Context(), repoDir, "main", "state", "record state", action)
+	exec := Executor{
+		FactoryDir:   repoDir,
+		ConfigBranch: "main",
+		StateBranch:  "state",
+	}
+	err := exec.Execute(t.Context(), action)
 	require.NoError(t, err)
 
 	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
 	assert.Equal(t, "record state", strings.TrimSpace(string(message)))
 }
 
-func Test_Run_should_record_the_action_row_on_the_state_branch(t *testing.T) {
+func Test_Execute_should_record_the_action_row_on_the_state_branch(t *testing.T) {
 	repoDir := setupFactory(t)
 	action := recordAction{}
 	rel := "repos/octo/app"
 	before := countGooseVersions(t, repoDir, rel)
 
-	err := Run(t.Context(), repoDir, "main", "state", "record state", action)
+	exec := Executor{
+		FactoryDir:   repoDir,
+		ConfigBranch: "main",
+		StateBranch:  "state",
+	}
+	err := exec.Execute(t.Context(), action)
 	require.NoError(t, err)
 
 	after := countGooseVersions(t, repoDir, rel)
@@ -47,14 +57,19 @@ func Test_Run_should_record_the_action_row_on_the_state_branch(t *testing.T) {
 	assert.Equal(t, expected, after)
 }
 
-func Test_Run_should_commit_once_for_each_repo(t *testing.T) {
+func Test_Execute_should_commit_once_for_each_repo(t *testing.T) {
 	app := appSetup{owner: "octo", name: "app"}
 	other := appSetup{owner: "octo", name: "other"}
 	apps := []appSetup{app, other}
 	repoDir := setupRepos(t, apps)
 	action := recordAction{}
 
-	err := Run(t.Context(), repoDir, "main", "state", "record state", action)
+	exec := Executor{
+		FactoryDir:   repoDir,
+		ConfigBranch: "main",
+		StateBranch:  "state",
+	}
+	err := exec.Execute(t.Context(), action)
 	require.NoError(t, err)
 
 	output := mustGit(t, repoDir, "log", "-2", "--format=%s", "state")
@@ -64,7 +79,7 @@ func Test_Run_should_commit_once_for_each_repo(t *testing.T) {
 	assert.Equal(t, "record state", lines[1])
 }
 
-func Test_Run_should_record_the_action_row_for_each_repo(t *testing.T) {
+func Test_Execute_should_record_the_action_row_for_each_repo(t *testing.T) {
 	app := appSetup{owner: "octo", name: "app"}
 	other := appSetup{owner: "octo", name: "other"}
 	apps := []appSetup{app, other}
@@ -75,7 +90,12 @@ func Test_Run_should_record_the_action_row_for_each_repo(t *testing.T) {
 	appBefore := countGooseVersions(t, repoDir, appRel)
 	otherBefore := countGooseVersions(t, repoDir, otherRel)
 
-	err := Run(t.Context(), repoDir, "main", "state", "record state", action)
+	exec := Executor{
+		FactoryDir:   repoDir,
+		ConfigBranch: "main",
+		StateBranch:  "state",
+	}
+	err := exec.Execute(t.Context(), action)
 	require.NoError(t, err)
 
 	appAfter := countGooseVersions(t, repoDir, appRel)
@@ -86,56 +106,83 @@ func Test_Run_should_record_the_action_row_for_each_repo(t *testing.T) {
 	assert.Equal(t, otherExpected, otherAfter)
 }
 
-func Test_Run_should_refuse_a_path_that_is_not_repos_owner_name(t *testing.T) {
+func Test_Execute_should_refuse_a_path_that_is_not_repos_owner_name(t *testing.T) {
 	repoDir := setupFactory(t)
 	stray := filepath.Join(repoDir, "repos", "stray.txt")
 	err := os.WriteFile(stray, []byte("x"), 0644)
 	require.NoError(t, err)
 	action := recordAction{}
 
-	err = Run(t.Context(), repoDir, "main", "state", "record state", action)
+	exec := Executor{
+		FactoryDir:   repoDir,
+		ConfigBranch: "main",
+		StateBranch:  "state",
+	}
+	err = exec.Execute(t.Context(), action)
 	require.Error(t, err)
 
 	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
 	assert.Equal(t, "state", strings.TrimSpace(string(message)))
 }
 
-func Test_Run_should_commit_when_the_action_writes_nothing(t *testing.T) {
+func Test_Execute_should_commit_when_the_action_writes_nothing(t *testing.T) {
 	repoDir := setupFactory(t)
 	action := quietAction{}
 
-	err := Run(t.Context(), repoDir, "main", "state", "record state", action)
+	exec := Executor{
+		FactoryDir:   repoDir,
+		ConfigBranch: "main",
+		StateBranch:  "state",
+	}
+	err := exec.Execute(t.Context(), action)
 	require.NoError(t, err)
 
 	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
 	assert.Equal(t, "record state", strings.TrimSpace(string(message)))
 }
 
-func Test_Run_should_leave_the_rows_when_the_action_writes_nothing(t *testing.T) {
+func Test_Execute_should_leave_the_rows_when_the_action_writes_nothing(t *testing.T) {
 	repoDir := setupFactory(t)
 	action := quietAction{}
 	rel := "repos/octo/app"
 	before := countGooseVersions(t, repoDir, rel)
 
-	err := Run(t.Context(), repoDir, "main", "state", "record state", action)
+	exec := Executor{
+		FactoryDir:   repoDir,
+		ConfigBranch: "main",
+		StateBranch:  "state",
+	}
+	err := exec.Execute(t.Context(), action)
 	require.NoError(t, err)
 
 	after := countGooseVersions(t, repoDir, rel)
 	assert.Equal(t, before, after)
 }
 
-func Test_Run_should_leave_the_branch_when_the_action_returns_an_error(t *testing.T) {
+func Test_Execute_should_leave_the_branch_when_the_action_returns_an_error(t *testing.T) {
 	repoDir := setupFactory(t)
 	action := failAction{}
 
-	err := Run(t.Context(), repoDir, "main", "state", "record state", action)
+	exec := Executor{
+		FactoryDir:   repoDir,
+		ConfigBranch: "main",
+		StateBranch:  "state",
+	}
+	err := exec.Execute(t.Context(), action)
 	require.Error(t, err)
 
 	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
 	assert.Equal(t, "state", strings.TrimSpace(string(message)))
 }
 
+const actionMessage = "record state"
+
 type recordAction struct{}
+
+func (recordAction) Message() (message string) {
+	message = actionMessage
+	return
+}
 
 func (recordAction) Apply(ctx context.Context, repo Repo) (err error) {
 	err = insertActionVersion(ctx, repo)
@@ -144,11 +191,21 @@ func (recordAction) Apply(ctx context.Context, repo Repo) (err error) {
 
 type quietAction struct{}
 
+func (quietAction) Message() (message string) {
+	message = actionMessage
+	return
+}
+
 func (quietAction) Apply(context.Context, Repo) (err error) {
 	return
 }
 
 type failAction struct{}
+
+func (failAction) Message() (message string) {
+	message = actionMessage
+	return
+}
 
 func (failAction) Apply(ctx context.Context, repo Repo) (err error) {
 	err = insertActionVersion(ctx, repo)

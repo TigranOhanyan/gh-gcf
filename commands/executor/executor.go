@@ -1,4 +1,4 @@
-package repos
+package executor
 
 import (
 	"context"
@@ -23,8 +23,18 @@ type Repo struct {
 }
 
 // Action is the work one command does for a single app repo.
+// Message is the state commit message for that work.
 type Action interface {
 	Apply(ctx context.Context, repo Repo) (err error)
+	Message() (message string)
+}
+
+// Executor carries one action across every app repo in FactoryDir.
+// ConfigBranch and StateBranch are the branches it opens.
+type Executor struct {
+	FactoryDir   string
+	ConfigBranch string
+	StateBranch  string
 }
 
 type repoFolder struct {
@@ -33,11 +43,15 @@ type repoFolder struct {
 	rel   string
 }
 
-// Run opens every app repo, applies action, and commits state.db.
-// Config is opened from configBranch and is not committed. State is opened from stateBranch.
-// An unchanged state.db is still committed. The first action error stops the walk.
-// Repos already committed stay committed.
-func Run(ctx context.Context, factoryDir string, configBranch string, stateBranch string, message string, action Action) (err error) {
+// Execute opens every app repo, applies action, and commits state.db.
+// Config is opened from ConfigBranch and is not committed. State is opened from StateBranch.
+// The commit message is action.Message. An unchanged state.db is still committed.
+// The first action error stops the walk. Repos already committed stay committed.
+func (executor Executor) Execute(ctx context.Context, action Action) (err error) {
+	factoryDir := executor.FactoryDir
+	configBranch := executor.ConfigBranch
+	stateBranch := executor.StateBranch
+	message := action.Message()
 	missingFactory := factoryDir == ""
 	if missingFactory {
 		factoryDir, err = os.Getwd()

@@ -8,7 +8,7 @@ import (
 	"charm.land/log/v2"
 	"github.com/spf13/cobra"
 
-	"github.com/TigranOhanyan/gh-gcf/commands/repos"
+	"github.com/TigranOhanyan/gh-gcf/commands/executor"
 	stateentities "github.com/TigranOhanyan/gh-gcf/statedb/entities"
 )
 
@@ -37,13 +37,23 @@ func NewCopy() (cmd *cobra.Command) {
 
 func Copy(ctx context.Context, factoryDir string, configBranch string, stateBranch string) (err error) {
 	action := copyAction{}
-	err = repos.Run(ctx, factoryDir, configBranch, stateBranch, commitMessage, action)
+	exec := executor.Executor{
+		FactoryDir:   factoryDir,
+		ConfigBranch: configBranch,
+		StateBranch:  stateBranch,
+	}
+	err = exec.Execute(ctx, action)
 	return
 }
 
 type copyAction struct{}
 
-func (copyAction) Apply(ctx context.Context, repo repos.Repo) (err error) {
+func (copyAction) Message() (message string) {
+	message = commitMessage
+	return
+}
+
+func (copyAction) Apply(ctx context.Context, repo executor.Repo) (err error) {
 	rows, err := repo.Config.Queries.GetConfigs(ctx)
 	if err != nil {
 		log.Error("read config", "owner", repo.Owner, "name", repo.Name, "err", err)
