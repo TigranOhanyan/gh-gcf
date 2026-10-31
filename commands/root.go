@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/TigranOhanyan/gh-gcf/commands/bind"
+	"github.com/TigranOhanyan/gh-gcf/commands/tick"
 )
 
 func NewRoot() (cmd *cobra.Command) {
@@ -13,5 +14,7 @@ func NewRoot() (cmd *cobra.Command) {
 	}
 	bindCmd := bind.NewBind()
 	cmd.AddCommand(bindCmd)
+	tickCmd := tick.NewTick()
+	cmd.AddCommand(tickCmd)
 	return
 }

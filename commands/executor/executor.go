@@ -2,16 +2,13 @@ package executor
 
 import (
 	"context"
-	"crypto/rand"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	"charm.land/log/v2"
-	"github.com/oklog/ulid/v2"
 
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 	"github.com/TigranOhanyan/gh-gcf/statedb"
@@ -30,17 +27,20 @@ type Repo struct {
 // Action is the work one command does for a single app repo.
 // Name is the action name in the state commit subject.
 // Apply returns the message for that subject, formed from what the action did.
+// When Apply returns an error, the subject uses that error text instead.
 type Action interface {
 	Name() (name string)
 	Apply(ctx context.Context, repo Repo, tick stateentities.Tick) (message string, err error)
 }
 
-// Executor carries one action across every app repo in FactoryDir.
+// StepExecutor carries one action across every app repo in FactoryDir.
 // ConfigBranch and StateBranch are the branches it opens.
-type Executor struct {
+// TickID is the tick this run records. It is required.
+type StepExecutor struct {
 	FactoryDir   string
 	ConfigBranch string
 	StateBranch  string
+	TickID       string
 }
 
 type repoFolder struct {
@@ -49,14 +49,98 @@ type repoFolder struct {
 	rel   string
 }
 
-// Execute opens every app repo, inserts one tick, applies action, and commits state.db.
+type session struct {
+	configDir string
+	stateDir  string
+	folders   []repoFolder
+	cleanup   func()
+}
+
+// Execute opens every app repo, applies action, and commits state.db.
 // Config is opened from ConfigBranch and is not committed. State is opened from StateBranch.
+// TickID is the tick already stored for this run. Execute does not insert a tick.
 // The commit subject is [tick id] [action name] [owner/name] and the message Apply returned.
+// When Apply returns an error, the message is that error text and the state commit still happens.
 // The first action error stops the walk. Repos already committed stay committed.
-func (executor Executor) Execute(ctx context.Context, action Action) (err error) {
-	factoryDir := executor.FactoryDir
-	configBranch := executor.ConfigBranch
-	stateBranch := executor.StateBranch
+func (step StepExecutor) Execute(ctx context.Context, action Action) (err error) {
+	missingTick := step.TickID == ""
+	if missingTick {
+		err = fmt.Errorf("tick id is required")
+		log.Error("tick id", "err", err)
+		return
+	}
+
+	visit := func(ctx context.Context, repo Repo) (subject string, err error) {
+		tick := stateentities.Tick{ID: step.TickID}
+		message, err := action.Apply(ctx, repo, tick)
+		failed := err != nil
+		if failed {
+			message = err.Error()
+		}
+		name := action.Name()
+		repoName := repo.Owner + "/" + repo.Name
+		subject = CommitSubject(step.TickID, name, repoName, message)
+		return
+	}
+	err = VisitRepos(ctx, step.FactoryDir, step.ConfigBranch, step.StateBranch, visit)
+	return
+}
+
+// VisitRepos opens every app repo and calls visit.
+// Config is read from configBranch and is not committed. State is opened from stateBranch.
+// visit returns the state commit subject. An error with an empty subject does not commit.
+// An error with a subject is committed, then returned.
+// The first error stops the walk. Repos already committed stay committed.
+func VisitRepos(ctx context.Context, factoryDir string, configBranch string, stateBranch string, visit func(context.Context, Repo) (string, error)) (err error) {
+	opened, err := openSession(ctx, factoryDir, configBranch, stateBranch)
+	if err != nil {
+		return
+	}
+	defer opened.cleanup()
+
+	for _, folder := range opened.folders {
+		err = visitRepo(ctx, opened.configDir, opened.stateDir, folder, visit)
+		if err != nil {
+			log.Error("visit repo", "owner", folder.owner, "name", folder.name, "err", err)
+			return
+		}
+	}
+	return
+}
+
+func visitRepo(ctx context.Context, configDir string, stateDir string, folder repoFolder, visit func(context.Context, Repo) (string, error)) (err error) {
+	repo, err := openRepo(ctx, configDir, stateDir, folder)
+	if err != nil {
+		return
+	}
+	defer repo.Config.Close()
+	defer repo.State.Close()
+
+	subject, err := visit(ctx, repo)
+	visitErr := err
+	failed := visitErr != nil
+	emptySubject := subject == ""
+	skipCommit := failed && emptySubject
+	if skipCommit {
+		return
+	}
+
+	err = repo.State.Close()
+	if err != nil {
+		log.Error("close state", "path", repo.State.FileFullPath, "err", err)
+		return
+	}
+	err = commitState(ctx, stateDir, folder.rel, subject)
+	if err != nil {
+		return
+	}
+	err = visitErr
+	return
+}
+
+func openSession(ctx context.Context, factoryDir string, configBranch string, stateBranch string) (opened session, err error) {
+	opened.cleanup = func() {}
+
 	missingFactory := factoryDir == ""
 	if missingFactory {
 		factoryDir, err = os.Getwd()
@@ -88,23 +172,23 @@ func (executor Executor) Execute(ctx context.Context, action Action) (err error)
 	if err != nil {
 		return
 	}
-	if configAdded {
-		defer removeWorktree(ctx, factoryDir, configDir)
-	}
-
 	stateDir, stateAdded, err := ensureCheckout(ctx, factoryDir, stateBranch)
 	if err != nil {
+		if configAdded {
+			removeWorktree(ctx, factoryDir, configDir)
+		}
 		return
 	}
-	if stateAdded {
-		defer removeWorktree(ctx, factoryDir, stateDir)
-	}
 
-	for _, folder := range folders {
-		err = apply(ctx, configDir, stateDir, action, folder)
-		if err != nil {
-			log.Error("apply", "owner", folder.owner, "name", folder.name, "err", err)
-			return
+	opened.configDir = configDir
+	opened.stateDir = stateDir
+	opened.folders = folders
+	opened.cleanup = func() {
+		if stateAdded {
+			removeWorktree(ctx, factoryDir, stateDir)
+		}
+		if configAdded {
+			removeWorktree(ctx, factoryDir, configDir)
 		}
 	}
 	return
@@ -159,7 +243,7 @@ func listRepos(factoryDir string) (folders []repoFolder, err error) {
 	return
 }
 
-func apply(ctx context.Context, configDir string, stateDir string, action Action, folder repoFolder) (err error) {
+func openRepo(ctx context.Context, configDir string, stateDir string, folder repoFolder) (repo Repo, err error) {
 	configPath := filepath.Join(configDir, folder.rel, "config.db")
 	_, err = os.Stat(configPath)
 	missingConfig := os.IsNotExist(err)
@@ -178,63 +262,29 @@ func apply(ctx context.Context, configDir string, stateDir string, action Action
 		log.Error("open config", "path", configPath, "err", err)
 		return
 	}
-	defer configDB.Close()
 
 	statePath := filepath.Join(stateDir, folder.rel, "state.db")
 	stateDB, err := statedb.Open(ctx, statePath)
 	if err != nil {
 		log.Error("open state", "path", statePath, "err", err)
+		closeErr := configDB.Close()
+		if closeErr != nil {
+			log.Error("close config", "path", configPath, "err", closeErr)
+		}
 		return
 	}
-	defer stateDB.Close()
 
-	repo := Repo{
+	repo = Repo{
 		Owner:  folder.owner,
 		Name:   folder.name,
 		Config: configDB,
 		State:  stateDB,
 	}
-	id, err := newTickID()
-	if err != nil {
-		return
-	}
-	err = stateDB.Queries.CreateTick(ctx, id)
-	if err != nil {
-		log.Error("insert tick", "owner", folder.owner, "name", folder.name, "err", err)
-		return
-	}
-	tick := stateentities.Tick{ID: id}
-	message, err := action.Apply(ctx, repo, tick)
-	if err != nil {
-		return
-	}
-
-	err = stateDB.Close()
-	if err != nil {
-		log.Error("close state", "path", statePath, "err", err)
-		return
-	}
-	storedID := tick.ID
-	name := action.Name()
-	repoName := folder.owner + "/" + folder.name
-	subject := commitSubject(storedID, name, repoName, message)
-	err = commitState(ctx, stateDir, folder.rel, subject)
 	return
 }
 
-func newTickID() (id string, err error) {
-	now := time.Now()
-	timestamp := ulid.Timestamp(now)
-	value, err := ulid.New(timestamp, rand.Reader)
-	if err != nil {
-		log.Error("new tick id", "err", err)
-		return
-	}
-	id = value.String()
-	return
-}
-
-func commitSubject(id string, name string, repoName string, message string) (subject string) {
+// CommitSubject is the state commit subject [id] [name] [repo] message.
+func CommitSubject(id string, name string, repoName string, message string) (subject string) {
 	subject = fmt.Sprintf("[%s] [%s] [%s] %s", id, name, repoName, message)
 	subject = strings.TrimSpace(subject)
 	return

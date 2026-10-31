@@ -11,7 +11,6 @@ import (
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 	"github.com/TigranOhanyan/gh-gcf/statedb"
 	stateentities "github.com/TigranOhanyan/gh-gcf/statedb/entities"
-	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,39 +19,18 @@ func Test_Execute_should_commit_the_tick_subject_on_the_state_branch(t *testing.
 	repoDir := setupFactory(t)
 	action := recordAction{}
 
-	exec := Executor{
+	exec := StepExecutor{
 		FactoryDir:   repoDir,
 		ConfigBranch: "main",
 		StateBranch:  "state",
+		TickID:       testTickID,
 	}
 	err := exec.Execute(t.Context(), action)
 	require.NoError(t, err)
 
 	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
-	ids := ticksAtTip(t, repoDir, "repos/octo/app")
-	require.Len(t, ids, 1)
-	id := ids[0]
-	expected := fmt.Sprintf("[%s] [record] [octo/app] recorded tick %s", id, id)
+	expected := fmt.Sprintf("[%s] [record] [octo/app] recorded tick %s", testTickID, testTickID)
 	assert.Equal(t, expected, strings.TrimSpace(string(message)))
-}
-
-func Test_Execute_should_store_one_tick_on_the_state_branch(t *testing.T) {
-	repoDir := setupFactory(t)
-	action := recordAction{}
-	rel := "repos/octo/app"
-
-	exec := Executor{
-		FactoryDir:   repoDir,
-		ConfigBranch: "main",
-		StateBranch:  "state",
-	}
-	err := exec.Execute(t.Context(), action)
-	require.NoError(t, err)
-
-	ids := ticksAtTip(t, repoDir, rel)
-	require.Len(t, ids, 1)
-	_, err = ulid.Parse(ids[0])
-	assert.NoError(t, err)
 }
 
 func Test_Execute_should_commit_once_for_each_repo(t *testing.T) {
@@ -62,10 +40,11 @@ func Test_Execute_should_commit_once_for_each_repo(t *testing.T) {
 	repoDir := setupRepos(t, apps)
 	action := recordAction{}
 
-	exec := Executor{
+	exec := StepExecutor{
 		FactoryDir:   repoDir,
 		ConfigBranch: "main",
 		StateBranch:  "state",
+		TickID:       testTickID,
 	}
 	err := exec.Execute(t.Context(), action)
 	require.NoError(t, err)
@@ -73,44 +52,10 @@ func Test_Execute_should_commit_once_for_each_repo(t *testing.T) {
 	output := mustGit(t, repoDir, "log", "-2", "--format=%s", "state")
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	require.Len(t, lines, 2)
-	appIDs := ticksAtTip(t, repoDir, "repos/octo/app")
-	otherIDs := ticksAtTip(t, repoDir, "repos/octo/other")
-	require.Len(t, appIDs, 1)
-	require.Len(t, otherIDs, 1)
-	appID := appIDs[0]
-	otherID := otherIDs[0]
-	appSubject := fmt.Sprintf("[%s] [record] [octo/app] recorded tick %s", appID, appID)
-	otherSubject := fmt.Sprintf("[%s] [record] [octo/other] recorded tick %s", otherID, otherID)
+	appSubject := fmt.Sprintf("[%s] [record] [octo/app] recorded tick %s", testTickID, testTickID)
+	otherSubject := fmt.Sprintf("[%s] [record] [octo/other] recorded tick %s", testTickID, testTickID)
 	assert.Equal(t, otherSubject, lines[0])
 	assert.Equal(t, appSubject, lines[1])
-}
-
-func Test_Execute_should_store_one_tick_for_each_repo(t *testing.T) {
-	app := appSetup{owner: "octo", name: "app"}
-	other := appSetup{owner: "octo", name: "other"}
-	apps := []appSetup{app, other}
-	repoDir := setupRepos(t, apps)
-	action := recordAction{}
-	appRel := "repos/octo/app"
-	otherRel := "repos/octo/other"
-
-	exec := Executor{
-		FactoryDir:   repoDir,
-		ConfigBranch: "main",
-		StateBranch:  "state",
-	}
-	err := exec.Execute(t.Context(), action)
-	require.NoError(t, err)
-
-	appIDs := ticksAtTip(t, repoDir, appRel)
-	otherIDs := ticksAtTip(t, repoDir, otherRel)
-	require.Len(t, appIDs, 1)
-	require.Len(t, otherIDs, 1)
-	_, err = ulid.Parse(appIDs[0])
-	assert.NoError(t, err)
-	_, err = ulid.Parse(otherIDs[0])
-	assert.NoError(t, err)
-	assert.NotEqual(t, appIDs[0], otherIDs[0])
 }
 
 func Test_Execute_should_refuse_a_path_that_is_not_repos_owner_name(t *testing.T) {
@@ -120,10 +65,11 @@ func Test_Execute_should_refuse_a_path_that_is_not_repos_owner_name(t *testing.T
 	require.NoError(t, err)
 	action := recordAction{}
 
-	exec := Executor{
+	exec := StepExecutor{
 		FactoryDir:   repoDir,
 		ConfigBranch: "main",
 		StateBranch:  "state",
+		TickID:       testTickID,
 	}
 	err = exec.Execute(t.Context(), action)
 	require.Error(t, err)
@@ -136,74 +82,52 @@ func Test_Execute_should_commit_when_the_action_writes_nothing(t *testing.T) {
 	repoDir := setupFactory(t)
 	action := quietAction{}
 
-	exec := Executor{
+	exec := StepExecutor{
 		FactoryDir:   repoDir,
 		ConfigBranch: "main",
 		StateBranch:  "state",
+		TickID:       testTickID,
 	}
 	err := exec.Execute(t.Context(), action)
 	require.NoError(t, err)
 
 	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
-	ids := ticksAtTip(t, repoDir, "repos/octo/app")
-	require.Len(t, ids, 1)
-	id := ids[0]
-	expected := fmt.Sprintf("[%s] [quiet] [octo/app] wrote nothing", id)
+	expected := fmt.Sprintf("[%s] [quiet] [octo/app] wrote nothing", testTickID)
 	assert.Equal(t, expected, strings.TrimSpace(string(message)))
 }
 
-func Test_Execute_should_store_one_tick_when_the_action_writes_nothing(t *testing.T) {
-	repoDir := setupFactory(t)
-	action := quietAction{}
-	rel := "repos/octo/app"
-
-	exec := Executor{
-		FactoryDir:   repoDir,
-		ConfigBranch: "main",
-		StateBranch:  "state",
-	}
-	err := exec.Execute(t.Context(), action)
-	require.NoError(t, err)
-
-	ids := ticksAtTip(t, repoDir, rel)
-	require.Len(t, ids, 1)
-	_, err = ulid.Parse(ids[0])
-	assert.NoError(t, err)
-}
-
-func Test_Execute_should_leave_the_branch_when_the_action_returns_an_error(t *testing.T) {
+func Test_Execute_should_commit_the_error_when_the_action_returns_an_error(t *testing.T) {
 	repoDir := setupFactory(t)
 	action := failAction{}
 
-	exec := Executor{
+	exec := StepExecutor{
 		FactoryDir:   repoDir,
 		ConfigBranch: "main",
 		StateBranch:  "state",
+		TickID:       testTickID,
 	}
 	err := exec.Execute(t.Context(), action)
 	require.Error(t, err)
 
 	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
-	assert.Equal(t, "state", strings.TrimSpace(string(message)))
+	expected := fmt.Sprintf("[%s] [fail] [octo/app] label is missing", testTickID)
+	assert.Equal(t, expected, strings.TrimSpace(string(message)))
 }
 
-func Test_Execute_should_not_store_a_tick_when_the_action_returns_an_error(t *testing.T) {
-	repoDir := setupFactory(t)
-	action := failAction{}
-	rel := "repos/octo/app"
+func Test_Execute_should_refuse_a_missing_tick_id(t *testing.T) {
+	action := recordAction{}
 
-	exec := Executor{
-		FactoryDir:   repoDir,
+	exec := StepExecutor{
+		FactoryDir:   filepath.Join(JunkDir, "missing-tick"),
 		ConfigBranch: "main",
 		StateBranch:  "state",
 	}
 	err := exec.Execute(t.Context(), action)
 	require.Error(t, err)
-
-	ids := ticksAtTip(t, repoDir, rel)
-	assert.Empty(t, ids)
+	assert.EqualError(t, err, "tick id is required")
 }
 
+const testTickID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 const recordName = "record"
 
 type recordAction struct{}
