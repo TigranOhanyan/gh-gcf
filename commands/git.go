@@ -1,4 +1,4 @@
-package executor
+package commands
 
 import (
 	"context"
@@ -7,7 +7,9 @@ import (
 	"strings"
 )
 
-func git(ctx context.Context, dir string, args ...string) (output []byte, err error) {
+// Git runs git in dir and returns stdout.
+// A non-zero exit includes stderr in the error.
+func Git(ctx context.Context, dir string, args ...string) (output []byte, err error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
 	output, err = cmd.Output()

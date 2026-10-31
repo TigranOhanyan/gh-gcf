@@ -1,14 +1,14 @@
 package tick
 
 import (
-	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/TigranOhanyan/gh-gcf/commands"
 )
 
 var JunkDir string
@@ -29,16 +29,7 @@ func TestMain(m *testing.M) {
 
 func mustGit(t *testing.T, dir string, args ...string) (output []byte) {
 	t.Helper()
-	cmd := exec.CommandContext(t.Context(), "git", args...)
-	cmd.Dir = dir
-	output, err := cmd.Output()
-	if err != nil {
-		exitErr, isExit := err.(*exec.ExitError)
-		if isExit {
-			detail := string(exitErr.Stderr)
-			err = fmt.Errorf("%w: %s", err, detail)
-		}
-	}
+	output, err := commands.Git(t.Context(), dir, args...)
 	require.NoError(t, err)
 	return
 }

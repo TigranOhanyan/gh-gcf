@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/TigranOhanyan/gh-gcf/commands"
 )
 
 var JunkDir string
@@ -27,7 +29,7 @@ func TestMain(m *testing.M) {
 
 func mustGit(t *testing.T, dir string, args ...string) (output []byte) {
 	t.Helper()
-	output, err := git(t.Context(), dir, args...)
+	output, err := commands.Git(t.Context(), dir, args...)
 	require.NoError(t, err)
 	return
 }

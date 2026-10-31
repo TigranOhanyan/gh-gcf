@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -8,28 +9,32 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/TigranOhanyan/gh-gcf/commands"
+	"github.com/TigranOhanyan/gh-gcf/commands/tick"
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 	"github.com/TigranOhanyan/gh-gcf/statedb"
 	stateentities "github.com/TigranOhanyan/gh-gcf/statedb/entities"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func Test_Execute_should_commit_the_tick_subject_on_the_state_branch(t *testing.T) {
 	repoDir := setupFactory(t)
+	id := runTick(t, repoDir)
 	action := recordAction{}
 
 	exec := StepExecutor{
 		FactoryDir:   repoDir,
 		ConfigBranch: "main",
 		StateBranch:  "state",
-		TickID:       testTickID,
+		TickID:       id,
 	}
 	err := exec.Execute(t.Context(), action)
 	require.NoError(t, err)
 
 	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
-	expected := fmt.Sprintf("[%s] [record] [octo/app] recorded tick %s", testTickID, testTickID)
+	expected := fmt.Sprintf("[%s] [record] [octo/app] recorded tick %s", id, id)
 	assert.Equal(t, expected, strings.TrimSpace(string(message)))
 }
 
@@ -38,13 +43,14 @@ func Test_Execute_should_commit_once_for_each_repo(t *testing.T) {
 	other := appSetup{owner: "octo", name: "other"}
 	apps := []appSetup{app, other}
 	repoDir := setupRepos(t, apps)
+	id := runTick(t, repoDir)
 	action := recordAction{}
 
 	exec := StepExecutor{
 		FactoryDir:   repoDir,
 		ConfigBranch: "main",
 		StateBranch:  "state",
-		TickID:       testTickID,
+		TickID:       id,
 	}
 	err := exec.Execute(t.Context(), action)
 	require.NoError(t, err)
@@ -52,14 +58,15 @@ func Test_Execute_should_commit_once_for_each_repo(t *testing.T) {
 	output := mustGit(t, repoDir, "log", "-2", "--format=%s", "state")
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	require.Len(t, lines, 2)
-	appSubject := fmt.Sprintf("[%s] [record] [octo/app] recorded tick %s", testTickID, testTickID)
-	otherSubject := fmt.Sprintf("[%s] [record] [octo/other] recorded tick %s", testTickID, testTickID)
+	appSubject := fmt.Sprintf("[%s] [record] [octo/app] recorded tick %s", id, id)
+	otherSubject := fmt.Sprintf("[%s] [record] [octo/other] recorded tick %s", id, id)
 	assert.Equal(t, otherSubject, lines[0])
 	assert.Equal(t, appSubject, lines[1])
 }
 
 func Test_Execute_should_refuse_a_path_that_is_not_repos_owner_name(t *testing.T) {
 	repoDir := setupFactory(t)
+	id := runTick(t, repoDir)
 	stray := filepath.Join(repoDir, "repos", "stray.txt")
 	err := os.WriteFile(stray, []byte("x"), 0644)
 	require.NoError(t, err)
@@ -69,48 +76,51 @@ func Test_Execute_should_refuse_a_path_that_is_not_repos_owner_name(t *testing.T
 		FactoryDir:   repoDir,
 		ConfigBranch: "main",
 		StateBranch:  "state",
-		TickID:       testTickID,
+		TickID:       id,
 	}
 	err = exec.Execute(t.Context(), action)
 	require.Error(t, err)
 
 	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
-	assert.Equal(t, "state", strings.TrimSpace(string(message)))
+	expected := fmt.Sprintf("[%s] [tick] [octo/app] created", id)
+	assert.Equal(t, expected, strings.TrimSpace(string(message)))
 }
 
 func Test_Execute_should_commit_when_the_action_writes_nothing(t *testing.T) {
 	repoDir := setupFactory(t)
+	id := runTick(t, repoDir)
 	action := quietAction{}
 
 	exec := StepExecutor{
 		FactoryDir:   repoDir,
 		ConfigBranch: "main",
 		StateBranch:  "state",
-		TickID:       testTickID,
+		TickID:       id,
 	}
 	err := exec.Execute(t.Context(), action)
 	require.NoError(t, err)
 
 	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
-	expected := fmt.Sprintf("[%s] [quiet] [octo/app] wrote nothing", testTickID)
+	expected := fmt.Sprintf("[%s] [quiet] [octo/app] wrote nothing", id)
 	assert.Equal(t, expected, strings.TrimSpace(string(message)))
 }
 
 func Test_Execute_should_commit_the_error_when_the_action_returns_an_error(t *testing.T) {
 	repoDir := setupFactory(t)
+	id := runTick(t, repoDir)
 	action := failAction{}
 
 	exec := StepExecutor{
 		FactoryDir:   repoDir,
 		ConfigBranch: "main",
 		StateBranch:  "state",
-		TickID:       testTickID,
+		TickID:       id,
 	}
 	err := exec.Execute(t.Context(), action)
 	require.Error(t, err)
 
 	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
-	expected := fmt.Sprintf("[%s] [fail] [octo/app] label is missing", testTickID)
+	expected := fmt.Sprintf("[%s] [fail] [octo/app] label is missing", id)
 	assert.Equal(t, expected, strings.TrimSpace(string(message)))
 }
 
@@ -127,7 +137,6 @@ func Test_Execute_should_refuse_a_missing_tick_id(t *testing.T) {
 	assert.EqualError(t, err, "tick id is required")
 }
 
-const testTickID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 const recordName = "record"
 
 type recordAction struct{}
@@ -137,8 +146,8 @@ func (recordAction) Name() (name string) {
 	return
 }
 
-func (recordAction) Apply(_ context.Context, _ Repo, tick stateentities.Tick) (message string, err error) {
-	id := tick.ID
+func (recordAction) Apply(_ context.Context, _ commands.Repo, tickRow stateentities.Tick) (message string, err error) {
+	id := tickRow.ID
 	message = fmt.Sprintf("recorded tick %s", id)
 	return
 }
@@ -153,7 +162,7 @@ func (quietAction) Name() (name string) {
 	return
 }
 
-func (quietAction) Apply(context.Context, Repo, stateentities.Tick) (message string, err error) {
+func (quietAction) Apply(context.Context, commands.Repo, stateentities.Tick) (message string, err error) {
 	message = quietMessage
 	return
 }
@@ -167,7 +176,7 @@ func (failAction) Name() (name string) {
 	return
 }
 
-func (failAction) Apply(context.Context, Repo, stateentities.Tick) (message string, err error) {
+func (failAction) Apply(context.Context, commands.Repo, stateentities.Tick) (message string, err error) {
 	err = fmt.Errorf("label is missing")
 	return
 }
@@ -228,19 +237,19 @@ func setupRepos(t *testing.T, apps []appSetup) (repoDir string) {
 	return
 }
 
-func ticksAtTip(t *testing.T, repoDir string, rel string) (ids []string) {
+func runTick(t *testing.T, repoDir string) (id string) {
 	t.Helper()
-	tipPath := filepath.Join(JunkDir, t.Name()+"-state-tip.db")
-	spec := "state:" + filepath.ToSlash(rel) + "/state.db"
-	blob := mustGit(t, repoDir, "show", spec)
-	err := os.WriteFile(tipPath, blob, 0644)
+	cmd := tick.NewTick()
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+	args := []string{"--factory-repo", repoDir}
+	cmd.SetArgs(args)
+
+	err := cmd.ExecuteContext(t.Context())
 	require.NoError(t, err)
 
-	db, err := statedb.Open(t.Context(), tipPath)
-	require.NoError(t, err)
-	defer db.Close()
-
-	ids, err = db.Queries.GetTicks(t.Context())
-	require.NoError(t, err)
+	id = strings.TrimSpace(output.String())
+	require.NotEmpty(t, id)
 	return
 }

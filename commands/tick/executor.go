@@ -8,7 +8,7 @@ import (
 	"charm.land/log/v2"
 	"github.com/oklog/ulid/v2"
 
-	"github.com/TigranOhanyan/gh-gcf/commands/executor"
+	"github.com/TigranOhanyan/gh-gcf/commands"
 )
 
 const tickName = "tick"
@@ -33,17 +33,17 @@ func (tick tickExecutor) CreateTick(ctx context.Context) (id string, err error) 
 		return
 	}
 
-	visit := func(ctx context.Context, repo executor.Repo) (subject string, err error) {
+	visit := func(ctx context.Context, repo commands.Repo) (subject string, err error) {
 		err = repo.State.Queries.CreateTick(ctx, id)
 		if err != nil {
 			log.Error("insert tick", "owner", repo.Owner, "name", repo.Name, "err", err)
 			return
 		}
 		repoName := repo.Owner + "/" + repo.Name
-		subject = executor.CommitSubject(id, tickName, repoName, tickCreated)
+		subject = commands.CommitSubject(id, tickName, repoName, tickCreated)
 		return
 	}
-	err = executor.VisitRepos(ctx, tick.FactoryDir, tick.ConfigBranch, tick.StateBranch, visit)
+	err = commands.VisitRepos(ctx, tick.FactoryDir, tick.ConfigBranch, tick.StateBranch, visit)
 	if err != nil {
 		id = ""
 		return
