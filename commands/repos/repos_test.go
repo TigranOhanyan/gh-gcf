@@ -1,0 +1,240 @@
+package repos
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/TigranOhanyan/gh-gcf/configdb"
+	"github.com/TigranOhanyan/gh-gcf/statedb"
+	_ "github.com/ncruces/go-sqlite3/driver"
+	_ "github.com/ncruces/go-sqlite3/embed"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+const (
+	insertGooseVersion = `INSERT INTO goose_db_version (version_id, is_applied) VALUES (?, ?)`
+	actionVersion      = int64(99999)
+)
+
+func Test_Run_should_commit_on_the_state_branch(t *testing.T) {
+	repoDir := setupFactory(t)
+	action := recordAction{}
+
+	err := Run(t.Context(), repoDir, "main", "state", "record state", action)
+	require.NoError(t, err)
+
+	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
+	assert.Equal(t, "record state", strings.TrimSpace(string(message)))
+}
+
+func Test_Run_should_record_the_action_row_on_the_state_branch(t *testing.T) {
+	repoDir := setupFactory(t)
+	action := recordAction{}
+	rel := "repos/octo/app"
+	before := countGooseVersions(t, repoDir, rel)
+
+	err := Run(t.Context(), repoDir, "main", "state", "record state", action)
+	require.NoError(t, err)
+
+	after := countGooseVersions(t, repoDir, rel)
+	expected := before + 1
+	assert.Equal(t, expected, after)
+}
+
+func Test_Run_should_commit_once_for_each_repo(t *testing.T) {
+	app := appSetup{owner: "octo", name: "app"}
+	other := appSetup{owner: "octo", name: "other"}
+	apps := []appSetup{app, other}
+	repoDir := setupRepos(t, apps)
+	action := recordAction{}
+
+	err := Run(t.Context(), repoDir, "main", "state", "record state", action)
+	require.NoError(t, err)
+
+	output := mustGit(t, repoDir, "log", "-2", "--format=%s", "state")
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	require.Len(t, lines, 2)
+	assert.Equal(t, "record state", lines[0])
+	assert.Equal(t, "record state", lines[1])
+}
+
+func Test_Run_should_record_the_action_row_for_each_repo(t *testing.T) {
+	app := appSetup{owner: "octo", name: "app"}
+	other := appSetup{owner: "octo", name: "other"}
+	apps := []appSetup{app, other}
+	repoDir := setupRepos(t, apps)
+	action := recordAction{}
+	appRel := "repos/octo/app"
+	otherRel := "repos/octo/other"
+	appBefore := countGooseVersions(t, repoDir, appRel)
+	otherBefore := countGooseVersions(t, repoDir, otherRel)
+
+	err := Run(t.Context(), repoDir, "main", "state", "record state", action)
+	require.NoError(t, err)
+
+	appAfter := countGooseVersions(t, repoDir, appRel)
+	otherAfter := countGooseVersions(t, repoDir, otherRel)
+	appExpected := appBefore + 1
+	otherExpected := otherBefore + 1
+	assert.Equal(t, appExpected, appAfter)
+	assert.Equal(t, otherExpected, otherAfter)
+}
+
+func Test_Run_should_refuse_a_path_that_is_not_repos_owner_name(t *testing.T) {
+	repoDir := setupFactory(t)
+	stray := filepath.Join(repoDir, "repos", "stray.txt")
+	err := os.WriteFile(stray, []byte("x"), 0644)
+	require.NoError(t, err)
+	action := recordAction{}
+
+	err = Run(t.Context(), repoDir, "main", "state", "record state", action)
+	require.Error(t, err)
+
+	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
+	assert.Equal(t, "state", strings.TrimSpace(string(message)))
+}
+
+func Test_Run_should_commit_when_the_action_writes_nothing(t *testing.T) {
+	repoDir := setupFactory(t)
+	action := quietAction{}
+
+	err := Run(t.Context(), repoDir, "main", "state", "record state", action)
+	require.NoError(t, err)
+
+	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
+	assert.Equal(t, "record state", strings.TrimSpace(string(message)))
+}
+
+func Test_Run_should_leave_the_rows_when_the_action_writes_nothing(t *testing.T) {
+	repoDir := setupFactory(t)
+	action := quietAction{}
+	rel := "repos/octo/app"
+	before := countGooseVersions(t, repoDir, rel)
+
+	err := Run(t.Context(), repoDir, "main", "state", "record state", action)
+	require.NoError(t, err)
+
+	after := countGooseVersions(t, repoDir, rel)
+	assert.Equal(t, before, after)
+}
+
+func Test_Run_should_leave_the_branch_when_the_action_returns_an_error(t *testing.T) {
+	repoDir := setupFactory(t)
+	action := failAction{}
+
+	err := Run(t.Context(), repoDir, "main", "state", "record state", action)
+	require.Error(t, err)
+
+	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
+	assert.Equal(t, "state", strings.TrimSpace(string(message)))
+}
+
+type recordAction struct{}
+
+func (recordAction) Apply(ctx context.Context, repo Repo) (err error) {
+	err = insertActionVersion(ctx, repo)
+	return
+}
+
+type quietAction struct{}
+
+func (quietAction) Apply(context.Context, Repo) (err error) {
+	return
+}
+
+type failAction struct{}
+
+func (failAction) Apply(ctx context.Context, repo Repo) (err error) {
+	err = insertActionVersion(ctx, repo)
+	if err != nil {
+		return
+	}
+	err = fmt.Errorf("label is missing")
+	return
+}
+
+func insertActionVersion(ctx context.Context, repo Repo) (err error) {
+	versionID := int64(actionVersion)
+	applied := int64(1)
+	_, err = repo.State.DB.ExecContext(ctx, insertGooseVersion, versionID, applied)
+	return
+}
+
+type appSetup struct {
+	owner string
+	name  string
+}
+
+func setupFactory(t *testing.T) (repoDir string) {
+	t.Helper()
+	app := appSetup{owner: "octo", name: "app"}
+	apps := []appSetup{app}
+	repoDir = setupRepos(t, apps)
+	return
+}
+
+func setupRepos(t *testing.T, apps []appSetup) (repoDir string) {
+	t.Helper()
+	ctx := t.Context()
+	repoDir = filepath.Join(JunkDir, t.Name())
+	err := os.RemoveAll(repoDir)
+	require.NoError(t, err)
+	err = os.MkdirAll(repoDir, 0755)
+	require.NoError(t, err)
+
+	_ = mustGit(t, repoDir, "init", "-b", "main")
+	_ = mustGit(t, repoDir, "config", "user.email", "test@example.com")
+	_ = mustGit(t, repoDir, "config", "user.name", "test")
+
+	for _, app := range apps {
+		configPath := filepath.Join(repoDir, "repos", app.owner, app.name, "config.db")
+		configDir := filepath.Dir(configPath)
+		err = os.MkdirAll(configDir, 0755)
+		require.NoError(t, err)
+		configDB, openErr := configdb.OpenAndMigrate(ctx, configPath)
+		require.NoError(t, openErr)
+		err = configDB.Close()
+		require.NoError(t, err)
+		configRel := filepath.Join("repos", app.owner, app.name, "config.db")
+		_ = mustGit(t, repoDir, "add", configRel)
+	}
+	_ = mustGit(t, repoDir, "commit", "-m", "config")
+
+	_ = mustGit(t, repoDir, "checkout", "-b", "state")
+	for _, app := range apps {
+		statePath := filepath.Join(repoDir, "repos", app.owner, app.name, "state.db")
+		stateDB, openErr := statedb.Open(ctx, statePath)
+		require.NoError(t, openErr)
+		err = stateDB.Close()
+		require.NoError(t, err)
+		stateRel := filepath.Join("repos", app.owner, app.name, "state.db")
+		_ = mustGit(t, repoDir, "add", stateRel)
+	}
+	_ = mustGit(t, repoDir, "commit", "-m", "state")
+
+	_ = mustGit(t, repoDir, "checkout", "main")
+	return
+}
+
+func countGooseVersions(t *testing.T, repoDir string, rel string) (count int) {
+	t.Helper()
+	tipPath := filepath.Join(JunkDir, t.Name()+"-state-tip.db")
+	spec := "state:" + filepath.ToSlash(rel) + "/state.db"
+	blob := mustGit(t, repoDir, "show", spec)
+	err := os.WriteFile(tipPath, blob, 0644)
+	require.NoError(t, err)
+
+	db, err := sql.Open("sqlite3", tipPath)
+	require.NoError(t, err)
+	defer db.Close()
+
+	err = db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM goose_db_version`).Scan(&count)
+	require.NoError(t, err)
+	return
+}
