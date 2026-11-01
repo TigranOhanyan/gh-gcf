@@ -15,7 +15,7 @@ import (
 
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 	"github.com/TigranOhanyan/gh-gcf/statedb"
-	stateentities "github.com/TigranOhanyan/gh-gcf/statedb/entities"
+	"github.com/TigranOhanyan/gh-gcf/statedb/records"
 )
 
 func Test_Tick_should_print_the_stored_tick_id(t *testing.T) {
@@ -199,7 +199,7 @@ func setupRepos(t *testing.T, apps []appSetup) (repoDir string) {
 	return
 }
 
-func ticksAtTip(t *testing.T, repoDir string, rel string) (rows []stateentities.Tick) {
+func ticksAtTip(t *testing.T, repoDir string, rel string) (rows []records.Tick) {
 	t.Helper()
 	tipPath := filepath.Join(JunkDir, t.Name()+"-state-tip.db")
 	spec := "state:" + filepath.ToSlash(rel) + "/state.db"

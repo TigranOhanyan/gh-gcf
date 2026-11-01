@@ -9,8 +9,8 @@ generate:
 # Clean generated files
 clean:
 	@echo "🧹 Cleaning sqlc generated files..."
-	@rm -rf ./entities/ 2>/dev/null || true
-	@echo "✅ Cleanup complete! (removed entities/ directory)"
+	@rm -rf ./records/ 2>/dev/null || true
+	@echo "✅ Cleanup complete! (removed records/ directory)"
 
 # Clean and regenerate
 reset: clean generate

@@ -3,7 +3,7 @@
 //   sqlc v1.31.1
 // source: ticks.sql
 
-package entities
+package records
 
 import (
 	"context"

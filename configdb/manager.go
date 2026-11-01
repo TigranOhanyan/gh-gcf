@@ -8,7 +8,7 @@ import (
 	"io/fs"
 	"os"
 
-	"github.com/TigranOhanyan/gh-gcf/configdb/entities"
+	"github.com/TigranOhanyan/gh-gcf/configdb/records"
 	"github.com/ncruces/go-sqlite3"
 	"github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
@@ -21,7 +21,7 @@ var embedMigrations embed.FS
 // DB is one SQLite file with this package's migrations applied.
 type DB struct {
 	DB           *sql.DB
-	Queries      *entities.Queries
+	Queries      *records.Queries
 	FileFullPath string
 	isClosed     bool
 }
@@ -86,7 +86,7 @@ func open(ctx context.Context, path string, strategy migrationStrategy) (db *DB,
 		return
 	}
 
-	queries := entities.New(sqlDB)
+	queries := records.New(sqlDB)
 	db = &DB{
 		DB:           sqlDB,
 		Queries:      queries,
@@ -108,7 +108,7 @@ func applyStrategy(ctx context.Context, sqlDB *sql.DB, provider *goose.Provider,
 }
 
 func requireApplied(ctx context.Context, sqlDB *sql.DB, provider *goose.Provider) (err error) {
-	queries := entities.New(sqlDB)
+	queries := records.New(sqlDB)
 	versions, err := queries.GetAppliedMigrationVersions(ctx)
 	if err != nil {
 		err = fmt.Errorf("database migrations are not applied: %w", err)

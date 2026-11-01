@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 
-	"github.com/TigranOhanyan/gh-gcf/statedb/entities"
+	"github.com/TigranOhanyan/gh-gcf/statedb/records"
 	"github.com/ncruces/go-sqlite3"
 	"github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
@@ -20,7 +20,7 @@ var embedMigrations embed.FS
 // DB is one SQLite file with this package's migrations applied.
 type DB struct {
 	DB           *sql.DB
-	Queries      *entities.Queries
+	Queries      *records.Queries
 	FileFullPath string
 	isClosed     bool
 }
@@ -58,7 +58,7 @@ func Open(ctx context.Context, path string) (db *DB, err error) {
 		return
 	}
 
-	queries := entities.New(sqlDB)
+	queries := records.New(sqlDB)
 	db = &DB{
 		DB:           sqlDB,
 		Queries:      queries,

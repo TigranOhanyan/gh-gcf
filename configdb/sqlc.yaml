@@ -7,8 +7,8 @@ sql:
       - "schema/goose_db_version.sql"
     gen:
       go:
-        package: "entities"
-        out: "entities"
+        package: "records"
+        out: "records"
         emit_json_tags: true
         emit_prepared_queries: false
         emit_interface: false

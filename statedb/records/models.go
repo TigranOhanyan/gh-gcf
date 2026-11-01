@@ -2,7 +2,7 @@
 // versions:
 //   sqlc v1.31.1
 
-package entities
+package records
 
 type Step struct {
 	ID     string `json:"id"`
