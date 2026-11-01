@@ -26,6 +26,10 @@ _Avoid_: reconcile, cycle, job
 One named piece of a tick, recorded in each app repo's state.
 _Avoid_: phase, stage, job, action
 
+**Event**:
+A moment a step recorded: starting, ack, rejected, completed, or failed. A poll that finds the agent still running writes none.
+_Avoid_: log, status
+
 **Executor**:
 The part of the factory that carries one command across every app repo.
 _Avoid_: engine, runner
