@@ -39,6 +39,7 @@ func (tick tickExecutor) CreateTick(ctx context.Context) (id string, err error) 
 			log.Error("insert tick", "owner", repo.Owner, "name", repo.Name, "err", err)
 			return
 		}
+		log.Info("insert tick", "owner", repo.Owner, "name", repo.Name)
 		repoName := repo.Owner + "/" + repo.Name
 		subject = commands.CommitSubject(id, tickName, repoName, tickCreated)
 		return
@@ -60,5 +61,6 @@ func newTickID() (id string, err error) {
 		return
 	}
 	id = value.String()
+	log.Info("tick", "id", id)
 	return
 }

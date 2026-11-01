@@ -43,15 +43,22 @@ func (step StepExecutor) Execute(ctx context.Context, action Action) (err error)
 		return
 	}
 
+	name := action.Name()
+	log.Info("step", "name", name)
+
 	visit := func(ctx context.Context, repo commands.Repo) (subject string, err error) {
 		tick := stateentities.Tick{ID: step.TickID}
 		message, err := action.Apply(ctx, repo, tick)
+		repoName := repo.Owner + "/" + repo.Name
 		failed := err != nil
 		if failed {
 			message = err.Error()
+			log.Error("apply", "name", name, "repo", repoName, "err", err)
 		}
-		name := action.Name()
-		repoName := repo.Owner + "/" + repo.Name
+		succeeded := !failed
+		if succeeded {
+			log.Info("apply", "name", name, "repo", repoName, "message", message)
+		}
 		subject = commands.CommitSubject(step.TickID, name, repoName, message)
 		return
 	}
