@@ -3,7 +3,7 @@
 #
 # GH_GCF_VERSION is the pin passed to `gh extension install --pin`.
 # Bind replaces __GCF_VERSION__ with the release tag of the binary that runs it.
-# The tick checks out main and state, installs gh-gcf, and pushes state.
+# The tick checks out main and state, installs gh-gcf, records a tick, prints its id, and pushes state.
 # CURSOR_API_KEY is available for later steps. It is never printed.
 
 name: Factory Tick
@@ -45,5 +45,8 @@ jobs:
 
           echo "Installing gh-gcf ${GH_GCF_VERSION}."
           gh extension install TigranOhanyan/gh-gcf --pin "${GH_GCF_VERSION}"
+
+          tick_id="$(gh gcf tick)"
+          echo "Tick ${tick_id}."
 
           git push origin state
