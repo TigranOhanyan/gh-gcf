@@ -23,7 +23,7 @@ type tickExecutor struct {
 }
 
 // CreateTick stores one new tick id in every app repo and commits each state.db.
-// started_at is set by the database to the current UTC time.
+// created_at is set by the database to the current UTC time.
 // Config is opened from ConfigBranch and is not committed. State is opened from StateBranch.
 // The commit subject is [tick id] [tick] [owner/name] created.
 // The same id is stored in every repo. An empty FactoryDir uses the current directory.

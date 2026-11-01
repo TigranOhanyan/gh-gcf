@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
@@ -60,6 +61,30 @@ func Test_Execute_should_store_one_step_named_for_the_step(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, id, row.TickID)
 	assert.Equal(t, recordName, row.Name)
+}
+
+func Test_Execute_should_store_a_utc_timestamp_for_the_step(t *testing.T) {
+	startOfTest := time.Now().Add(-time.Second)
+	repoDir := setupFactory(t)
+	id := runTick(t, repoDir)
+	step := recordStep{}
+
+	exec := StepExecutor{
+		FactoryDir:   repoDir,
+		ConfigBranch: "main",
+		StateBranch:  "state",
+		TickID:       id,
+	}
+	err := exec.Execute(t.Context(), step)
+	require.NoError(t, err)
+	startOfCheck := time.Now().Add(time.Second)
+
+	rows := stepsAtTip(t, repoDir, "repos/octo/app")
+	require.Len(t, rows, 1)
+	row := rows[0]
+	createdAt, err := time.Parse(time.RFC3339Nano, row.CreatedAt)
+	require.NoError(t, err)
+	assert.WithinRange(t, createdAt, startOfTest, startOfCheck)
 }
 
 func Test_Execute_should_commit_once_for_each_repo(t *testing.T) {

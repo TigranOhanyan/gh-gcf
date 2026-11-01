@@ -19,7 +19,7 @@ func (q *Queries) CreateTick(ctx context.Context, id string) error {
 }
 
 const getTicks = `-- name: GetTicks :many
-SELECT id, started_at FROM tick ORDER BY id
+SELECT id, created_at FROM tick ORDER BY id
 `
 
 func (q *Queries) GetTicks(ctx context.Context) ([]Tick, error) {
@@ -31,7 +31,7 @@ func (q *Queries) GetTicks(ctx context.Context) ([]Tick, error) {
 	var items []Tick
 	for rows.Next() {
 		var i Tick
-		if err := rows.Scan(&i.ID, &i.StartedAt); err != nil {
+		if err := rows.Scan(&i.ID, &i.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

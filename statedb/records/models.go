@@ -13,12 +13,13 @@ type Event struct {
 }
 
 type Step struct {
-	ID     string `json:"id"`
-	TickID string `json:"tick_id"`
-	Name   string `json:"name"`
+	ID        string `json:"id"`
+	TickID    string `json:"tick_id"`
+	Name      string `json:"name"`
+	CreatedAt string `json:"created_at"`
 }
 
 type Tick struct {
 	ID        string `json:"id"`
-	StartedAt string `json:"started_at"`
+	CreatedAt string `json:"created_at"`
 }

@@ -25,7 +25,7 @@ func (q *Queries) CreateStep(ctx context.Context, arg CreateStepParams) error {
 }
 
 const getSteps = `-- name: GetSteps :many
-SELECT id, tick_id, name FROM step ORDER BY id
+SELECT id, tick_id, name, created_at FROM step ORDER BY id
 `
 
 func (q *Queries) GetSteps(ctx context.Context) ([]Step, error) {
@@ -37,7 +37,12 @@ func (q *Queries) GetSteps(ctx context.Context) ([]Step, error) {
 	var items []Step
 	for rows.Next() {
 		var i Step
-		if err := rows.Scan(&i.ID, &i.TickID, &i.Name); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.TickID,
+			&i.Name,
+			&i.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

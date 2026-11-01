@@ -91,9 +91,9 @@ func Test_CreateTick_should_store_a_utc_timestamp(t *testing.T) {
 	require.Len(t, rows, 1)
 	row := rows[0]
 	assert.Equal(t, id, row.ID)
-	startedAt, err := time.Parse(time.RFC3339Nano, row.StartedAt)
+	createdAt, err := time.Parse(time.RFC3339Nano, row.CreatedAt)
 	require.NoError(t, err)
-	assert.WithinRange(t, startedAt, startOfTest, startOfCheck)
+	assert.WithinRange(t, createdAt, startOfTest, startOfCheck)
 }
 
 func Test_CreateTick_should_commit_once_for_each_repo(t *testing.T) {
