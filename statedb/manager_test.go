@@ -62,7 +62,7 @@ func Test_Open_should_leave_an_existing_database_unchanged(t *testing.T) {
 	ids, err := db.Queries.GetTicks(ctx)
 	require.NoError(t, err)
 	require.Len(t, ids, 1)
-	assert.Equal(t, tickID, ids[0])
+	assert.Equal(t, tickID, ids[0].ID)
 }
 
 func Test_CreateTick_should_refuse_an_id_that_is_not_26_characters(t *testing.T) {

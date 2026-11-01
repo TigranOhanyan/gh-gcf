@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 	"github.com/TigranOhanyan/gh-gcf/statedb"
+	stateentities "github.com/TigranOhanyan/gh-gcf/statedb/entities"
 )
 
 func Test_Tick_should_print_the_stored_tick_id(t *testing.T) {
@@ -31,9 +33,9 @@ func Test_Tick_should_print_the_stored_tick_id(t *testing.T) {
 	id := strings.TrimSpace(output.String())
 	_, err = ulid.Parse(id)
 	assert.NoError(t, err)
-	ids := ticksAtTip(t, repoDir, "repos/octo/app")
-	require.Len(t, ids, 1)
-	assert.Equal(t, id, ids[0])
+	rows := ticksAtTip(t, repoDir, "repos/octo/app")
+	require.Len(t, rows, 1)
+	assert.Equal(t, id, rows[0].ID)
 }
 
 func Test_CreateTick_should_commit_the_tick_subject_on_the_state_branch(t *testing.T) {
@@ -66,9 +68,32 @@ func Test_CreateTick_should_store_one_tick_on_the_state_branch(t *testing.T) {
 
 	_, err = ulid.Parse(id)
 	assert.NoError(t, err)
-	ids := ticksAtTip(t, repoDir, rel)
-	require.Len(t, ids, 1)
-	assert.Equal(t, id, ids[0])
+	rows := ticksAtTip(t, repoDir, rel)
+	require.Len(t, rows, 1)
+	assert.Equal(t, id, rows[0].ID)
+}
+
+func Test_CreateTick_should_store_a_utc_timestamp(t *testing.T) {
+	repoDir := setupFactory(t)
+	rel := "repos/octo/app"
+	tick := tickExecutor{
+		FactoryDir:   repoDir,
+		ConfigBranch: "main",
+		StateBranch:  "state",
+	}
+
+	startOfTest := time.Now().Add(-time.Second)
+	id, err := tick.CreateTick(t.Context())
+	require.NoError(t, err)
+	startOfCheck := time.Now().Add(time.Second)
+
+	rows := ticksAtTip(t, repoDir, rel)
+	require.Len(t, rows, 1)
+	row := rows[0]
+	assert.Equal(t, id, row.ID)
+	startedAt, err := time.Parse(time.RFC3339Nano, row.StartedAt)
+	require.NoError(t, err)
+	assert.WithinRange(t, startedAt, startOfTest, startOfCheck)
 }
 
 func Test_CreateTick_should_commit_once_for_each_repo(t *testing.T) {
@@ -110,12 +135,12 @@ func Test_CreateTick_should_store_the_same_tick_in_each_repo(t *testing.T) {
 	id, err := tick.CreateTick(t.Context())
 	require.NoError(t, err)
 
-	appIDs := ticksAtTip(t, repoDir, appRel)
-	otherIDs := ticksAtTip(t, repoDir, otherRel)
-	require.Len(t, appIDs, 1)
-	require.Len(t, otherIDs, 1)
-	assert.Equal(t, id, appIDs[0])
-	assert.Equal(t, id, otherIDs[0])
+	appRows := ticksAtTip(t, repoDir, appRel)
+	otherRows := ticksAtTip(t, repoDir, otherRel)
+	require.Len(t, appRows, 1)
+	require.Len(t, otherRows, 1)
+	assert.Equal(t, id, appRows[0].ID)
+	assert.Equal(t, id, otherRows[0].ID)
 }
 
 type appSetup struct {
@@ -174,7 +199,7 @@ func setupRepos(t *testing.T, apps []appSetup) (repoDir string) {
 	return
 }
 
-func ticksAtTip(t *testing.T, repoDir string, rel string) (ids []string) {
+func ticksAtTip(t *testing.T, repoDir string, rel string) (rows []stateentities.Tick) {
 	t.Helper()
 	tipPath := filepath.Join(JunkDir, t.Name()+"-state-tip.db")
 	spec := "state:" + filepath.ToSlash(rel) + "/state.db"
@@ -186,7 +211,7 @@ func ticksAtTip(t *testing.T, repoDir string, rel string) (ids []string) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	ids, err = db.Queries.GetTicks(t.Context())
+	rows, err = db.Queries.GetTicks(t.Context())
 	require.NoError(t, err)
 	return
 }

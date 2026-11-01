@@ -4,6 +4,13 @@
 
 package entities
 
+type Step struct {
+	ID     string `json:"id"`
+	TickID string `json:"tick_id"`
+	Name   string `json:"name"`
+}
+
 type Tick struct {
-	ID string `json:"id"`
+	ID        string `json:"id"`
+	StartedAt string `json:"started_at"`
 }

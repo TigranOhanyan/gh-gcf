@@ -22,6 +22,10 @@ _Avoid_: setup, init
 One scheduled run of the factory that looks at every app repo and takes the next action for each issue and pull request.
 _Avoid_: reconcile, cycle, job
 
+**Step**:
+One named action of a tick, recorded in each app repo's state.
+_Avoid_: phase, stage, job
+
 **Executor**:
 The part of the factory that carries one command across every app repo.
 _Avoid_: engine, runner

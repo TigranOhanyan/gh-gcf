@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -36,6 +37,29 @@ func Test_Execute_should_commit_the_tick_subject_on_the_state_branch(t *testing.
 	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
 	expected := fmt.Sprintf("[%s] [record] [octo/app] recorded tick %s", id, id)
 	assert.Equal(t, expected, strings.TrimSpace(string(message)))
+}
+
+func Test_Execute_should_store_one_step_named_for_the_action(t *testing.T) {
+	repoDir := setupFactory(t)
+	id := runTick(t, repoDir)
+	action := recordAction{}
+
+	exec := StepExecutor{
+		FactoryDir:   repoDir,
+		ConfigBranch: "main",
+		StateBranch:  "state",
+		TickID:       id,
+	}
+	err := exec.Execute(t.Context(), action)
+	require.NoError(t, err)
+
+	rows := stepsAtTip(t, repoDir, "repos/octo/app")
+	require.Len(t, rows, 1)
+	row := rows[0]
+	_, err = ulid.Parse(row.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, id, row.TickID)
+	assert.Equal(t, recordName, row.Name)
 }
 
 func Test_Execute_should_commit_once_for_each_repo(t *testing.T) {
@@ -122,6 +146,26 @@ func Test_Execute_should_commit_the_error_when_the_action_returns_an_error(t *te
 	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
 	expected := fmt.Sprintf("[%s] [fail] [octo/app] label is missing", id)
 	assert.Equal(t, expected, strings.TrimSpace(string(message)))
+}
+
+func Test_Execute_should_store_the_step_when_the_action_returns_an_error(t *testing.T) {
+	repoDir := setupFactory(t)
+	id := runTick(t, repoDir)
+	action := failAction{}
+
+	exec := StepExecutor{
+		FactoryDir:   repoDir,
+		ConfigBranch: "main",
+		StateBranch:  "state",
+		TickID:       id,
+	}
+	err := exec.Execute(t.Context(), action)
+	require.Error(t, err)
+
+	rows := stepsAtTip(t, repoDir, "repos/octo/app")
+	require.Len(t, rows, 1)
+	assert.Equal(t, id, rows[0].TickID)
+	assert.Equal(t, failName, rows[0].Name)
 }
 
 func Test_Execute_should_refuse_a_missing_tick_id(t *testing.T) {
@@ -234,6 +278,23 @@ func setupRepos(t *testing.T, apps []appSetup) (repoDir string) {
 	_ = mustGit(t, repoDir, "commit", "-m", "state")
 
 	_ = mustGit(t, repoDir, "checkout", "main")
+	return
+}
+
+func stepsAtTip(t *testing.T, repoDir string, rel string) (rows []stateentities.Step) {
+	t.Helper()
+	tipPath := filepath.Join(JunkDir, t.Name()+"-state-tip.db")
+	spec := "state:" + filepath.ToSlash(rel) + "/state.db"
+	blob := mustGit(t, repoDir, "show", spec)
+	err := os.WriteFile(tipPath, blob, 0644)
+	require.NoError(t, err)
+
+	db, err := statedb.Open(t.Context(), tipPath)
+	require.NoError(t, err)
+	defer db.Close()
+
+	rows, err = db.Queries.GetSteps(t.Context())
+	require.NoError(t, err)
 	return
 }
 

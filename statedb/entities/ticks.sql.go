@@ -19,22 +19,22 @@ func (q *Queries) CreateTick(ctx context.Context, id string) error {
 }
 
 const getTicks = `-- name: GetTicks :many
-SELECT id FROM tick ORDER BY id
+SELECT id, started_at FROM tick ORDER BY id
 `
 
-func (q *Queries) GetTicks(ctx context.Context) ([]string, error) {
+func (q *Queries) GetTicks(ctx context.Context) ([]Tick, error) {
 	rows, err := q.db.QueryContext(ctx, getTicks)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	var items []Tick
 	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
+		var i Tick
+		if err := rows.Scan(&i.ID, &i.StartedAt); err != nil {
 			return nil, err
 		}
-		items = append(items, id)
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
