@@ -16,6 +16,10 @@ _Avoid_: host, host repo, target repo
 The commit on a factory repo's main branch that installs that factory.
 _Avoid_: setup, init
 
+**Setup**:
+The user's recording of an app repo's config.
+_Avoid_: bind, init
+
 ## Running
 
 **Tick**:

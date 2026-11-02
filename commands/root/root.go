@@ -5,6 +5,7 @@ import (
 
 	"github.com/TigranOhanyan/gh-gcf/commands/bind"
 	"github.com/TigranOhanyan/gh-gcf/commands/label"
+	"github.com/TigranOhanyan/gh-gcf/commands/setup"
 	"github.com/TigranOhanyan/gh-gcf/commands/tick"
 )
 
@@ -19,5 +20,7 @@ func NewRoot() (cmd *cobra.Command) {
 	cmd.AddCommand(tickCmd)
 	labelCmd := label.NewLabel()
 	cmd.AddCommand(labelCmd)
+	setupCmd := setup.NewSetup()
+	cmd.AddCommand(setupCmd)
 	return
 }
