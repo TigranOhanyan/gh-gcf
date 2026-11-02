@@ -35,9 +35,12 @@ func Test_Execute_should_commit_the_tick_subject_on_the_state_branch(t *testing.
 	err := exec.Execute(t.Context(), step)
 	require.NoError(t, err)
 
-	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
-	expected := fmt.Sprintf("[%s] [record] [octo/app] recorded tick %s", id, id)
-	assert.Equal(t, expected, strings.TrimSpace(string(message)))
+	subject := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
+	expectedSubject := fmt.Sprintf("✅ [%s] [record] [octo/app]", id)
+	assert.Equal(t, expectedSubject, strings.TrimSpace(string(subject)))
+	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
+	expectedBody := fmt.Sprintf("✅ recorded tick %s", id)
+	assert.Equal(t, expectedBody, strings.TrimSpace(string(body)))
 }
 
 func Test_Execute_should_store_one_step_named_for_the_step(t *testing.T) {
@@ -107,8 +110,8 @@ func Test_Execute_should_commit_once_for_each_repo(t *testing.T) {
 	output := mustGit(t, repoDir, "log", "-2", "--format=%s", "state")
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	require.Len(t, lines, 2)
-	appSubject := fmt.Sprintf("[%s] [record] [octo/app] recorded tick %s", id, id)
-	otherSubject := fmt.Sprintf("[%s] [record] [octo/other] recorded tick %s", id, id)
+	appSubject := fmt.Sprintf("✅ [%s] [record] [octo/app]", id)
+	otherSubject := fmt.Sprintf("✅ [%s] [record] [octo/other]", id)
 	assert.Equal(t, otherSubject, lines[0])
 	assert.Equal(t, appSubject, lines[1])
 }
@@ -149,9 +152,12 @@ func Test_Execute_should_commit_when_the_step_writes_nothing(t *testing.T) {
 	err := exec.Execute(t.Context(), step)
 	require.NoError(t, err)
 
-	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
-	expected := fmt.Sprintf("[%s] [quiet] [octo/app] wrote nothing", id)
-	assert.Equal(t, expected, strings.TrimSpace(string(message)))
+	subject := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
+	expectedSubject := fmt.Sprintf("✅ [%s] [quiet] [octo/app]", id)
+	assert.Equal(t, expectedSubject, strings.TrimSpace(string(subject)))
+	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
+	expectedBody := "✅ wrote nothing"
+	assert.Equal(t, expectedBody, strings.TrimSpace(string(body)))
 }
 
 func Test_Execute_should_commit_the_error_when_the_step_returns_an_error(t *testing.T) {
@@ -168,9 +174,34 @@ func Test_Execute_should_commit_the_error_when_the_step_returns_an_error(t *test
 	err := exec.Execute(t.Context(), step)
 	require.Error(t, err)
 
-	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
-	expected := fmt.Sprintf("[%s] [fail] [octo/app] label is missing", id)
-	assert.Equal(t, expected, strings.TrimSpace(string(message)))
+	subject := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
+	expectedSubject := fmt.Sprintf("❌ [%s] [fail] [octo/app]", id)
+	assert.Equal(t, expectedSubject, strings.TrimSpace(string(subject)))
+	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
+	expectedBody := "❌ label is missing"
+	assert.Equal(t, expectedBody, strings.TrimSpace(string(body)))
+}
+
+func Test_Execute_should_keep_the_message_and_the_error(t *testing.T) {
+	repoDir := setupFactory(t)
+	id := runTick(t, repoDir)
+	step := bothStep{}
+
+	exec := StepExecutor{
+		FactoryDir:   repoDir,
+		ConfigBranch: "main",
+		StateBranch:  "state",
+		TickID:       id,
+	}
+	err := exec.Execute(t.Context(), step)
+	require.Error(t, err)
+
+	subject := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
+	expectedSubject := fmt.Sprintf("❌ [%s] [both] [octo/app]", id)
+	assert.Equal(t, expectedSubject, strings.TrimSpace(string(subject)))
+	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
+	expectedBody := "✅ [todo] created\n❌ [bug] POST failed"
+	assert.Equal(t, expectedBody, strings.TrimSpace(string(body)))
 }
 
 func Test_Execute_should_store_the_step_when_the_step_returns_an_error(t *testing.T) {
@@ -215,7 +246,7 @@ func (recordStep) Name() (name string) {
 	return
 }
 
-func (recordStep) Apply(_ context.Context, _ commands.Repo, tickRow records.Tick) (message string, err error) {
+func (recordStep) Apply(_ context.Context, _ commands.Repo, tickRow records.Tick, _ records.Step) (message string, err error) {
 	id := tickRow.ID
 	message = fmt.Sprintf("recorded tick %s", id)
 	return
@@ -231,7 +262,7 @@ func (quietStep) Name() (name string) {
 	return
 }
 
-func (quietStep) Apply(context.Context, commands.Repo, records.Tick) (message string, err error) {
+func (quietStep) Apply(context.Context, commands.Repo, records.Tick, records.Step) (message string, err error) {
 	message = quietMessage
 	return
 }
@@ -245,8 +276,23 @@ func (failStep) Name() (name string) {
 	return
 }
 
-func (failStep) Apply(context.Context, commands.Repo, records.Tick) (message string, err error) {
+func (failStep) Apply(context.Context, commands.Repo, records.Tick, records.Step) (message string, err error) {
 	err = fmt.Errorf("label is missing")
+	return
+}
+
+const bothName = "both"
+
+type bothStep struct{}
+
+func (bothStep) Name() (name string) {
+	name = bothName
+	return
+}
+
+func (bothStep) Apply(context.Context, commands.Repo, records.Tick, records.Step) (message string, err error) {
+	message = "[todo] created"
+	err = fmt.Errorf("[bug] POST failed")
 	return
 }
 

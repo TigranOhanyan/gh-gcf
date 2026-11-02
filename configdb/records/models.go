@@ -14,3 +14,9 @@ type GooseDbVersion struct {
 	IsApplied int64        `json:"is_applied"`
 	Tstamp    sql.NullTime `json:"tstamp"`
 }
+
+type Label struct {
+	Name         string `json:"name"`
+	Color        string `json:"color"`
+	RegisteredAt string `json:"registered_at"`
+}

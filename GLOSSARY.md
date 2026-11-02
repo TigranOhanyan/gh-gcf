@@ -38,8 +38,12 @@ _Avoid_: engine, runner
 What the user wants the factory to do: its labels, Apps, blueprints, and the CI checks that can claim a fixer. Only the user changes it.
 _Avoid_: settings, desired state
 
+**Label**:
+A name the user records in an app repo's config. The factory creates that name on the app repo when it is missing.
+_Avoid_: tag, marker
+
 **State**:
-What the factory has done and seen, including the config data kept by compilation. Only the tick changes it.
+What the factory has done and seen. The tick and the steps write it. The user does not.
 _Avoid_: database, history
 
 **Compilation**:

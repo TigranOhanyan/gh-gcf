@@ -30,7 +30,7 @@ func Test_OpenAndMigrate_should_migrate_a_new_database(t *testing.T) {
 
 	versions, err := db.Queries.GetAppliedMigrationVersions(ctx)
 	require.NoError(t, err)
-	expected := []int64{0, 1}
+	expected := []int64{0, 1, 2}
 	assert.Equal(t, expected, versions)
 
 	err = db.Close()

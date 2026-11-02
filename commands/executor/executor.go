@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"strings"
 	"time"
 
 	"charm.land/log/v2"
@@ -15,11 +16,11 @@ import (
 
 // Step is the work one command does for a single app repo.
 // Name is the step name in the state commit subject.
-// Apply returns the message for that subject, formed from what the step did.
-// When Apply returns an error, the subject uses that error text instead.
+// Apply returns the lines the commit body records, and an error when the step stopped.
+// Both can be set. The executor keeps each of them.
 type Step interface {
 	Name() (name string)
-	Apply(ctx context.Context, repo commands.Repo, tick records.Tick) (message string, err error)
+	Apply(ctx context.Context, repo commands.Repo, tick records.Tick, step records.Step) (message string, err error)
 }
 
 // StepExecutor carries one step across every app repo in FactoryDir.
@@ -36,9 +37,11 @@ type StepExecutor struct {
 // Config is opened from ConfigBranch and is not committed. State is opened from StateBranch.
 // TickID is the tick already stored for this run. Execute does not insert a tick.
 // The step id is new for this call and the same in every repo. Its name is the step name.
-// The commit subject is [tick id] [step name] [owner/name] and the message Apply returned.
-// When Apply returns an error, the message is that error text and the state commit still happens.
-// When the step insert fails, the subject is empty and that repo is not committed.
+// The commit subject is ✅ or ❌, then [tick id] [step name] [owner/name].
+// ✅ means Apply returned no error. ❌ means it did.
+// The body is Apply's message, with ✅ at the start of each line.
+// When Apply also returns an error, that text follows, with ❌ at the start of each line.
+// The state commit still happens. When the step insert fails, the subject is empty and that repo is not committed.
 // The first step error stops the walk. Repos already committed stay committed.
 func (exec StepExecutor) Execute(ctx context.Context, step Step) (err error) {
 	missingTick := exec.TickID == ""
@@ -56,25 +59,30 @@ func (exec StepExecutor) Execute(ctx context.Context, step Step) (err error) {
 		return
 	}
 
-	visit := func(ctx context.Context, repo commands.Repo) (subject string, err error) {
+	visit := func(ctx context.Context, repo commands.Repo) (commit commands.StateCommit, err error) {
 		err = insertStep(ctx, repo, stepID, exec.TickID, name)
 		if err != nil {
 			return
 		}
 
 		tick := records.Tick{ID: exec.TickID}
-		message, err := step.Apply(ctx, repo, tick)
+		stepRow := records.Step{
+			ID:     stepID,
+			TickID: exec.TickID,
+			Name:   name,
+		}
+		message, err := step.Apply(ctx, repo, tick, stepRow)
 		repoName := repo.Owner + "/" + repo.Name
 		failed := err != nil
 		if failed {
-			message = err.Error()
 			log.Error("apply", "name", name, "repo", repoName, "err", err)
 		}
 		succeeded := !failed
 		if succeeded {
 			log.Info("apply", "name", name, "repo", repoName, "message", message)
 		}
-		subject = commands.CommitSubject(exec.TickID, name, repoName, message)
+		commit.Subject = stepSubject(failed, exec.TickID, name, repoName)
+		commit.Body = markedBody(message, err)
 		return
 	}
 	err = commands.VisitRepos(ctx, exec.FactoryDir, exec.ConfigBranch, exec.StateBranch, visit)
@@ -93,6 +101,55 @@ func insertStep(ctx context.Context, repo commands.Repo, id string, tickID strin
 		return
 	}
 	log.Info("insert step", "owner", repo.Owner, "name", repo.Name, "id", id)
+	return
+}
+
+const passedMark = "✅"
+const failedMark = "❌"
+
+func stepSubject(failed bool, id string, name string, repoName string) (subject string) {
+	mark := passedMark
+	if failed {
+		mark = failedMark
+	}
+	subject = fmt.Sprintf("%s [%s] [%s] [%s]", mark, id, name, repoName)
+	return
+}
+
+func markedBody(message string, err error) (body string) {
+	success := markLines(message, passedMark)
+	var failure string
+	if err != nil {
+		failure = markLines(err.Error(), failedMark)
+	}
+	body = joinLines(success, failure)
+	return
+}
+
+func markLines(text string, mark string) (marked string) {
+	if text == "" {
+		return
+	}
+	lines := strings.Split(text, "\n")
+	markedLines := make([]string, 0, len(lines))
+	for _, line := range lines {
+		markedLine := mark + " " + line
+		markedLines = append(markedLines, markedLine)
+	}
+	marked = strings.Join(markedLines, "\n")
+	return
+}
+
+func joinLines(left string, right string) (joined string) {
+	if left == "" {
+		joined = right
+		return
+	}
+	if right == "" {
+		joined = left
+		return
+	}
+	joined = left + "\n" + right
 	return
 }
 

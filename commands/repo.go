@@ -36,12 +36,19 @@ type session struct {
 	cleanup   func()
 }
 
+// StateCommit is one git commit on the state branch.
+// An empty Subject together with an error skips the commit.
+type StateCommit struct {
+	Subject string
+	Body    string
+}
+
 // VisitRepos opens every app repo and calls visit.
 // Config is read from configBranch and is not committed. State is opened from stateBranch.
-// visit returns the state commit subject. An error with an empty subject does not commit.
+// visit returns the state commit. An error with an empty subject does not commit.
 // An error with a subject is committed, then returned.
 // The first error stops the walk. Repos already committed stay committed.
-func VisitRepos(ctx context.Context, factoryDir string, configBranch string, stateBranch string, visit func(context.Context, Repo) (string, error)) (err error) {
+func VisitRepos(ctx context.Context, factoryDir string, configBranch string, stateBranch string, visit func(context.Context, Repo) (StateCommit, error)) (err error) {
 	opened, err := openSession(ctx, factoryDir, configBranch, stateBranch)
 	if err != nil {
 		return
@@ -58,7 +65,7 @@ func VisitRepos(ctx context.Context, factoryDir string, configBranch string, sta
 	return
 }
 
-func visitRepo(ctx context.Context, configDir string, stateDir string, folder repoFolder, visit func(context.Context, Repo) (string, error)) (err error) {
+func visitRepo(ctx context.Context, configDir string, stateDir string, folder repoFolder, visit func(context.Context, Repo) (StateCommit, error)) (err error) {
 	repo, err := openRepo(ctx, configDir, stateDir, folder)
 	if err != nil {
 		return
@@ -66,10 +73,10 @@ func visitRepo(ctx context.Context, configDir string, stateDir string, folder re
 	defer repo.Config.Close()
 	defer repo.State.Close()
 
-	subject, err := visit(ctx, repo)
+	commit, err := visit(ctx, repo)
 	visitErr := err
 	failed := visitErr != nil
-	emptySubject := subject == ""
+	emptySubject := commit.Subject == ""
 	skipCommit := failed && emptySubject
 	if skipCommit {
 		return
@@ -80,7 +87,7 @@ func visitRepo(ctx context.Context, configDir string, stateDir string, folder re
 		log.Error("close state", "path", repo.State.FileFullPath, "err", err)
 		return
 	}
-	err = commitState(ctx, stateDir, folder.rel, subject)
+	err = commitState(ctx, stateDir, folder.rel, commit)
 	if err != nil {
 		return
 	}
@@ -270,7 +277,7 @@ func removeWorktree(ctx context.Context, factoryDir string, worktreePath string)
 	}
 }
 
-func commitState(ctx context.Context, stateDir string, rel string, message string) (err error) {
+func commitState(ctx context.Context, stateDir string, rel string, commit StateCommit) (err error) {
 	statePath := filepath.Join(rel, "state.db")
 	stateFile := filepath.ToSlash(statePath)
 	_, err = Git(ctx, stateDir, "add", "--", stateFile)
@@ -279,7 +286,13 @@ func commitState(ctx context.Context, stateDir string, rel string, message strin
 		return
 	}
 
-	_, err = Git(ctx, stateDir, "commit", "--allow-empty", "-m", message, "--", stateFile)
+	args := []string{"commit", "--allow-empty", "-m", commit.Subject}
+	hasBody := commit.Body != ""
+	if hasBody {
+		args = append(args, "-m", commit.Body)
+	}
+	args = append(args, "--", stateFile)
+	_, err = Git(ctx, stateDir, args...)
 	if err != nil {
 		log.Error("commit state", "dir", stateDir, "err", err)
 		return

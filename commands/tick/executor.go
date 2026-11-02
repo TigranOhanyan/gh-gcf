@@ -34,7 +34,7 @@ func (tick tickExecutor) CreateTick(ctx context.Context) (id string, err error) 
 		return
 	}
 
-	visit := func(ctx context.Context, repo commands.Repo) (subject string, err error) {
+	visit := func(ctx context.Context, repo commands.Repo) (commit commands.StateCommit, err error) {
 		err = repo.State.Queries.CreateTick(ctx, id)
 		if err != nil {
 			log.Error("insert tick", "owner", repo.Owner, "name", repo.Name, "err", err)
@@ -42,7 +42,7 @@ func (tick tickExecutor) CreateTick(ctx context.Context) (id string, err error) 
 		}
 		log.Info("insert tick", "owner", repo.Owner, "name", repo.Name)
 		repoName := repo.Owner + "/" + repo.Name
-		subject = commands.CommitSubject(id, tickName, repoName, tickCreated)
+		commit.Subject = commands.CommitSubject(id, tickName, repoName, tickCreated)
 		return
 	}
 	err = commands.VisitRepos(ctx, tick.FactoryDir, tick.ConfigBranch, tick.StateBranch, visit)

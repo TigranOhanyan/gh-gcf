@@ -4,12 +4,23 @@
 
 package records
 
+import (
+	"database/sql"
+)
+
 type Event struct {
 	ID        string `json:"id"`
 	StepID    string `json:"step_id"`
 	Kind      string `json:"kind"`
 	Message   string `json:"message"`
 	CreatedAt string `json:"created_at"`
+}
+
+type Label struct {
+	Name         string         `json:"name"`
+	Color        string         `json:"color"`
+	RegisteredAt string         `json:"registered_at"`
+	CreatedAt    sql.NullString `json:"created_at"`
 }
 
 type Step struct {

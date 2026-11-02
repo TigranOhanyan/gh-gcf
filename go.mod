@@ -11,11 +11,13 @@ tool (
 require (
 	charm.land/log/v2 v2.0.1
 	github.com/charmbracelet/fang v1.0.0
+	github.com/google/go-github/v93 v93.0.0
 	github.com/ncruces/go-sqlite3 v0.32.0
 	github.com/oklog/ulid/v2 v2.1.2
 	github.com/pressly/goose/v3 v3.29.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
+	github.com/wiremock/go-wiremock v1.16.0
 )
 
 require (
@@ -46,6 +48,8 @@ require (
 	github.com/go-logfmt/logfmt v0.6.1 // indirect
 	github.com/go-sql-driver/mysql v1.10.1 // indirect
 	github.com/google/cel-go v0.28.0 // indirect
+	github.com/google/go-querystring v1.2.0 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect

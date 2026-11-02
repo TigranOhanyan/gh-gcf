@@ -1,0 +1,10 @@
+services:
+
+  wiremock:
+    image: holomekc/wiremock-gui:latest
+    container_name: gh-gcf-wiremock
+    restart: "no"
+    hostname: wiremock
+    ports:
+      - "${WIREMOCK_EXPOSED_PORT}:8443"
+    command: [ "--port", "8443", "--max-request-journal", "1000", "--local-response-templating", "--root-dir", "/home/wiremock/storage" ]
