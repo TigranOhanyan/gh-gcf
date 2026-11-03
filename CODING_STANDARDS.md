@@ -12,6 +12,8 @@ Never put business logic in `if` / `switch` / `for` conditions. Compute, assign,
 
 Never edit think comments in code.
 
+Never alias an import to the name the package already declares. An alias is only for a different name.
+
 The admin database only creates the other databases, or ensures they exist. After `NewAdminDatabase`, close it. Pass the pointer to the other database constructors anyway. Those constructors take `_ *divanbashi.AdminDatabase` and do not use it. The unused parameter makes the creation order a compile-time requirement: nobody can open a domain database without first going through admin. [db.go](db.go) and [knowledge/db.go](knowledge/db.go) are the example.
 
 ### Exceptions
@@ -56,6 +58,16 @@ assert.Equal(t, string(status), row.Status)
 
 // Zap field constructors may stay in the argument list.
 zap.L().Error("ensure admin reader", zap.Error(err))
+```
+
+Leave an import unaliased when the package clause is already the name you use. `package tea` is referred to as `tea`:
+
+```go
+// bad
+import tea "charm.land/bubbletea/v2"
+
+// good
+import "charm.land/bubbletea/v2"
 ```
 
 Close the admin database after it has created the cluster databases. Pass the closed pointer so later constructors still require the admin step:

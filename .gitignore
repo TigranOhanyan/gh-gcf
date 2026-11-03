@@ -1,2 +1,6 @@
 /gh-gcf
 /dist/
+/schema/
+
+**/junk/*
+!**/junk/_keepme

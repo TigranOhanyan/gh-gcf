@@ -1,0 +1,15 @@
+version: "2"
+sql:
+  - engine: "sqlite"
+    queries: "access_patterns/"
+    schema:
+      - "migrations/"
+      - "schema/goose_db_version.sql"
+    gen:
+      go:
+        package: "records"
+        out: "records"
+        emit_json_tags: true
+        emit_prepared_queries: false
+        emit_interface: false
+        emit_exact_table_names: false

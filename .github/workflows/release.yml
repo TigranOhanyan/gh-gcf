@@ -16,3 +16,4 @@ jobs:
       - uses: cli/gh-extension-precompile@v2
         with:
           go_version_file: go.mod
+          go_build_options: -ldflags=-X=github.com/TigranOhanyan/gh-gcf/commands/bind.Version=${{ github.ref_name }}

@@ -1,21 +1,25 @@
 package main
 
 import (
-	"fmt"
+	"context"
 	"os"
 
-	"github.com/TigranOhanyan/gh-gcf/internal/cli"
-	"github.com/TigranOhanyan/gh-gcf/internal/source"
+	"charm.land/log/v2"
+	"github.com/TigranOhanyan/gh-gcf/commands/root"
+	"github.com/charmbracelet/fang"
 )
 
 func main() {
-	cwd, err := os.Getwd()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "gh gcf: %s\n", err)
-		os.Exit(1)
+	options := log.Options{
+		Level: log.InfoLevel,
 	}
-	if err := cli.Run(os.Args[1:], cwd, os.Stdout, os.Stderr, source.GitHub{}); err != nil {
-		fmt.Fprintf(os.Stderr, "gh gcf: %s\n", err)
+	logger := log.NewWithOptions(os.Stderr, options)
+	log.SetDefault(logger)
+
+	ctx := context.Background()
+	rootCmd := root.NewRoot()
+	err := fang.Execute(ctx, rootCmd)
+	if err != nil {
 		os.Exit(1)
 	}
 }

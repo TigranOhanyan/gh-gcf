@@ -16,8 +16,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: Start WireMock
+        run: make test-up && make test-setup
       - name: Test
-        run: go test ./...
+        run: make test-run
       - name: Build
         run: go build -o "$RUNNER_TEMP/gh-gcf" .
       - name: Check formatting

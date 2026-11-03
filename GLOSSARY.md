@@ -12,18 +12,42 @@ _Avoid_: host factory, control repo
 A repo whose issues a factory builds. It holds only its own code, CI and agent rules, and does not know the factory exists.
 _Avoid_: host, host repo, target repo
 
+**Bind**:
+The commit on a factory repo's main branch that installs that factory.
+_Avoid_: setup, init
+
+**Setup**:
+The user's recording of an app repo's config.
+_Avoid_: bind, init
+
 ## Running
 
 **Tick**:
-One scheduled run of the factory that looks at every app repo and takes the next action for each issue and pull request.
+One scheduled run of the factory that looks at every app repo and takes the next step for each issue and pull request.
 _Avoid_: reconcile, cycle, job
+
+**Step**:
+One named piece of a tick, recorded in each app repo's state.
+_Avoid_: phase, stage, job, action
+
+**Event**:
+A moment a step recorded: starting, ack, rejected, completed, or failed. A poll that finds the agent still running writes none.
+_Avoid_: log, status
+
+**Executor**:
+The part of the factory that carries one command across every app repo.
+_Avoid_: engine, runner
 
 **Config**:
 What the user wants the factory to do: its labels, Apps, blueprints, and the CI checks that can claim a fixer. Only the user changes it.
 _Avoid_: settings, desired state
 
+**Label**:
+A name the user records in an app repo's config. The factory creates that name on the app repo when it is missing.
+_Avoid_: tag, marker
+
 **State**:
-What the factory has done and seen, including the config data kept by compilation. Only the tick changes it.
+What the factory has done and seen. The tick and the steps write it. The user does not.
 _Avoid_: database, history
 
 **Compilation**:
