@@ -1,6 +1,6 @@
 # The label step calls GitHub with go-github
 
-The label step uses `google/go-github` to get and create labels. The token is `GH_TOKEN`, then `GITHUB_TOKEN`. When both are empty, the step runs `gh auth token` and uses the printed token. A `gh` extension does not receive the saved login as `GH_TOKEN`, and the REST API accepts that token as a bearer token from this process. Tests point the client's base URL at WireMock and stub the get and the create. The token is not written into an event.
+The label step uses `google/go-github` to get and create labels. When `FACTORY_GITHUB_APP_ID` and `FACTORY_GITHUB_APP_PRIVATE_KEY` are set, the step mints an installation token for the app repo and sends that (`0025-the-label-step-mints-an-installation-token.md`). Otherwise the token is `GH_TOKEN`, then `GITHUB_TOKEN`. When both are empty, the step runs `gh auth token` and uses the printed token. A `gh` extension does not receive the saved login as `GH_TOKEN`, and the REST API accepts that token as a bearer token from this process. Tests point the client's base URL at WireMock and stub the get and the create. The token is not written into an event.
 
 ## Considered Options
 

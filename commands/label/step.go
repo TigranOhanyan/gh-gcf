@@ -25,6 +25,7 @@ const eventFailed = "failed"
 
 type labelStep struct {
 	GitHub *github.Client
+	app    appAuth
 }
 
 func (labelStep) Name() (name string) {
@@ -37,6 +38,16 @@ func (step labelStep) Apply(ctx context.Context, repo commands.Repo, _ records.T
 	if err != nil {
 		log.Error("list labels", "owner", repo.Owner, "name", repo.Name, "err", err)
 		return
+	}
+
+	useApp := step.app.key != nil && len(labels) > 0
+	if useApp {
+		client, clientErr := step.app.clientFor(ctx, repo.Owner, repo.Name)
+		if clientErr != nil {
+			err = clientErr
+			return
+		}
+		step.GitHub = client
 	}
 
 	var lines []string

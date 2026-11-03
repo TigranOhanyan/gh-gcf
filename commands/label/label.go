@@ -2,6 +2,7 @@ package label
 
 import (
 	"charm.land/log/v2"
+	"github.com/google/go-github/v93/github"
 	"github.com/spf13/cobra"
 
 	"github.com/TigranOhanyan/gh-gcf/commands/executor"
@@ -18,9 +19,17 @@ func NewLabel() (cmd *cobra.Command) {
 		Short: "Ensure configured labels exist",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) (err error) {
-			client, err := newGitHubClient(cmd.Context())
+			app, err := loadAppAuth()
 			if err != nil {
 				return
+			}
+			var client *github.Client
+			needsUserToken := app.key == nil
+			if needsUserToken {
+				client, err = newGitHubClient(cmd.Context())
+				if err != nil {
+					return
+				}
 			}
 			exec := executor.StepExecutor{
 				FactoryDir:   factoryDir,
@@ -28,7 +37,7 @@ func NewLabel() (cmd *cobra.Command) {
 				StateBranch:  stateBranch,
 				TickID:       tickID,
 			}
-			step := labelStep{GitHub: client}
+			step := labelStep{GitHub: client, app: app}
 			err = exec.Execute(cmd.Context(), step)
 			return
 		},

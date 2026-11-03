@@ -2,6 +2,10 @@ package label_test
 
 import (
 	"bytes"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"net/http"
 	"os"
@@ -266,6 +270,95 @@ func Test_Label_should_use_gh_auth_token_when_the_environment_has_none(t *testin
 	requireGetToken(t, "todo", "script-token")
 }
 
+func Test_Label_should_create_a_label_with_an_installation_token(t *testing.T) {
+	resetWireMock(t)
+	stubInstallation(t, 42)
+	stubInstallationToken(t, 42, http.StatusCreated, `{"token":"ghs_test"}`)
+	stubGet(t, "todo", http.StatusNotFound, `{"message":"Not Found"}`)
+	stubPost(t, "todo", "ededed", http.StatusCreated, `{"id":1,"node_id":"x","url":"http://example","name":"todo","color":"ededed","default":false}`)
+	repoDir := setupFactory(t, []configLabel{{name: "todo", color: "ededed"}})
+	id := runTick(t, repoDir)
+	pemText := testAppKey(t)
+	t.Setenv("FACTORY_GITHUB_APP_ID", "123")
+	t.Setenv("FACTORY_GITHUB_APP_PRIVATE_KEY", pemText)
+	t.Setenv("GH_TOKEN", "")
+	startOfTest := time.Now().Add(-time.Second)
+
+	err := runLabel(t, repoDir, id, "")
+	require.NoError(t, err)
+	startOfCheck := time.Now().Add(time.Second)
+
+	requireRequestOrder(t, []string{
+		"GET /repos/octo/app/installation",
+		"POST /app/installations/42/access_tokens",
+		"GET /repos/octo/app/labels/todo",
+		"POST /repos/octo/app/labels",
+	})
+	requireJWT(t, "GET", "/repos/octo/app/installation")
+	requireGetToken(t, "todo", "ghs_test")
+	requirePost(t, "todo", "ededed", "ghs_test", 1)
+
+	rows := labelsAtTip(t, repoDir)
+	require.Len(t, rows, 1)
+	row := rows[0]
+	assert.Equal(t, "todo", row.Name)
+	assert.Equal(t, "ededed", row.Color)
+	assert.True(t, row.CreatedAt.Valid)
+	registeredAt, err := time.Parse(time.RFC3339Nano, row.RegisteredAt)
+	require.NoError(t, err)
+	assert.WithinRange(t, registeredAt, startOfTest, startOfCheck)
+	createdAt, err := time.Parse(time.RFC3339Nano, row.CreatedAt.String)
+	require.NoError(t, err)
+	assert.WithinRange(t, createdAt, startOfTest, startOfCheck)
+	events := eventsAtTip(t, repoDir)
+	require.Len(t, events, 2)
+	assert.Equal(t, "starting", events[0].Kind)
+	assert.Equal(t, "completed", events[1].Kind)
+}
+
+func Test_Label_should_stop_when_the_token_exchange_fails(t *testing.T) {
+	resetWireMock(t)
+	stubInstallation(t, 42)
+	stubInstallationToken(t, 42, http.StatusUnauthorized, `{"message":"Bad credentials"}`)
+	repoDir := setupFactory(t, []configLabel{{name: "todo", color: "ededed"}})
+	id := runTick(t, repoDir)
+	pemText := testAppKey(t)
+	t.Setenv("FACTORY_GITHUB_APP_ID", "123")
+	t.Setenv("FACTORY_GITHUB_APP_PRIVATE_KEY", pemText)
+	t.Setenv("GH_TOKEN", "")
+
+	err := runLabel(t, repoDir, id, "")
+	require.Error(t, err)
+
+	requireGetCount(t, "todo", 0)
+	rows := labelsAtTip(t, repoDir)
+	assert.Empty(t, rows)
+	events := eventsAtTip(t, repoDir)
+	assert.Empty(t, events)
+	subject := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
+	expectedSubject := fmt.Sprintf("❌ [%s] [label] [octo/app]", id)
+	assert.Equal(t, expectedSubject, strings.TrimSpace(string(subject)))
+	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
+	assert.Contains(t, string(body), "Bad credentials")
+}
+
+func Test_Label_should_refuse_an_app_id_without_a_private_key(t *testing.T) {
+	repoDir := setupFactory(t, []configLabel{{name: "todo", color: "ededed"}})
+	id := runTick(t, repoDir)
+	t.Setenv("FACTORY_GITHUB_APP_ID", "123")
+	t.Setenv("FACTORY_GITHUB_APP_PRIVATE_KEY", "")
+
+	err := runLabel(t, repoDir, id, token)
+	require.Error(t, err)
+
+	assert.Contains(t, err.Error(), "github app credentials are incomplete")
+	rows := labelsAtTip(t, repoDir)
+	assert.Empty(t, rows)
+	subject := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
+	expectedSubject := fmt.Sprintf("[%s] [tick] [octo/app] created", id)
+	assert.Equal(t, expectedSubject, strings.TrimSpace(string(subject)))
+}
+
 func Test_Label_should_require_a_tick_id(t *testing.T) {
 	cmd := label.NewLabel()
 	var output bytes.Buffer
@@ -396,6 +489,33 @@ func resetWireMock(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func stubInstallation(t *testing.T, id int64) {
+	t.Helper()
+	path := fmt.Sprintf("/repos/%s/%s/installation", owner, repoName)
+	body := fmt.Sprintf(`{"id":%d}`, id)
+	rule := wiremock.Get(wiremock.URLPathEqualTo(path)).WillReturnResponse(
+		wiremock.NewResponse().
+			WithStatus(int64(http.StatusOK)).
+			WithHeader("Content-Type", "application/json").
+			WithBody(body),
+	)
+	err := wiremockClient.StubFor(rule)
+	require.NoError(t, err)
+}
+
+func stubInstallationToken(t *testing.T, id int64, status int, body string) {
+	t.Helper()
+	path := fmt.Sprintf("/app/installations/%d/access_tokens", id)
+	rule := wiremock.Post(wiremock.URLPathEqualTo(path)).WillReturnResponse(
+		wiremock.NewResponse().
+			WithStatus(int64(status)).
+			WithHeader("Content-Type", "application/json").
+			WithBody(body),
+	)
+	err := wiremockClient.StubFor(rule)
+	require.NoError(t, err)
+}
+
 func stubGet(t *testing.T, name string, status int, body string) {
 	t.Helper()
 	path := fmt.Sprintf("/repos/%s/%s/labels/%s", owner, repoName, name)
@@ -454,6 +574,51 @@ func requireGetToken(t *testing.T, name string, authToken string) {
 	ok, err := wiremockClient.Verify(rule.Request(), 1)
 	require.NoError(t, err)
 	assert.True(t, ok)
+}
+
+func requireRequestOrder(t *testing.T, expected []string) {
+	t.Helper()
+	journal, err := wiremockClient.GetAllRequests()
+	require.NoError(t, err)
+	require.Len(t, journal.Requests, len(expected))
+	got := make([]string, 0, len(journal.Requests))
+	last := len(journal.Requests) - 1
+	for i := last; i >= 0; i-- {
+		req := journal.Requests[i].Request
+		line := req.Method + " " + req.URL
+		got = append(got, line)
+	}
+	assert.Equal(t, expected, got)
+}
+
+func requireJWT(t *testing.T, method string, path string) {
+	t.Helper()
+	journal, err := wiremockClient.GetAllRequests()
+	require.NoError(t, err)
+	var header string
+	for _, entry := range journal.Requests {
+		req := entry.Request
+		match := req.Method == method && req.URL == path
+		if match {
+			header = req.Headers["Authorization"]
+		}
+	}
+	require.NotEmpty(t, header)
+	tokenText := strings.TrimPrefix(header, "Bearer ")
+	parts := strings.Split(tokenText, ".")
+	assert.Len(t, parts, 3)
+}
+
+func testAppKey(t *testing.T) (pemText string) {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	block := &pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	}
+	pemText = string(pem.EncodeToMemory(block))
+	return
 }
 
 func writeTokenScript(t *testing.T) (path string) {

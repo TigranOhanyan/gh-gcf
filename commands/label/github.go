@@ -19,7 +19,11 @@ func newGitHubClient(ctx context.Context) (client *github.Client, err error) {
 	if err != nil {
 		return
 	}
+	client, err = newGitHubClientWithToken(token)
+	return
+}
 
+func newGitHubClientWithToken(token string) (client *github.Client, err error) {
 	auth := github.WithAuthToken(token)
 	options := []github.ClientOptionsFunc{auth}
 	base := os.Getenv(githubAPIURL)

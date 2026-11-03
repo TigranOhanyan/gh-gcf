@@ -5,6 +5,8 @@
 # Bind replaces __GCF_VERSION__ with the release tag of the binary that runs it.
 # The tick checks out main and state, installs gh-gcf, records a tick, prints its id, and pushes state.
 # CURSOR_API_KEY is available for later steps. It is never printed.
+# FACTORY_GITHUB_APP_ID and FACTORY_GITHUB_APP_PRIVATE_KEY let the label step mint an installation token.
+# GH_TOKEN stays the Actions token, used to install gh-gcf and push state.
 
 name: Factory Tick
 
@@ -29,6 +31,8 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+      FACTORY_GITHUB_APP_ID: ${{ secrets.FACTORY_GITHUB_APP_ID }}
+      FACTORY_GITHUB_APP_PRIVATE_KEY: ${{ secrets.FACTORY_GITHUB_APP_PRIVATE_KEY }}
 
     steps:
       - name: Checkout factory

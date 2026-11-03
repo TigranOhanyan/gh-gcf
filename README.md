@@ -32,7 +32,7 @@ gh gcf bind
 
 Bind writes the tick workflow and commits. Push the branch. When the factory repo only accepts changes through a pull request, open one from this branch. The tick reads `main` after that pull request is merged.
 
-4. In the factory repo's Actions secrets, set `CURSOR_API_KEY`.
+4. In the factory repo's Actions secrets, set `CURSOR_API_KEY`, `FACTORY_GITHUB_APP_ID`, and `FACTORY_GITHUB_APP_PRIVATE_KEY`. The private key is the PEM for the factory app.
 
 5. From the factory checkout:
 

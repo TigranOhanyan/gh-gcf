@@ -29,6 +29,14 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		os.Exit(1)
 	}
+	err = os.Unsetenv("FACTORY_GITHUB_APP_ID")
+	if err != nil {
+		os.Exit(1)
+	}
+	err = os.Unsetenv("FACTORY_GITHUB_APP_PRIVATE_KEY")
+	if err != nil {
+		os.Exit(1)
+	}
 
 	os.Exit(m.Run())
 }
