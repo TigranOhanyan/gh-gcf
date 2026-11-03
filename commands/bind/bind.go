@@ -30,19 +30,20 @@ const (
 var Version = devVersion
 
 func NewBind() (cmd *cobra.Command) {
-	var factoryRepo string
-
 	cmd = &cobra.Command{
 		Use:   "bind",
 		Short: "Install the tick workflow and migrate config",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return Bind(cmd.Context(), factoryRepo)
+		RunE: func(cmd *cobra.Command, _ []string) (err error) {
+			dir, err := os.Getwd()
+			if err != nil {
+				log.Error("current directory", "err", err)
+				return
+			}
+			err = Bind(cmd.Context(), dir)
+			return
 		},
 	}
-
-	flags := cmd.Flags()
-	flags.StringVar(&factoryRepo, "factory-repo", "", "path to the factory checkout")
 	return
 }
 
@@ -53,55 +54,38 @@ func Bind(ctx context.Context, factoryDir string) (err error) {
 		return
 	}
 
-	missingFactory := factoryDir == ""
-	if missingFactory {
-		factoryDir, err = os.Getwd()
-		if err != nil {
-			log.Error("current directory", "err", err)
-			return
-		}
-	}
-
-	err = requireMain(ctx, factoryDir)
+	err = requireCheckout(ctx, factoryDir)
 	if err != nil {
 		log.Error("factory repo", "path", factoryDir, "err", err)
 		return
 	}
 	log.Info("factory repo", "path", factoryDir)
 
-	mainDir, added, err := ensureMain(ctx, factoryDir)
+	err = installWorkflow(factoryDir)
 	if err != nil {
-		return
-	}
-	if added {
-		defer removeWorktree(ctx, factoryDir, mainDir)
-	}
-
-	err = installWorkflow(mainDir)
-	if err != nil {
-		log.Error("install workflow", "path", mainDir, "err", err)
+		log.Error("install workflow", "path", factoryDir, "err", err)
 		return
 	}
 
-	err = installWorktrees(mainDir)
+	err = installWorktrees(factoryDir)
 	if err != nil {
-		log.Error("install worktrees", "path", mainDir, "err", err)
+		log.Error("install worktrees", "path", factoryDir, "err", err)
 		return
 	}
 
-	configRels, err := migrateConfigs(ctx, mainDir)
+	configRels, err := migrateConfigs(ctx, factoryDir)
 	if err != nil {
-		log.Error("migrate config", "path", mainDir, "err", err)
+		log.Error("migrate config", "path", factoryDir, "err", err)
 		return
 	}
 
 	files := []string{workflowRel, gitignoreRel, hintRel}
 	files = append(files, configRels...)
-	err = commitMain(ctx, mainDir, files)
+	err = commitCheckout(ctx, factoryDir, files)
 	return
 }
 
-func requireMain(ctx context.Context, factoryDir string) (err error) {
+func requireCheckout(ctx context.Context, factoryDir string) (err error) {
 	top, err := git(ctx, factoryDir, "rev-parse", "--show-toplevel")
 	if err != nil {
 		err = fmt.Errorf("factory repo is not a git checkout")
@@ -121,17 +105,11 @@ func requireMain(ctx context.Context, factoryDir string) (err error) {
 		err = fmt.Errorf("factory repo is not a git checkout")
 		return
 	}
-
-	_, err = git(ctx, factoryDir, "rev-parse", "--verify", "refs/heads/main")
-	if err != nil {
-		err = fmt.Errorf("factory repo has no main branch")
-		return
-	}
 	return
 }
 
-func installWorkflow(mainDir string) (err error) {
-	workflowPath := filepath.Join(mainDir, filepath.FromSlash(workflowRel))
+func installWorkflow(factoryDir string) (err error) {
+	workflowPath := filepath.Join(factoryDir, filepath.FromSlash(workflowRel))
 	err = os.Remove(workflowPath)
 	missing := os.IsNotExist(err)
 	if missing {
@@ -174,34 +152,34 @@ func workflowContents() (contents []byte, err error) {
 	return
 }
 
-func installWorktrees(mainDir string) (err error) {
-	worktreesDir := filepath.Join(mainDir, ".worktrees")
+func installWorktrees(factoryDir string) (err error) {
+	worktreesDir := filepath.Join(factoryDir, ".worktrees")
 	err = os.MkdirAll(worktreesDir, 0755)
 	if err != nil {
 		return
 	}
 
-	gitignorePath := filepath.Join(mainDir, filepath.FromSlash(gitignoreRel))
+	gitignorePath := filepath.Join(factoryDir, filepath.FromSlash(gitignoreRel))
 	err = os.WriteFile(gitignorePath, worktreesGitignore, 0644)
 	if err != nil {
 		return
 	}
 
-	hintPath := filepath.Join(mainDir, filepath.FromSlash(hintRel))
+	hintPath := filepath.Join(factoryDir, filepath.FromSlash(hintRel))
 	empty := []byte{}
 	err = os.WriteFile(hintPath, empty, 0644)
 	return
 }
 
-func migrateConfigs(ctx context.Context, mainDir string) (rels []string, err error) {
-	apps, err := listApps(mainDir)
+func migrateConfigs(ctx context.Context, factoryDir string) (rels []string, err error) {
+	apps, err := listApps(factoryDir)
 	if err != nil {
 		return
 	}
 
 	for _, app := range apps {
 		configRel := filepath.ToSlash(filepath.Join(app, "config.db"))
-		configPath := filepath.Join(mainDir, filepath.FromSlash(configRel))
+		configPath := filepath.Join(factoryDir, filepath.FromSlash(configRel))
 		_, statErr := os.Stat(configPath)
 		missing := os.IsNotExist(statErr)
 		if missing {
@@ -227,9 +205,9 @@ func migrateConfigs(ctx context.Context, mainDir string) (rels []string, err err
 	return
 }
 
-func commitMain(ctx context.Context, mainDir string, files []string) (err error) {
+func commitCheckout(ctx context.Context, factoryDir string, files []string) (err error) {
 	for _, rel := range files {
-		_, err = git(ctx, mainDir, "add", "--", rel)
+		_, err = git(ctx, factoryDir, "add", "--", rel)
 		if err != nil {
 			log.Error("stage bind file", "path", rel, "err", err)
 			return
@@ -238,24 +216,24 @@ func commitMain(ctx context.Context, mainDir string, files []string) (err error)
 
 	args := []string{"commit", "-m", commitMessage, "--"}
 	args = append(args, files...)
-	output, err := git(ctx, mainDir, args...)
+	output, err := git(ctx, factoryDir, args...)
 	if err == nil {
-		log.Info("committed bind", "dir", mainDir)
+		log.Info("committed bind", "dir", factoryDir)
 		return
 	}
 	marker := []byte("nothing to commit")
 	unchanged := bytes.Contains(output, marker)
 	if unchanged {
-		log.Info("bind files are unchanged", "dir", mainDir)
+		log.Info("bind files are unchanged", "dir", factoryDir)
 		err = nil
 		return
 	}
-	log.Error("commit bind", "dir", mainDir, "err", err)
+	log.Error("commit bind", "dir", factoryDir, "err", err)
 	return
 }
 
-func listApps(mainDir string) (rels []string, err error) {
-	reposDir := filepath.Join(mainDir, "repos")
+func listApps(factoryDir string) (rels []string, err error) {
+	reposDir := filepath.Join(factoryDir, "repos")
 	owners, err := os.ReadDir(reposDir)
 	missing := os.IsNotExist(err)
 	if missing {
@@ -293,34 +271,4 @@ func listApps(mainDir string) (rels []string, err error) {
 
 	sort.Strings(rels)
 	return
-}
-
-func ensureMain(ctx context.Context, factoryDir string) (dir string, added bool, err error) {
-	list, err := git(ctx, factoryDir, "worktree", "list", "--porcelain")
-	if err != nil {
-		log.Error("list worktrees", "err", err)
-		return
-	}
-	dir, found := findCheckout(list, "main")
-	if found {
-		log.Info("using existing checkout", "branch", "main", "path", dir)
-		return
-	}
-
-	dir = filepath.Join(factoryDir, ".worktrees", "main")
-	_, err = git(ctx, factoryDir, "worktree", "add", dir, "main")
-	if err != nil {
-		log.Error("add worktree", "branch", "main", "path", dir, "err", err)
-		return
-	}
-	added = true
-	log.Info("added worktree", "branch", "main", "path", dir)
-	return
-}
-
-func removeWorktree(ctx context.Context, factoryDir string, worktreePath string) {
-	_, err := git(ctx, factoryDir, "worktree", "remove", "--force", worktreePath)
-	if err != nil {
-		log.Warn("remove worktree", "path", worktreePath, "err", err)
-	}
 }

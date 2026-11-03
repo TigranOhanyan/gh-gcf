@@ -18,8 +18,9 @@ import (
 
 func Test_Bind_should_commit_the_workflow_on_main(t *testing.T) {
 	repoDir := setupMain(t)
+	t.Chdir(repoDir)
 
-	err := runBind(t, repoDir)
+	err := runBind(t)
 	require.NoError(t, err)
 
 	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "main")
@@ -32,13 +33,14 @@ func Test_Bind_should_commit_the_workflow_on_main(t *testing.T) {
 
 func Test_Bind_should_refuse_a_dev_version(t *testing.T) {
 	repoDir := setupMain(t)
+	t.Chdir(repoDir)
 	previous := Version
 	Version = devVersion
 	t.Cleanup(func() {
 		Version = previous
 	})
 
-	err := runBind(t, repoDir)
+	err := runBind(t)
 	require.Error(t, err)
 
 	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "main")
@@ -55,8 +57,9 @@ func Test_Bind_should_migrate_config_and_commit_it_on_main(t *testing.T) {
 	writeEmptyDatabase(t, filepath.Join(repoDir, filepath.FromSlash(configRel)))
 	_ = mustGit(t, repoDir, "add", configRel)
 	_ = mustGit(t, repoDir, "commit", "-m", "config")
+	t.Chdir(repoDir)
 
-	err := runBind(t, repoDir)
+	err := runBind(t)
 	require.NoError(t, err)
 
 	blob := mustGit(t, repoDir, "show", "main:"+configRel)
@@ -72,7 +75,8 @@ func Test_Bind_should_migrate_config_and_commit_it_on_main(t *testing.T) {
 
 func Test_Bind_should_replace_the_previous_workflow(t *testing.T) {
 	repoDir := setupMain(t)
-	err := runBind(t, repoDir)
+	t.Chdir(repoDir)
+	err := runBind(t)
 	require.NoError(t, err)
 
 	workflowPath := filepath.Join(repoDir, filepath.FromSlash(workflowRel))
@@ -81,7 +85,7 @@ func Test_Bind_should_replace_the_previous_workflow(t *testing.T) {
 	_ = mustGit(t, repoDir, "add", workflowRel)
 	_ = mustGit(t, repoDir, "commit", "-m", "previous workflow")
 
-	err = runBind(t, repoDir)
+	err = runBind(t)
 	require.NoError(t, err)
 
 	committed := mustGit(t, repoDir, "show", "main:"+workflowRel)
@@ -91,8 +95,9 @@ func Test_Bind_should_replace_the_previous_workflow(t *testing.T) {
 
 func Test_Bind_should_commit_the_worktrees_hint_on_main(t *testing.T) {
 	repoDir := setupMain(t)
+	t.Chdir(repoDir)
 
-	err := runBind(t, repoDir)
+	err := runBind(t)
 	require.NoError(t, err)
 
 	gitignore := mustGit(t, repoDir, "show", "main:"+gitignoreRel)
@@ -108,8 +113,9 @@ func Test_Bind_should_refuse_a_directory_that_is_not_a_git_repo(t *testing.T) {
 	require.NoError(t, err)
 	err = os.MkdirAll(repoDir, 0755)
 	require.NoError(t, err)
+	t.Chdir(repoDir)
 
-	err = runBind(t, repoDir)
+	err = runBind(t)
 	require.Error(t, err)
 
 	_, err = os.Stat(filepath.Join(repoDir, filepath.FromSlash(workflowRel)))
@@ -128,14 +134,53 @@ func pinnedWorkflow() (contents []byte) {
 	return
 }
 
-func runBind(t *testing.T, repoDir string) (err error) {
+func Test_Bind_should_refuse_a_subdirectory_of_a_git_checkout(t *testing.T) {
+	repoDir := setupMain(t)
+	sub := filepath.Join(repoDir, "nested")
+	err := os.MkdirAll(sub, 0755)
+	require.NoError(t, err)
+	t.Chdir(sub)
+
+	err = runBind(t)
+	require.Error(t, err)
+
+	_, err = os.Stat(filepath.Join(repoDir, filepath.FromSlash(workflowRel)))
+	assert.Error(t, err)
+	assert.True(t, os.IsNotExist(err))
+
+	_, err = os.Stat(filepath.Join(repoDir, ".worktrees"))
+	assert.Error(t, err)
+	assert.True(t, os.IsNotExist(err))
+}
+
+func Test_Bind_should_commit_the_workflow_on_the_open_branch(t *testing.T) {
+	repoDir := setupMain(t)
+	_ = mustGit(t, repoDir, "checkout", "-b", "bind-me")
+	t.Chdir(repoDir)
+
+	err := runBind(t)
+	require.NoError(t, err)
+
+	head := mustGit(t, repoDir, "rev-parse", "--abbrev-ref", "HEAD")
+	assert.Equal(t, "bind-me", strings.TrimSpace(string(head)))
+
+	message := mustGit(t, repoDir, "log", "-1", "--format=%s")
+	assert.Equal(t, commitMessage, strings.TrimSpace(string(message)))
+
+	committed := mustGit(t, repoDir, "show", "HEAD:"+workflowRel)
+	expected := pinnedWorkflow()
+	assert.Equal(t, expected, committed)
+
+	mainTip := mustGit(t, repoDir, "log", "-1", "--format=%s", "main")
+	assert.Equal(t, "init", strings.TrimSpace(string(mainTip)))
+}
+
+func runBind(t *testing.T) (err error) {
 	t.Helper()
 	cmd := NewBind()
 	var output bytes.Buffer
 	cmd.SetOut(&output)
 	cmd.SetErr(&output)
-	args := []string{"--factory-repo", repoDir}
-	cmd.SetArgs(args)
 
 	err = cmd.ExecuteContext(t.Context())
 	return

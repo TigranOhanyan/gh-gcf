@@ -13,7 +13,7 @@ A repo whose issues a factory builds. It holds only its own code, CI and agent r
 _Avoid_: host, host repo, target repo
 
 **Bind**:
-The commit on a factory repo's main branch that installs that factory.
+The commit that installs a factory in its factory repo.
 _Avoid_: setup, init
 
 **Setup**:
