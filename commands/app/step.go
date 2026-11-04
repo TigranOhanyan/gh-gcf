@@ -122,7 +122,7 @@ func insertApp(ctx context.Context, repo commands.Repo, id int64, clientID strin
 		InstallationID: installationID,
 	}
 	err = queries.CreateGithubApp(ctx, params)
-	err = finishTx(tx, err)
+	err = commands.FinishTx(tx, err)
 	return
 }
 
@@ -139,6 +139,6 @@ func updateApp(ctx context.Context, repo commands.Repo, id int64, clientID strin
 		AppID:          id,
 	}
 	err = queries.UpdateGithubApp(ctx, params)
-	err = finishTx(tx, err)
+	err = commands.FinishTx(tx, err)
 	return
 }

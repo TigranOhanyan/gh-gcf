@@ -10,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"charm.land/log/v2"
 
+	"github.com/TigranOhanyan/gh-gcf/commands"
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 	configrecords "github.com/TigranOhanyan/gh-gcf/configdb/records"
 )
@@ -768,7 +769,7 @@ func (m model) reloadLabels() (updated model, err error) {
 
 func (m model) reloadApps() (updated model, err error) {
 	updated = m
-	ids, err := listAppIDs(updated.factoryDir)
+	ids, err := commands.ListAppIDs(updated.factoryDir)
 	if err != nil {
 		return
 	}

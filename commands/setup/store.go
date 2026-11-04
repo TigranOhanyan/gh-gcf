@@ -185,38 +185,6 @@ func addLabel(ctx context.Context, db *configdb.DB, rawName string, rawColor str
 	return
 }
 
-func listAppIDs(factoryDir string) (ids []int64, err error) {
-	dir := filepath.Join(factoryDir, "apps")
-	entries, err := os.ReadDir(dir)
-	missing := os.IsNotExist(err)
-	if missing {
-		err = nil
-		return
-	}
-	if err != nil {
-		log.Error("list apps", "path", dir, "err", err)
-		return
-	}
-
-	for _, entry := range entries {
-		name := entry.Name()
-		id, parseErr := strconv.ParseInt(name, 10, 64)
-		canonical := strconv.FormatInt(id, 10)
-		isDir := entry.IsDir()
-		bad := isDir || parseErr != nil || id <= 0 || canonical != name
-		if bad {
-			err = fmt.Errorf("app file name is not an app id: %s", name)
-			log.Error("list apps", "err", err)
-			return
-		}
-		ids = append(ids, id)
-	}
-	sort.Slice(ids, func(i int, j int) bool {
-		return ids[i] < ids[j]
-	})
-	return
-}
-
 func createAppFile(factoryDir string, raw string) (id int64, err error) {
 	text := strings.TrimSpace(raw)
 	parsed, parseErr := strconv.ParseInt(text, 10, 64)

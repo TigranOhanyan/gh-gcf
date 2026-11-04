@@ -130,7 +130,7 @@ func workflowContents(factoryDir string) (contents []byte, err error) {
 	version := []byte(Version)
 	contents = bytes.ReplaceAll(workflowfile.FactoryTick, token, version)
 
-	ids, err := registeredAppIDs(factoryDir)
+	ids, err := commands.ListAppIDs(factoryDir)
 	if err != nil {
 		return
 	}
@@ -190,36 +190,6 @@ func appKeyLines(indent string, ids []int64) (lines [][]byte) {
 		raw := []byte(line)
 		lines = append(lines, raw)
 	}
-	return
-}
-
-func registeredAppIDs(factoryDir string) (ids []int64, err error) {
-	dir := filepath.Join(factoryDir, "apps")
-	entries, err := os.ReadDir(dir)
-	missing := os.IsNotExist(err)
-	if missing {
-		err = nil
-		return
-	}
-	if err != nil {
-		return
-	}
-
-	for _, entry := range entries {
-		name := entry.Name()
-		id, parseErr := strconv.ParseInt(name, 10, 64)
-		canonical := strconv.FormatInt(id, 10)
-		isDir := entry.IsDir()
-		bad := isDir || parseErr != nil || id <= 0 || canonical != name
-		if bad {
-			err = fmt.Errorf("app file name is not an app id: %s", name)
-			return
-		}
-		ids = append(ids, id)
-	}
-	sort.Slice(ids, func(i int, j int) bool {
-		return ids[i] < ids[j]
-	})
 	return
 }
 

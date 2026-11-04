@@ -162,7 +162,7 @@ func (step labelStep) insertLabel(ctx context.Context, repo commands.Repo, label
 		Color: label.Color,
 	}
 	err = queries.CreateLabel(ctx, params)
-	err = finishTx(tx, err)
+	err = commands.FinishTx(tx, err)
 	return
 }
 
@@ -180,14 +180,14 @@ func (step labelStep) beginCreate(ctx context.Context, repo commands.Repo, stepI
 		}
 		err = queries.CreateLabel(ctx, params)
 		if err != nil {
-			err = finishTx(tx, err)
+			err = commands.FinishTx(tx, err)
 			return
 		}
 	}
 	repoName := repo.Owner + "/" + repo.Name
 	message := creatingMessage(repoName, label.Name)
 	err = insertEvent(ctx, queries, stepID, eventStarting, message)
-	err = finishTx(tx, err)
+	err = commands.FinishTx(tx, err)
 	return
 }
 
@@ -208,12 +208,12 @@ func (step labelStep) finishCreate(ctx context.Context, repo commands.Repo, step
 	}
 	err = queries.SetLabelCreatedAt(ctx, params)
 	if err != nil {
-		err = finishTx(tx, err)
+		err = commands.FinishTx(tx, err)
 		return
 	}
 	message := createdMessage(repoName, name)
 	err = insertEvent(ctx, queries, stepID, eventCompleted, message)
-	err = finishTx(tx, err)
+	err = commands.FinishTx(tx, err)
 	return
 }
 
@@ -225,7 +225,7 @@ func (step labelStep) recordFailure(ctx context.Context, repo commands.Repo, ste
 	}
 	queries := repo.State.Queries.WithTx(tx)
 	err = insertEvent(ctx, queries, stepID, eventFailed, callErr.Error())
-	err = finishTx(tx, err)
+	err = commands.FinishTx(tx, err)
 	return
 }
 
@@ -243,23 +243,6 @@ func insertEvent(ctx context.Context, queries *records.Queries, stepID string, k
 	err = queries.CreateEvent(ctx, params)
 	if err != nil {
 		log.Error("insert event", "kind", kind, "err", err)
-	}
-	return
-}
-
-func finishTx(tx *sql.Tx, workErr error) (err error) {
-	failed := workErr != nil
-	if failed {
-		rollbackErr := tx.Rollback()
-		if rollbackErr != nil {
-			log.Error("rollback", "err", rollbackErr)
-		}
-		err = workErr
-		return
-	}
-	err = tx.Commit()
-	if err != nil {
-		log.Error("commit", "err", err)
 	}
 	return
 }
