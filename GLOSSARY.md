@@ -46,6 +46,14 @@ _Avoid_: settings, desired state
 A name the user records in an app repo's config. The factory creates that name on the app repo when it is missing.
 _Avoid_: tag, marker
 
+**App**:
+A GitHub App a blueprint acts as. GitHub assigns its App ID, and that id identifies the app.
+_Avoid_: bot, installation, slug, display name
+
+**Installation**:
+An App installed on the account that owns an app repo.
+_Avoid_: app, token
+
 **State**:
 What the factory has done and seen. The tick and the steps write it. The user does not.
 _Avoid_: database, history
@@ -65,7 +73,7 @@ A blueprint tied to a starting label and an optional GitHub App. Its agent imple
 _Avoid_: implementer, coder
 
 **Reviewer**:
-A blueprint tied to one builder. Its agent posts a verdict on that builder's pull request.
+A blueprint tied to one builder and to its own App. Its agent posts a verdict on that builder's pull request.
 _Avoid_: code reviewer
 
 **Standards reviewer**:

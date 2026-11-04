@@ -16,6 +16,12 @@ type Event struct {
 	CreatedAt string `json:"created_at"`
 }
 
+type GithubApp struct {
+	AppID          int64  `json:"app_id"`
+	ClientID       string `json:"client_id"`
+	InstallationID int64  `json:"installation_id"`
+}
+
 type Label struct {
 	Name         string         `json:"name"`
 	Color        string         `json:"color"`

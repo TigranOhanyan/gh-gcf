@@ -18,6 +18,8 @@ import (
 	"github.com/creack/pty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/TigranOhanyan/gh-gcf/configdb"
 )
 
 func Test_Setup_should_create_an_empty_config_database(t *testing.T) {
@@ -56,6 +58,59 @@ func Test_Setup_should_store_a_label(t *testing.T) {
 	registered, err := time.Parse(time.RFC3339Nano, labels[0].RegisteredAt)
 	require.NoError(t, err)
 	assert.WithinRange(t, registered, startOfTest, startOfCheck)
+}
+
+func Test_Setup_should_attach_a_registered_app(t *testing.T) {
+	repoDir := setupCheckout(t)
+	recordRepo(t, repoDir)
+
+	session := startSetup(t, repoDir)
+	session.wait(0, "Repos")
+	session.write("j")
+	apps := session.mark()
+	session.write("\r")
+	session.wait(apps, "No apps yet.")
+	session.write("a")
+	session.wait(apps, "app id:")
+	session.write("42")
+	session.write("\r")
+	session.wait(apps, "GITHUB_APP_42")
+	session.escape()
+	session.wait(apps, "Repos")
+	session.write("\r")
+	repo := session.mark()
+	session.wait(repo, "octo/app")
+	session.write("\r")
+	session.wait(repo, "Labels")
+	session.write("j")
+	session.write("\r")
+	pick := session.mark()
+	session.wait(pick, "No apps yet.")
+	session.write("a")
+	session.wait(pick, "42")
+	session.write("\r")
+	session.wait(pick, "GITHUB_APP_42")
+	err := session.quit()
+	require.NoError(t, err)
+
+	info, err := os.Stat(filepath.Join(repoDir, "apps", "42"))
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), info.Size())
+
+	path := filepath.Join(repoDir, "repos", "octo", "app", "config.db")
+	db, err := configdb.OpenIfMigrated(t.Context(), path)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		closeErr := db.Close()
+		failed := closeErr != nil
+		if failed {
+			t.Errorf("close config: %v", closeErr)
+		}
+	})
+	ids, err := db.Queries.ListGithubApps(t.Context())
+	require.NoError(t, err)
+	require.Len(t, ids, 1)
+	assert.Equal(t, int64(42), ids[0])
 }
 
 func Test_Setup_should_quit_from_the_repo_list(t *testing.T) {
@@ -110,6 +165,7 @@ func Test_Setup_should_refuse_an_existing_repo_folder(t *testing.T) {
 	recordRepo(t, repoDir)
 
 	session := startSetup(t, repoDir)
+	openRepoList(t, session)
 	session.wait(0, "octo/app")
 	session.write("a")
 	session.wait(0, "Add a repo")
@@ -218,7 +274,7 @@ func Test_Setup_should_store_a_label_name_of_50_characters(t *testing.T) {
 func Test_Setup_should_refuse_a_repo_name_that_is_not_a_single_path_segment(t *testing.T) {
 	repoDir := setupCheckout(t)
 	session := startSetup(t, repoDir)
-	session.wait(0, "Repos")
+	openRepoList(t, session)
 	session.write("a")
 	session.wait(0, "Add a repo")
 	session.write("octo/app")
@@ -239,7 +295,7 @@ func Test_Setup_should_refuse_a_repo_name_that_is_not_a_single_path_segment(t *t
 func Test_Setup_should_refuse_an_empty_repo_name(t *testing.T) {
 	repoDir := setupCheckout(t)
 	session := startSetup(t, repoDir)
-	session.wait(0, "Repos")
+	openRepoList(t, session)
 	session.write("a")
 	session.wait(0, "Add a repo")
 	session.write("octo")
@@ -264,6 +320,7 @@ func Test_Setup_should_leave_a_missing_config_database_uncreated(t *testing.T) {
 	require.NoError(t, err)
 
 	session := startSetup(t, repoDir)
+	openRepoList(t, session)
 	session.wait(0, "octo/app")
 	session.write("\r")
 	session.wait(0, "config.db is missing")
@@ -284,7 +341,9 @@ func Test_Setup_should_migrate_a_config_database_that_is_behind(t *testing.T) {
 	writeEmptyDatabase(t, filepath.Join(dir, "config.db"))
 
 	session := startSetup(t, repoDir)
+	openRepoList(t, session)
 	session.wait(0, "octo/app")
+	session.write("\r")
 	session.write("\r")
 	session.wait(0, "No labels yet.")
 	submitLabel(t, session, "bug", "ededed", "bug  ededed")
@@ -317,7 +376,7 @@ func Test_Setup_should_leave_the_database_unchanged_when_add_is_cancelled(t *tes
 func recordRepo(t *testing.T, repoDir string) {
 	t.Helper()
 	session := startSetup(t, repoDir)
-	session.wait(0, "Repos")
+	openRepoList(t, session)
 	session.write("a")
 	session.wait(0, "Add a repo")
 	owner := session.mark()
@@ -329,15 +388,26 @@ func recordRepo(t *testing.T, repoDir string) {
 	session.write("app")
 	session.wait(name, "app")
 	session.write("\r")
-	session.wait(name, "No labels yet.")
+	session.wait(name, "octo/app")
 	err := session.quit()
 	require.NoError(t, err)
+}
+
+func openRepoList(t *testing.T, session *terminalSession) {
+	t.Helper()
+	session.wait(0, "Repos")
+	mark := session.mark()
+	session.write("\r")
+	session.wait(mark, "a add")
 }
 
 func selectRepo(t *testing.T, repoDir string) (session *terminalSession) {
 	t.Helper()
 	session = startSetup(t, repoDir)
+	openRepoList(t, session)
 	session.wait(0, "octo/app")
+	session.write("\r")
+	session.wait(0, "Labels")
 	session.write("\r")
 	session.wait(0, "No labels yet.")
 	return

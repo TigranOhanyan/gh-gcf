@@ -131,6 +131,8 @@ func pinnedWorkflow() (contents []byte) {
 	token := []byte(versionToken)
 	version := []byte(Version)
 	contents = bytes.ReplaceAll(workflowfile.FactoryTick, token, version)
+	marker := []byte(appKeyMarker)
+	contents = bytes.ReplaceAll(contents, marker, nil)
 	return
 }
 
@@ -151,6 +153,24 @@ func Test_Bind_should_refuse_a_subdirectory_of_a_git_checkout(t *testing.T) {
 	_, err = os.Stat(filepath.Join(repoDir, ".worktrees"))
 	assert.Error(t, err)
 	assert.True(t, os.IsNotExist(err))
+}
+
+func Test_Bind_should_name_each_registered_app_key(t *testing.T) {
+	repoDir := setupMain(t)
+	appsDir := filepath.Join(repoDir, "apps")
+	err := os.MkdirAll(appsDir, 0755)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(appsDir, "42"), []byte{}, 0644)
+	require.NoError(t, err)
+	t.Chdir(repoDir)
+
+	err = runBind(t)
+	require.NoError(t, err)
+
+	committed := mustGit(t, repoDir, "show", "main:"+workflowRel)
+	text := string(committed)
+	assert.Contains(t, text, "GITHUB_APP_42: ${{ secrets.GITHUB_APP_42 }}")
+	assert.NotContains(t, text, "      __APP_KEYS__")
 }
 
 func Test_Bind_should_commit_the_workflow_on_the_open_branch(t *testing.T) {

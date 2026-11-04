@@ -3,6 +3,7 @@ package root
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/TigranOhanyan/gh-gcf/commands/app"
 	"github.com/TigranOhanyan/gh-gcf/commands/bind"
 	"github.com/TigranOhanyan/gh-gcf/commands/label"
 	"github.com/TigranOhanyan/gh-gcf/commands/setup"
@@ -20,6 +21,8 @@ func NewRoot() (cmd *cobra.Command) {
 	cmd.AddCommand(tickCmd)
 	labelCmd := label.NewLabel()
 	cmd.AddCommand(labelCmd)
+	appCmd := app.NewApp()
+	cmd.AddCommand(appCmd)
 	setupCmd := setup.NewSetup()
 	cmd.AddCommand(setupCmd)
 	return

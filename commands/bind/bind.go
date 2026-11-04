@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"charm.land/log/v2"
@@ -124,7 +125,7 @@ func installWorkflow(factoryDir string) (err error) {
 	if err != nil {
 		return
 	}
-	contents, err := workflowContents()
+	contents, err := workflowContents(factoryDir)
 	if err != nil {
 		return
 	}
@@ -140,7 +141,9 @@ func requireRelease() (err error) {
 	return
 }
 
-func workflowContents() (contents []byte, err error) {
+const appKeyMarker = "      __APP_KEYS__\n"
+
+func workflowContents(factoryDir string) (contents []byte, err error) {
 	token := []byte(versionToken)
 	hasToken := bytes.Contains(workflowfile.FactoryTick, token)
 	if !hasToken {
@@ -149,6 +152,65 @@ func workflowContents() (contents []byte, err error) {
 	}
 	version := []byte(Version)
 	contents = bytes.ReplaceAll(workflowfile.FactoryTick, token, version)
+
+	marker := []byte(appKeyMarker)
+	hasMarker := bytes.Contains(contents, marker)
+	if !hasMarker {
+		err = fmt.Errorf("workflow template has no app key marker")
+		return
+	}
+	ids, err := registeredAppIDs(factoryDir)
+	if err != nil {
+		return
+	}
+	block := appKeyBlock(ids)
+	contents = bytes.ReplaceAll(contents, marker, block)
+	return
+}
+
+func registeredAppIDs(factoryDir string) (ids []int64, err error) {
+	dir := filepath.Join(factoryDir, "apps")
+	entries, err := os.ReadDir(dir)
+	missing := os.IsNotExist(err)
+	if missing {
+		err = nil
+		return
+	}
+	if err != nil {
+		return
+	}
+
+	for _, entry := range entries {
+		name := entry.Name()
+		id, parseErr := strconv.ParseInt(name, 10, 64)
+		canonical := strconv.FormatInt(id, 10)
+		isDir := entry.IsDir()
+		bad := isDir || parseErr != nil || id <= 0 || canonical != name
+		if bad {
+			err = fmt.Errorf("app file name is not an app id: %s", name)
+			return
+		}
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i int, j int) bool {
+		return ids[i] < ids[j]
+	})
+	return
+}
+
+func appKeyBlock(ids []int64) (block []byte) {
+	var lines []string
+	for _, id := range ids {
+		text := strconv.FormatInt(id, 10)
+		line := fmt.Sprintf("      GITHUB_APP_%s: ${{ secrets.GITHUB_APP_%s }}", text, text)
+		lines = append(lines, line)
+	}
+	empty := len(lines) == 0
+	if empty {
+		return
+	}
+	text := strings.Join(lines, "\n") + "\n"
+	block = []byte(text)
 	return
 }
 

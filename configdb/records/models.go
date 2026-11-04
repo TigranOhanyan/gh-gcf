@@ -8,6 +8,10 @@ import (
 	"database/sql"
 )
 
+type GithubApp struct {
+	AppID int64 `json:"app_id"`
+}
+
 type GooseDbVersion struct {
 	ID        int64        `json:"id"`
 	VersionID int64        `json:"version_id"`

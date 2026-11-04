@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -181,6 +182,110 @@ func addLabel(ctx context.Context, db *configdb.DB, rawName string, rawColor str
 		return
 	}
 	log.Info("create label", "name", name, "color", color)
+	return
+}
+
+func listAppIDs(factoryDir string) (ids []int64, err error) {
+	dir := filepath.Join(factoryDir, "apps")
+	entries, err := os.ReadDir(dir)
+	missing := os.IsNotExist(err)
+	if missing {
+		err = nil
+		return
+	}
+	if err != nil {
+		log.Error("list apps", "path", dir, "err", err)
+		return
+	}
+
+	for _, entry := range entries {
+		name := entry.Name()
+		id, parseErr := strconv.ParseInt(name, 10, 64)
+		canonical := strconv.FormatInt(id, 10)
+		isDir := entry.IsDir()
+		bad := isDir || parseErr != nil || id <= 0 || canonical != name
+		if bad {
+			err = fmt.Errorf("app file name is not an app id: %s", name)
+			log.Error("list apps", "err", err)
+			return
+		}
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i int, j int) bool {
+		return ids[i] < ids[j]
+	})
+	return
+}
+
+func createAppFile(factoryDir string, raw string) (id int64, err error) {
+	text := strings.TrimSpace(raw)
+	parsed, parseErr := strconv.ParseInt(text, 10, 64)
+	canonical := strconv.FormatInt(parsed, 10)
+	bad := parseErr != nil || parsed <= 0 || canonical != text
+	if bad {
+		err = fmt.Errorf("app id must be a positive integer")
+		return
+	}
+
+	dir := filepath.Join(factoryDir, "apps")
+	err = os.MkdirAll(dir, 0755)
+	if err != nil {
+		log.Error("create app", "path", dir, "err", err)
+		return
+	}
+
+	path := filepath.Join(dir, canonical)
+	_, statErr := os.Stat(path)
+	exists := statErr == nil
+	if exists {
+		err = fmt.Errorf("app %s already exists", canonical)
+		log.Info("app exists", "app", canonical)
+		return
+	}
+	missing := os.IsNotExist(statErr)
+	if statErr != nil && !missing {
+		err = statErr
+		log.Error("stat app", "path", path, "err", err)
+		return
+	}
+
+	empty := []byte{}
+	err = os.WriteFile(path, empty, 0644)
+	if err != nil {
+		log.Error("create app", "path", path, "err", err)
+		return
+	}
+	id = parsed
+	log.Info("create app", "app", id, "path", path)
+	return
+}
+
+func attachApp(ctx context.Context, db *configdb.DB, id int64) (err error) {
+	ids, err := db.Queries.ListGithubApps(ctx)
+	if err != nil {
+		log.Error("list apps", "err", err)
+		return
+	}
+	for _, existing := range ids {
+		same := existing == id
+		if same {
+			err = fmt.Errorf("app %d already exists", id)
+			log.Info("app exists", "app", id)
+			return
+		}
+	}
+
+	err = db.Queries.CreateGithubApp(ctx, id)
+	if err != nil {
+		log.Error("attach app", "app", id, "err", err)
+		return
+	}
+	log.Info("attach app", "app", id)
+	return
+}
+
+func secretName(id int64) (name string) {
+	name = fmt.Sprintf("GITHUB_APP_%d", id)
 	return
 }
 

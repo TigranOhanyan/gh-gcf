@@ -2,9 +2,10 @@ package setup
 
 import (
 	"context"
-	"strings"
-	"unicode/utf8"
+	"strconv"
 
+	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"charm.land/log/v2"
@@ -13,52 +14,85 @@ import (
 	configrecords "github.com/TigranOhanyan/gh-gcf/configdb/records"
 )
 
-const reposHelp = "a add   enter open   q quit"
-const labelsHelp = "a add   esc repos   q quit"
-const missingHelp = "esc repos   q quit"
+const homeHelp = "enter open   q quit"
+const listHelp = "a add   enter open   esc back   q quit"
+const backHelp = "esc back   q quit"
 const formContinueHelp = "enter continues   esc back"
 const formSaveHelp = "enter saves   esc back"
 const missingConfig = "config.db is missing"
 const noRepos = "No app repos yet."
+const noLabels = "No labels yet."
+const noApps = "No apps yet."
 
 var titleStyle = lipgloss.NewStyle().Bold(true)
 
 type screen int
 
 const (
-	screenRepos screen = iota
+	screenHome screen = iota
+	screenRepos
 	screenAddRepo
+	screenSections
 	screenLabels
 	screenAddLabel
+	screenApps
+	screenAddApp
+	screenRepoApps
+	screenPickApp
 )
 
+type place struct {
+	screen screen
+	owner  string
+	name   string
+}
+
+type row struct {
+	title string
+	value string
+}
+
+func (item row) Title() (title string) {
+	title = item.title
+	return
+}
+
+func (item row) Description() (description string) {
+	return
+}
+
+func (item row) FilterValue() (value string) {
+	value = item.title
+	return
+}
+
 type model struct {
-	ctx         context.Context
-	factoryDir  string
-	screen      screen
-	repos       []appRepo
-	repoCursor  int
-	current     appRepo
-	db          *configdb.DB
-	labels      []configrecords.Label
-	labelCursor int
-	field       int
-	ownerInput  string
-	nameInput   string
-	labelInput  string
-	colorInput  string
-	notice      string
+	ctx        context.Context
+	factoryDir string
+	place      place
+	repos      []appRepo
+	labels     []configrecords.Label
+	appIDs     []int64
+	attached   []int64
+	db         *configdb.DB
+	list       list.Model
+	field      int
+	first      textinput.Model
+	second     textinput.Model
+	notice     string
+	help       string
 }
 
 func newModel(ctx context.Context, factoryDir string) (m model) {
 	m.ctx = ctx
 	m.factoryDir = factoryDir
-	m.screen = screenRepos
+	m.place.screen = screenHome
 	var err error
 	m, err = m.reloadRepos()
 	if err != nil {
 		m.notice = err.Error()
 	}
+	m = m.showHome()
 	return
 }
 
@@ -72,25 +106,17 @@ func (m model) Update(msg tea.Msg) (updated tea.Model, cmd tea.Cmd) {
 		updated = m
 		return
 	}
-	m, cmd = m.onKey(press)
-	updated = m
-	return
-}
-
-func (m model) onKey(key tea.KeyPressMsg) (updated model, cmd tea.Cmd) {
-	stroke := key.String()
+	stroke := press.String()
 	quitNow := stroke == "ctrl+c"
 	if quitNow {
 		updated, cmd = m.quit()
 		return
 	}
-
-	onForm := m.screen == screenAddRepo || m.screen == screenAddLabel
-	if onForm {
-		updated = m.onFormKey(key)
+	if m.onForm() {
+		updated, cmd = m.onFormKey(press)
 		return
 	}
-	updated, cmd = m.onListKey(key)
+	updated, cmd = m.onListKey(press)
 	return
 }
 
@@ -116,21 +142,17 @@ func (m model) onListKey(key tea.KeyPressMsg) (updated model, cmd tea.Cmd) {
 		updated = m.back()
 		return
 	}
-	up := stroke == "up" || stroke == "k"
-	if up {
-		updated = m.move(-1)
-		return
-	}
-	down := stroke == "down" || stroke == "j"
-	if down {
-		updated = m.move(1)
+	moving := stroke == "up" || stroke == "down" || stroke == "k" || stroke == "j"
+	if moving {
+		updated = m
+		updated.list, cmd = updated.list.Update(key)
 		return
 	}
 	updated = m
 	return
 }
 
-func (m model) onFormKey(key tea.KeyPressMsg) (updated model) {
+func (m model) onFormKey(key tea.KeyPressMsg) (updated model, cmd tea.Cmd) {
 	stroke := key.String()
 	escape := stroke == "esc"
 	if escape {
@@ -142,19 +164,11 @@ func (m model) onFormKey(key tea.KeyPressMsg) (updated model) {
 		updated = m.advanceForm()
 		return
 	}
-	back := stroke == "backspace"
-	if back {
-		updated = m.backspace()
-		return
-	}
-
-	text := key.Text
-	hasText := text != ""
-	if hasText {
-		updated = m.appendText(text)
-		return
-	}
 	updated = m
+	field := updated.activeField()
+	field, cmd = field.Update(key)
+	updated = updated.setActiveField(field)
+	updated.notice = ""
 	return
 }
 
@@ -163,12 +177,99 @@ func (m model) View() (view tea.View) {
 	view = tea.NewView(content)
 	view.AltScreen = true
 	view.WindowTitle = "setup"
-	onForm := m.screen == screenAddRepo || m.screen == screenAddLabel
-	if onForm {
-		x, y := m.cursorSpot()
-		cursor := tea.NewCursor(x, y)
-		view.Cursor = cursor
+	if m.onForm() {
+		field := m.activeField()
+		cursor := field.Cursor()
+		if cursor != nil {
+			view.Cursor = cursor
+		}
 	}
+	return
+}
+
+func (m model) render() (text string) {
+	if m.onForm() {
+		text = m.renderForm()
+		return
+	}
+	title := titleStyle.Render(m.list.Title)
+	body := m.listBody()
+	lines := []string{title, "", body, ""}
+	lines = appendNotice(lines, m.notice)
+	lines = append(lines, m.help)
+	text = joinLines(lines)
+	return
+}
+
+func (m model) listBody() (text string) {
+	empty := len(m.list.Items()) == 0
+	if empty {
+		text = m.emptyList()
+		return
+	}
+	text = m.list.View()
+	return
+}
+
+func (m model) emptyList() (text string) {
+	switch m.place.screen {
+	case screenRepos:
+		text = noRepos
+	case screenLabels:
+		text = noLabels
+	case screenApps, screenRepoApps, screenPickApp:
+		text = noApps
+	default:
+		text = ""
+	}
+	return
+}
+
+func (m model) renderForm() (text string) {
+	heading := titleStyle.Render(m.formTitle())
+	lines := []string{heading, "", m.first.View()}
+	two := m.twoFields()
+	if two {
+		lines = append(lines, m.second.View())
+	}
+	lines = append(lines, "")
+	lines = appendNotice(lines, m.notice)
+	lines = append(lines, m.formHelp())
+	text = joinLines(lines)
+	return
+}
+
+func (m model) formTitle() (title string) {
+	switch m.place.screen {
+	case screenAddRepo:
+		title = "Add a repo"
+	case screenAddLabel:
+		title = "Add a label"
+	default:
+		title = "Add an app"
+	}
+	return
+}
+
+func (m model) formHelp() (help string) {
+	one := m.place.screen == screenAddApp
+	last := m.field == 1
+	saving := one || last
+	if saving {
+		help = formSaveHelp
+		return
+	}
+	help = formContinueHelp
+	return
+}
+
+func (m model) onForm() (form bool) {
+	form = m.place.screen == screenAddRepo || m.place.screen == screenAddLabel || m.place.screen == screenAddApp
+	return
+}
+
+func (m model) twoFields() (two bool) {
+	two = m.place.screen == screenAddRepo || m.place.screen == screenAddLabel
 	return
 }
 
@@ -180,106 +281,169 @@ func (m model) quit() (updated model, cmd tea.Cmd) {
 
 func (m model) startAdd() (updated model) {
 	updated = m
-	onRepos := updated.screen == screenRepos
-	if onRepos {
-		updated.screen = screenAddRepo
+	switch updated.place.screen {
+	case screenRepos:
+		updated.place.screen = screenAddRepo
 		updated.field = 0
-		updated.ownerInput = ""
-		updated.nameInput = ""
+		updated.first = newField("owner: ")
+		updated.second = newField("name: ")
 		updated.notice = ""
-		return
+	case screenLabels:
+		missing := updated.db == nil
+		if missing {
+			updated.notice = missingConfig
+			return
+		}
+		updated.place.screen = screenAddLabel
+		updated.field = 0
+		updated.first = newField("name: ")
+		updated.second = newField("color: ")
+		updated.notice = ""
+	case screenApps:
+		updated.place.screen = screenAddApp
+		updated.field = 0
+		updated.first = newField("app id: ")
+		updated.notice = ""
+	case screenRepoApps:
+		missing := updated.db == nil
+		if missing {
+			updated.notice = missingConfig
+			return
+		}
+		updated = updated.showPick()
+	default:
 	}
-
-	missing := updated.db == nil
-	if missing {
-		updated.notice = missingConfig
-		return
-	}
-	updated.screen = screenAddLabel
-	updated.field = 0
-	updated.labelInput = ""
-	updated.colorInput = ""
-	updated.notice = ""
 	return
 }
 
 func (m model) openSelected() (updated model) {
-	onRepos := m.screen == screenRepos
-	if !onRepos {
-		updated = m
-		return
+	updated = m
+	switch updated.place.screen {
+	case screenHome:
+		updated = updated.openHome()
+	case screenRepos:
+		updated = updated.openRepo()
+	case screenSections:
+		updated = updated.openSection()
+	case screenPickApp:
+		updated = updated.pickApp()
+	default:
 	}
-	empty := len(m.repos) == 0
-	if empty {
-		updated = m
-		return
-	}
-	selected := m.repos[m.repoCursor]
-	updated = m.openRepo(selected)
 	return
 }
 
-func (m model) openRepo(repo appRepo) (updated model) {
+func (m model) openHome() (updated model) {
+	updated = m
+	item, ok := selectedRow(updated.list)
+	if !ok {
+		return
+	}
+	apps := item.value == "apps"
+	if apps {
+		updated = updated.showApps()
+		return
+	}
+	updated = updated.showRepos()
+	return
+}
+
+func (m model) openRepo() (updated model) {
+	updated = m
+	item, ok := selectedRow(updated.list)
+	if !ok {
+		return
+	}
+	index := indexOfRepo(updated.repos, item.value)
+	missing := index < 0
+	if missing {
+		return
+	}
+	repo := updated.repos[index]
+	updated = updated.enterRepo(repo)
+	return
+}
+
+func (m model) enterRepo(repo appRepo) (updated model) {
 	updated = m.closeDB()
-	updated.current = repo
-	updated.labels = nil
-	updated.labelCursor = 0
-	updated.screen = screenLabels
+	updated.place.owner = repo.owner
+	updated.place.name = repo.name
+	updated.place.screen = screenSections
 	updated.notice = ""
+	updated.labels = nil
+	updated.attached = nil
 
 	path := configPath(updated.factoryDir, repo.owner, repo.name)
 	db, missing, err := openConfig(updated.ctx, path)
 	if err != nil {
 		updated.notice = err.Error()
+		updated = updated.showSections()
 		return
 	}
 	if missing {
 		updated.notice = missingConfig
+		updated = updated.showSections()
 		return
 	}
-
 	updated.db = db
-	var listErr error
-	updated, listErr = updated.reloadLabels()
-	if listErr != nil {
-		updated.notice = listErr.Error()
+	updated = updated.showSections()
+	return
+}
+
+func (m model) openSection() (updated model) {
+	updated = m
+	item, ok := selectedRow(updated.list)
+	if !ok {
+		return
 	}
+	apps := item.value == "apps"
+	if apps {
+		updated = updated.showRepoApps()
+		return
+	}
+	updated = updated.showLabels()
 	return
 }
 
 func (m model) back() (updated model) {
-	onLabels := m.screen == screenLabels
-	if !onLabels {
-		updated = m
-		return
+	updated = m
+	switch updated.place.screen {
+	case screenRepos, screenApps:
+		updated = updated.showHome()
+	case screenSections:
+		updated = updated.closeDB()
+		updated.notice = ""
+		updated = updated.showRepos()
+	case screenLabels, screenRepoApps:
+		updated.notice = ""
+		updated = updated.showSections()
+	case screenPickApp:
+		updated.notice = ""
+		updated = updated.showRepoApps()
+	default:
 	}
-	updated = m.closeDB()
-	updated.screen = screenRepos
-	updated.labels = nil
-	updated.notice = ""
 	return
 }
 
 func (m model) cancelForm() (updated model) {
 	updated = m
-	addingRepo := updated.screen == screenAddRepo
-	if addingRepo {
-		updated.screen = screenRepos
-		updated.ownerInput = ""
-		updated.nameInput = ""
-		updated.field = 0
-		updated.notice = ""
-		return
-	}
-	updated.screen = screenLabels
-	updated.labelInput = ""
-	updated.colorInput = ""
-	updated.field = 0
 	updated.notice = ""
+	switch updated.place.screen {
+	case screenAddRepo:
+		updated = updated.showRepos()
+	case screenAddLabel:
+		updated = updated.showLabels()
+	default:
+		updated = updated.showApps()
+	}
 	return
 }
 
 func (m model) advanceForm() (updated model) {
+	one := m.place.screen == screenAddApp
+	if one {
+		updated = m.submitApp()
+		return
+	}
 	first := m.field == 0
 	if first {
 		updated = m
@@ -287,7 +451,7 @@ func (m model) advanceForm() (updated model) {
 		updated.notice = ""
 		return
 	}
-	addingRepo := m.screen == screenAddRepo
+	addingRepo := m.place.screen == screenAddRepo
 	if addingRepo {
 		updated = m.submitRepo()
 		return
@@ -298,49 +462,25 @@ func (m model) advanceForm() (updated model) {
 
 func (m model) submitRepo() (updated model) {
 	updated = m
-	owner, err := normalizeSegment(updated.ownerInput)
-	if err != nil {
-		updated.notice = err.Error()
-		return
-	}
-	name, err := normalizeSegment(updated.nameInput)
-	if err != nil {
-		updated.notice = err.Error()
-		return
-	}
-
+	owner := updated.first.Value()
+	name := updated.second.Value()
 	db, err := createRepo(updated.ctx, updated.factoryDir, owner, name)
 	if err != nil {
 		updated.notice = err.Error()
 		return
 	}
-
-	updated = updated.closeDB()
-	updated.db = db
-	updated.current = appRepo{owner: owner, name: name, hasConfig: true}
-	updated.screen = screenLabels
-	updated.ownerInput = ""
-	updated.nameInput = ""
-	updated.field = 0
-	updated.notice = ""
-	updated.labels = nil
-	updated.labelCursor = 0
-
-	var listErr error
-	updated, listErr = updated.reloadLabels()
-	if listErr != nil {
-		updated.notice = listErr.Error()
+	err = db.Close()
+	if err != nil {
+		log.Error("close config", "err", err)
 	}
+	updated.notice = ""
 	var reloadErr error
 	updated, reloadErr = updated.reloadRepos()
 	if reloadErr != nil {
 		updated.notice = reloadErr.Error()
 		return
 	}
-	index, found := repoIndex(updated.repos, owner, name)
-	if found {
-		updated.repoCursor = index
-	}
+	updated = updated.showRepos()
 	return
 }
 
@@ -351,122 +491,240 @@ func (m model) submitLabel() (updated model) {
 		updated.notice = missingConfig
 		return
 	}
-
-	name, err := addLabel(updated.ctx, updated.db, updated.labelInput, updated.colorInput)
+	nameText := updated.first.Value()
+	colorText := updated.second.Value()
+	name, err := addLabel(updated.ctx, updated.db, nameText, colorText)
 	if err != nil {
 		updated.notice = err.Error()
 		return
 	}
-
-	updated.labelInput = ""
-	updated.colorInput = ""
-	updated.field = 0
 	updated.notice = ""
-	updated.screen = screenLabels
 	var listErr error
 	updated, listErr = updated.reloadLabels()
 	if listErr != nil {
 		updated.notice = listErr.Error()
 		return
 	}
-	index, found := labelIndex(updated.labels, name)
+	updated = updated.showLabels()
+	index := indexOfLabel(updated.labels, name)
+	found := index >= 0
 	if found {
-		updated.labelCursor = index
+		updated.list.Select(index)
 	}
 	return
 }
 
-func (m model) move(delta int) (updated model) {
+func (m model) submitApp() (updated model) {
 	updated = m
-	var length int
-	var cursor int
-	onRepos := updated.screen == screenRepos
-	if onRepos {
-		length = len(updated.repos)
-		cursor = updated.repoCursor
-	}
-	onLabels := updated.screen == screenLabels
-	if onLabels {
-		length = len(updated.labels)
-		cursor = updated.labelCursor
-	}
-	empty := length == 0
-	if empty {
+	raw := updated.first.Value()
+	id, err := createAppFile(updated.factoryDir, raw)
+	if err != nil {
+		updated.notice = err.Error()
 		return
 	}
-
-	cursor = cursor + delta
-	below := cursor < 0
-	if below {
-		cursor = 0
-	}
-	last := length - 1
-	above := cursor > last
-	if above {
-		cursor = last
-	}
-	if onRepos {
-		updated.repoCursor = cursor
+	updated.notice = secretName(id)
+	var listErr error
+	updated, listErr = updated.reloadApps()
+	if listErr != nil {
+		updated.notice = listErr.Error()
 		return
 	}
-	if onLabels {
-		updated.labelCursor = cursor
+	updated = updated.showApps()
+	text := strconv.FormatInt(id, 10)
+	index := indexOfText(updated.appIDs, text)
+	found := index >= 0
+	if found {
+		updated.list.Select(index)
 	}
 	return
 }
 
-func (m model) appendText(text string) (updated model) {
-	current := m.activeText()
-	next := current + text
-	updated = m.setActiveText(next)
-	updated.notice = ""
-	return
-}
-
-func (m model) backspace() (updated model) {
-	current := m.activeText()
-	next := dropLast(current)
-	updated = m.setActiveText(next)
-	updated.notice = ""
-	return
-}
-
-func (m model) activeText() (text string) {
-	addingRepo := m.screen == screenAddRepo
-	first := m.field == 0
-	if addingRepo {
-		if first {
-			text = m.ownerInput
-			return
-		}
-		text = m.nameInput
-		return
-	}
-	if first {
-		text = m.labelInput
-		return
-	}
-	text = m.colorInput
-	return
-}
-
-func (m model) setActiveText(text string) (updated model) {
+func (m model) pickApp() (updated model) {
 	updated = m
-	addingRepo := updated.screen == screenAddRepo
-	first := updated.field == 0
-	if addingRepo {
-		if first {
-			updated.ownerInput = text
-			return
+	missing := updated.db == nil
+	if missing {
+		updated.notice = missingConfig
+		return
+	}
+	item, ok := selectedRow(updated.list)
+	if !ok {
+		return
+	}
+	id, err := strconv.ParseInt(item.value, 10, 64)
+	if err != nil {
+		updated.notice = err.Error()
+		return
+	}
+	err = attachApp(updated.ctx, updated.db, id)
+	if err != nil {
+		updated.notice = err.Error()
+		return
+	}
+	updated.notice = secretName(id)
+	var listErr error
+	updated, listErr = updated.reloadAttached()
+	if listErr != nil {
+		updated.notice = listErr.Error()
+		return
+	}
+	updated = updated.showRepoApps()
+	return
+}
+
+func (m model) showHome() (updated model) {
+	updated = m
+	updated.place.screen = screenHome
+	items := []string{"Repos", "Apps"}
+	values := []string{"repos", "apps"}
+	updated = updated.setList("Setup", items, values, 0, homeHelp)
+	return
+}
+
+func (m model) showRepos() (updated model) {
+	updated = m
+	updated.place.screen = screenRepos
+	items := make([]string, 0, len(updated.repos))
+	values := make([]string, 0, len(updated.repos))
+	for _, repo := range updated.repos {
+		line := repo.owner + "/" + repo.name
+		missing := !repo.hasConfig
+		if missing {
+			line = line + "  " + missingConfig
 		}
-		updated.nameInput = text
+		items = append(items, line)
+		values = append(values, repo.owner+"/"+repo.name)
+	}
+	updated = updated.setList("Repos", items, values, 0, listHelp)
+	return
+}
+
+func (m model) showSections() (updated model) {
+	updated = m
+	updated.place.screen = screenSections
+	heading := updated.place.owner + "/" + updated.place.name
+	items := []string{"Labels", "Apps"}
+	values := []string{"labels", "apps"}
+	updated = updated.setList(heading, items, values, 0, listHelp)
+	return
+}
+
+func (m model) showLabels() (updated model) {
+	updated = m
+	updated.place.screen = screenLabels
+	var listErr error
+	updated, listErr = updated.reloadLabels()
+	if listErr != nil {
+		updated.notice = listErr.Error()
+	}
+	items := make([]string, 0, len(updated.labels))
+	values := make([]string, 0, len(updated.labels))
+	for _, label := range updated.labels {
+		line := label.Name + "  " + label.Color
+		items = append(items, line)
+		values = append(values, label.Name)
+	}
+	heading := updated.place.owner + "/" + updated.place.name
+	updated = updated.setList(heading, items, values, 0, listHelp)
+	return
+}
+
+func (m model) showApps() (updated model) {
+	updated = m
+	updated.place.screen = screenApps
+	var listErr error
+	updated, listErr = updated.reloadApps()
+	if listErr != nil {
+		updated.notice = listErr.Error()
+	}
+	items := idLines(updated.appIDs)
+	updated = updated.setList("Apps", items, items, 0, listHelp)
+	return
+}
+
+func (m model) showRepoApps() (updated model) {
+	updated = m
+	updated.place.screen = screenRepoApps
+	var listErr error
+	updated, listErr = updated.reloadAttached()
+	if listErr != nil {
+		updated.notice = listErr.Error()
+	}
+	items := idLines(updated.attached)
+	heading := updated.place.owner + "/" + updated.place.name
+	updated = updated.setList(heading, items, items, 0, listHelp)
+	return
+}
+
+func (m model) showPick() (updated model) {
+	updated = m
+	updated.place.screen = screenPickApp
+	var listErr error
+	updated, listErr = updated.reloadApps()
+	if listErr != nil {
+		updated.notice = listErr.Error()
 		return
 	}
-	if first {
-		updated.labelInput = text
+	items := idLines(updated.appIDs)
+	updated = updated.setList("Apps", items, items, 0, backHelp)
+	return
+}
+
+func (m model) setList(title string, items []string, values []string, index int, help string) (updated model) {
+	updated = m
+	rows := make([]list.Item, 0, len(items))
+	for i, item := range items {
+		value := item
+		hasValue := i < len(values)
+		if hasValue {
+			value = values[i]
+		}
+		next := row{title: item, value: value}
+		rows = append(rows, next)
+	}
+	delegate := list.NewDefaultDelegate()
+	delegate.ShowDescription = false
+	delegate.SetHeight(1)
+	chooser := list.New(rows, delegate, 60, 16)
+	chooser.Title = title
+	chooser.SetFilteringEnabled(false)
+	chooser.SetShowStatusBar(false)
+	chooser.SetShowHelp(false)
+	chooser.SetShowPagination(false)
+	chooser.SetShowFilter(false)
+	hasRows := len(rows) > 0
+	if hasRows {
+		chooser.Select(index)
+	}
+	updated.list = chooser
+	updated.help = help
+	return
+}
+
+func (m model) activeField() (field textinput.Model) {
+	second := m.field == 1 && m.twoFields()
+	if second {
+		field = m.second
 		return
 	}
-	updated.colorInput = text
+	field = m.first
+	return
+}
+
+func (m model) setActiveField(field textinput.Model) (updated model) {
+	updated = m
+	second := updated.field == 1 && updated.twoFields()
+	if second {
+		updated.second = field
+		return
+	}
+	updated.first = field
+	return
+}
+
+func newField(prompt string) (field textinput.Model) {
+	field = textinput.New()
+	field.Prompt = prompt
+	field.Focus()
 	return
 }
 
@@ -490,13 +748,13 @@ func (m model) reloadRepos() (updated model, err error) {
 		return
 	}
 	updated.repos = repos
-	updated.repoCursor = clamp(updated.repoCursor, len(repos))
 	return
 }
 
 func (m model) reloadLabels() (updated model, err error) {
 	updated = m
 	if updated.db == nil {
+		updated.labels = nil
 		return
 	}
 	labels, err := updated.db.Queries.ListLabels(updated.ctx)
@@ -505,123 +763,86 @@ func (m model) reloadLabels() (updated model, err error) {
 		return
 	}
 	updated.labels = labels
-	updated.labelCursor = clamp(updated.labelCursor, len(labels))
 	return
 }
 
-func (m model) render() (text string) {
-	onRepos := m.screen == screenRepos
-	if onRepos {
-		text = m.renderRepos()
+func (m model) reloadApps() (updated model, err error) {
+	updated = m
+	ids, err := listAppIDs(updated.factoryDir)
+	if err != nil {
 		return
 	}
-	onAddRepo := m.screen == screenAddRepo
-	if onAddRepo {
-		text = m.renderForm("Add a repo", "owner", "name", m.ownerInput, m.nameInput)
-		return
-	}
-	onLabels := m.screen == screenLabels
-	if onLabels {
-		text = m.renderLabels()
-		return
-	}
-	text = m.renderForm("Add a label", "name", "color", m.labelInput, m.colorInput)
+	updated.appIDs = ids
 	return
 }
 
-func (m model) renderRepos() (text string) {
-	title := titleStyle.Render("Repos")
-	lines := []string{title, ""}
-	empty := len(m.repos) == 0
-	if empty {
-		lines = append(lines, noRepos)
+func (m model) reloadAttached() (updated model, err error) {
+	updated = m
+	if updated.db == nil {
+		updated.attached = nil
+		return
 	}
-	for i, repo := range m.repos {
-		selected := i == m.repoCursor
-		line := repoLine(repo, selected)
-		lines = append(lines, line)
+	ids, err := updated.db.Queries.ListGithubApps(updated.ctx)
+	if err != nil {
+		log.Error("list apps", "err", err)
+		return
 	}
-	lines = append(lines, "")
-	lines = appendNotice(lines, m.notice)
-	lines = append(lines, reposHelp)
-	text = strings.Join(lines, "\n")
+	updated.attached = ids
 	return
 }
 
-func (m model) renderLabels() (text string) {
-	heading := m.current.owner + "/" + m.current.name
-	title := titleStyle.Render(heading)
-	lines := []string{title, ""}
-	absent := m.db == nil
-	if absent {
-		message := m.notice
-		empty := message == ""
-		if empty {
-			message = missingConfig
+func selectedRow(chooser list.Model) (item row, ok bool) {
+	selected := chooser.SelectedItem()
+	if selected == nil {
+		return
+	}
+	item, ok = selected.(row)
+	return
+}
+
+func idLines(ids []int64) (lines []string) {
+	lines = make([]string, 0, len(ids))
+	for _, id := range ids {
+		text := strconv.FormatInt(id, 10)
+		lines = append(lines, text)
+	}
+	return
+}
+
+func indexOfRepo(repos []appRepo, key string) (index int) {
+	index = -1
+	for i, repo := range repos {
+		same := repo.owner+"/"+repo.name == key
+		if same {
+			index = i
+			return
 		}
-		lines = append(lines, message)
-		lines = append(lines, "")
-		lines = append(lines, missingHelp)
-		text = strings.Join(lines, "\n")
-		return
 	}
-	empty := len(m.labels) == 0
-	if empty {
-		lines = append(lines, "No labels yet.")
-	}
-	for i, label := range m.labels {
-		selected := i == m.labelCursor
-		line := labelLine(label, selected)
-		lines = append(lines, line)
-	}
-	lines = append(lines, "")
-	lines = appendNotice(lines, m.notice)
-	lines = append(lines, labelsHelp)
-	text = strings.Join(lines, "\n")
 	return
 }
 
-func (m model) renderForm(title string, firstLabel string, secondLabel string, firstValue string, secondValue string) (text string) {
-	heading := titleStyle.Render(title)
-	firstLine := fieldLine(firstLabel, firstValue)
-	secondLine := fieldLine(secondLabel, secondValue)
-	lines := []string{heading, "", firstLine, secondLine, ""}
-	lines = appendNotice(lines, m.notice)
-	help := m.formHelp()
-	lines = append(lines, help)
-	text = strings.Join(lines, "\n")
-	return
-}
-
-func (m model) formHelp() (help string) {
-	last := m.field == 1
-	if last {
-		help = formSaveHelp
-		return
-	}
-	help = formContinueHelp
-	return
-}
-
-func (m model) cursorSpot() (x int, y int) {
-	y = 2 + m.field
-	var label string
-	addingRepo := m.screen == screenAddRepo
-	first := m.field == 0
-	if addingRepo {
-		if first {
-			label = "owner"
-		} else {
-			label = "name"
+func indexOfLabel(labels []configrecords.Label, name string) (index int) {
+	index = -1
+	for i, label := range labels {
+		same := label.Name == name
+		if same {
+			index = i
+			return
 		}
-	} else if first {
-		label = "name"
-	} else {
-		label = "color"
 	}
-	prefix := label + ": "
-	value := m.activeText()
-	x = utf8.RuneCountInString(prefix) + utf8.RuneCountInString(value)
+	return
+}
+
+func indexOfText(ids []int64, text string) (index int) {
+	index = -1
+	for i, id := range ids {
+		line := strconv.FormatInt(id, 10)
+		same := line == text
+		if same {
+			index = i
+			return
+		}
+	}
 	return
 }
 
@@ -636,84 +857,14 @@ func appendNotice(lines []string, notice string) (next []string) {
 	return
 }
 
-func repoLine(repo appRepo, selected bool) (line string) {
-	mark := "  "
-	if selected {
-		mark = "> "
-	}
-	line = mark + repo.owner + "/" + repo.name
-	missing := !repo.hasConfig
-	if missing {
-		line = line + "  " + missingConfig
-	}
-	return
-}
-
-func labelLine(label configrecords.Label, selected bool) (line string) {
-	mark := "  "
-	if selected {
-		mark = "> "
-	}
-	line = mark + label.Name + "  " + label.Color
-	return
-}
-
-func fieldLine(label string, value string) (line string) {
-	line = label + ": " + value
-	return
-}
-
-func dropLast(text string) (next string) {
-	empty := text == ""
-	if empty {
-		return
-	}
-	runes := []rune(text)
-	last := len(runes) - 1
-	next = string(runes[:last])
-	return
-}
-
-func repoIndex(repos []appRepo, owner string, name string) (index int, found bool) {
-	for i, repo := range repos {
-		sameOwner := repo.owner == owner
-		sameName := repo.name == name
-		same := sameOwner && sameName
-		if same {
-			index = i
-			found = true
-			return
+func joinLines(lines []string) (text string) {
+	for i, line := range lines {
+		first := i == 0
+		if first {
+			text = line
+			continue
 		}
-	}
-	return
-}
-
-func labelIndex(labels []configrecords.Label, name string) (index int, found bool) {
-	for i, label := range labels {
-		same := label.Name == name
-		if same {
-			index = i
-			found = true
-			return
-		}
-	}
-	return
-}
-
-func clamp(cursor int, length int) (next int) {
-	empty := length == 0
-	if empty {
-		return
-	}
-	next = cursor
-	below := next < 0
-	if below {
-		next = 0
-	}
-	last := length - 1
-	above := next > last
-	if above {
-		next = last
+		text = text + "\n" + line
 	}
 	return
 }

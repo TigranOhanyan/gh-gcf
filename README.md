@@ -40,7 +40,7 @@ Bind writes the tick workflow and commits. Push the branch. When the factory rep
 gh gcf setup
 ```
 
-`a` adds an app repo. Enter opens it. `a` again adds a label for that repo.
+Enter opens Repos or Apps. `a` adds a repo, a label, or an App ID. An App is the number GitHub shows as the App ID. Setup writes that id as `apps/<app id>`, and a repo can then use it. The private key is the Actions secret `GITHUB_APP_<app id>`. Bind writes that secret into the tick workflow.
 
 A label is a name you choose for one app repo. The starting label marks an issue as ready. The attention label marks an issue the factory stopped on, so a person has to look. The factory creates a missing label on that app repo. A label recorded for one app repo is not a label on another.
 
