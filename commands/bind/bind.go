@@ -141,7 +141,7 @@ func requireRelease() (err error) {
 	return
 }
 
-const appKeyMarker = "      __APP_KEYS__\n"
+const appKeyToken = "__APP_KEYS__"
 
 func workflowContents(factoryDir string) (contents []byte, err error) {
 	token := []byte(versionToken)
@@ -153,18 +153,66 @@ func workflowContents(factoryDir string) (contents []byte, err error) {
 	version := []byte(Version)
 	contents = bytes.ReplaceAll(workflowfile.FactoryTick, token, version)
 
-	marker := []byte(appKeyMarker)
-	hasMarker := bytes.Contains(contents, marker)
-	if !hasMarker {
-		err = fmt.Errorf("workflow template has no app key marker")
-		return
-	}
 	ids, err := registeredAppIDs(factoryDir)
 	if err != nil {
 		return
 	}
-	block := appKeyBlock(ids)
-	contents = bytes.ReplaceAll(contents, marker, block)
+	contents, err = replaceAppKeys(contents, ids)
+	return
+}
+
+func replaceAppKeys(contents []byte, ids []int64) (next []byte, err error) {
+	lines := bytes.Split(contents, []byte("\n"))
+	index := -1
+	var indent string
+	for i, line := range lines {
+		body, lead := markerBody(line)
+		token := []byte(appKeyToken)
+		match := bytes.Equal(body, token)
+		if !match {
+			continue
+		}
+		already := index >= 0
+		if already {
+			err = fmt.Errorf("workflow template has more than one app key marker")
+			return
+		}
+		index = i
+		indent = lead
+	}
+	missing := index < 0
+	if missing {
+		err = fmt.Errorf("workflow template has no app key marker")
+		return
+	}
+
+	replacement := appKeyLines(indent, ids)
+	var out [][]byte
+	head := lines[:index]
+	tail := lines[index+1:]
+	out = append(out, head...)
+	out = append(out, replacement...)
+	out = append(out, tail...)
+	next = bytes.Join(out, []byte("\n"))
+	return
+}
+
+func markerBody(line []byte) (body []byte, indent string) {
+	trimmed := bytes.TrimLeft(line, " \t")
+	lead := len(line) - len(trimmed)
+	indent = string(line[:lead])
+	body = bytes.TrimRight(trimmed, " \t\r")
+	return
+}
+
+func appKeyLines(indent string, ids []int64) (lines [][]byte) {
+	lines = make([][]byte, 0, len(ids))
+	for _, id := range ids {
+		text := strconv.FormatInt(id, 10)
+		line := indent + "GITHUB_APP_" + text + ": ${{ secrets.GITHUB_APP_" + text + " }}"
+		raw := []byte(line)
+		lines = append(lines, raw)
+	}
 	return
 }
 
@@ -195,22 +243,6 @@ func registeredAppIDs(factoryDir string) (ids []int64, err error) {
 	sort.Slice(ids, func(i int, j int) bool {
 		return ids[i] < ids[j]
 	})
-	return
-}
-
-func appKeyBlock(ids []int64) (block []byte) {
-	var lines []string
-	for _, id := range ids {
-		text := strconv.FormatInt(id, 10)
-		line := fmt.Sprintf("      GITHUB_APP_%s: ${{ secrets.GITHUB_APP_%s }}", text, text)
-		lines = append(lines, line)
-	}
-	empty := len(lines) == 0
-	if empty {
-		return
-	}
-	text := strings.Join(lines, "\n") + "\n"
-	block = []byte(text)
 	return
 }
 

@@ -27,7 +27,7 @@ func Test_Bind_should_commit_the_workflow_on_main(t *testing.T) {
 	assert.Equal(t, commitMessage, strings.TrimSpace(string(message)))
 
 	committed := mustGit(t, repoDir, "show", "main:"+workflowRel)
-	expected := pinnedWorkflow()
+	expected := pinnedWorkflow(t)
 	assert.Equal(t, expected, committed)
 }
 
@@ -89,7 +89,7 @@ func Test_Bind_should_replace_the_previous_workflow(t *testing.T) {
 	require.NoError(t, err)
 
 	committed := mustGit(t, repoDir, "show", "main:"+workflowRel)
-	expected := pinnedWorkflow()
+	expected := pinnedWorkflow(t)
 	assert.Equal(t, expected, committed)
 }
 
@@ -127,12 +127,14 @@ func Test_Bind_should_refuse_a_directory_that_is_not_a_git_repo(t *testing.T) {
 	assert.True(t, os.IsNotExist(err))
 }
 
-func pinnedWorkflow() (contents []byte) {
+func pinnedWorkflow(t *testing.T) (contents []byte) {
+	t.Helper()
 	token := []byte(versionToken)
 	version := []byte(Version)
-	contents = bytes.ReplaceAll(workflowfile.FactoryTick, token, version)
-	marker := []byte(appKeyMarker)
-	contents = bytes.ReplaceAll(contents, marker, nil)
+	replaced := bytes.ReplaceAll(workflowfile.FactoryTick, token, version)
+	var err error
+	contents, err = replaceAppKeys(replaced, nil)
+	require.NoError(t, err)
 	return
 }
 
@@ -169,8 +171,26 @@ func Test_Bind_should_name_each_registered_app_key(t *testing.T) {
 
 	committed := mustGit(t, repoDir, "show", "main:"+workflowRel)
 	text := string(committed)
-	assert.Contains(t, text, "GITHUB_APP_42: ${{ secrets.GITHUB_APP_42 }}")
-	assert.NotContains(t, text, "      __APP_KEYS__")
+	indent := indentOf(t, text, "FACTORY_GITHUB_APP_PRIVATE_KEY:")
+	want := indent + "GITHUB_APP_42: ${{ secrets.GITHUB_APP_42 }}\n"
+	assert.Contains(t, text, want)
+	assert.NotContains(t, text, "__APP_KEYS__\n")
+}
+
+func indentOf(t *testing.T, text string, key string) (indent string) {
+	t.Helper()
+	lines := strings.Split(text, "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimLeft(line, " \t")
+		match := strings.HasPrefix(trimmed, key)
+		if match {
+			lead := len(line) - len(trimmed)
+			indent = line[:lead]
+			return
+		}
+	}
+	t.Fatalf("workflow has no %s", key)
+	return
 }
 
 func Test_Bind_should_commit_the_workflow_on_the_open_branch(t *testing.T) {
@@ -188,7 +208,7 @@ func Test_Bind_should_commit_the_workflow_on_the_open_branch(t *testing.T) {
 	assert.Equal(t, commitMessage, strings.TrimSpace(string(message)))
 
 	committed := mustGit(t, repoDir, "show", "HEAD:"+workflowRel)
-	expected := pinnedWorkflow()
+	expected := pinnedWorkflow(t)
 	assert.Equal(t, expected, committed)
 
 	mainTip := mustGit(t, repoDir, "log", "-1", "--format=%s", "main")
