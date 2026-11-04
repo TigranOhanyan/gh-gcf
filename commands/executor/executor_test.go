@@ -371,12 +371,11 @@ func stepsAtTip(t *testing.T, repoDir string, rel string) (rows []records.Step) 
 
 func runTick(t *testing.T, repoDir string) (id string) {
 	t.Helper()
+	t.Chdir(repoDir)
 	cmd := tick.NewTick()
 	var output bytes.Buffer
 	cmd.SetOut(&output)
 	cmd.SetErr(&output)
-	args := []string{"--factory-repo", repoDir}
-	cmd.SetArgs(args)
 
 	err := cmd.ExecuteContext(t.Context())
 	require.NoError(t, err)

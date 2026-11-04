@@ -1,14 +1,16 @@
 package app
 
 import (
+	"os"
+
 	"charm.land/log/v2"
 	"github.com/spf13/cobra"
 
+	"github.com/TigranOhanyan/gh-gcf/commands"
 	"github.com/TigranOhanyan/gh-gcf/commands/executor"
 )
 
 func NewApp() (cmd *cobra.Command) {
-	var factoryDir string
 	var configBranch string
 	var stateBranch string
 	var tickID string
@@ -18,8 +20,18 @@ func NewApp() (cmd *cobra.Command) {
 		Short: "Record configured apps that are installed",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) (err error) {
+			dir, err := os.Getwd()
+			if err != nil {
+				log.Error("current directory", "err", err)
+				return
+			}
+			err = commands.RequireCheckout(cmd.Context(), dir)
+			if err != nil {
+				log.Error("factory repo", "path", dir, "err", err)
+				return
+			}
 			exec := executor.StepExecutor{
-				FactoryDir:   factoryDir,
+				FactoryDir:   dir,
 				ConfigBranch: configBranch,
 				StateBranch:  stateBranch,
 				TickID:       tickID,
@@ -31,7 +43,6 @@ func NewApp() (cmd *cobra.Command) {
 	}
 
 	flags := cmd.Flags()
-	flags.StringVar(&factoryDir, "factory-repo", "", "path to the factory checkout")
 	flags.StringVar(&configBranch, "config-branch", "main", "branch that holds config")
 	flags.StringVar(&stateBranch, "state-branch", "state", "branch that holds state")
 	flags.StringVar(&tickID, "tick", "", "tick id this step records")

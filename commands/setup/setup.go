@@ -7,6 +7,8 @@ import (
 	"charm.land/bubbletea/v2"
 	"charm.land/log/v2"
 	"github.com/spf13/cobra"
+
+	"github.com/TigranOhanyan/gh-gcf/commands"
 )
 
 func NewSetup() (cmd *cobra.Command) {
@@ -30,8 +32,9 @@ func NewSetup() (cmd *cobra.Command) {
 // Setup records config in the factory checkout at dir.
 // It fails when dir is not a git checkout. It does not commit.
 func Setup(ctx context.Context, dir string) (err error) {
-	err = requireCheckout(ctx, dir)
+	err = commands.RequireCheckout(ctx, dir)
 	if err != nil {
+		log.Error("setup", "path", dir, "err", err)
 		return
 	}
 	log.Info("setup", "path", dir)

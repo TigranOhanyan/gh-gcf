@@ -699,7 +699,66 @@ func (screen *termScreen) mark() (mark int) {
 func (screen *termScreen) containsSince(mark int, text string) (found bool) {
 	screen.mu.Lock()
 	defer screen.mu.Unlock()
-	found = strings.Contains(screen.buf.String()[mark:], text)
+	raw := screen.buf.String()[mark:]
+	visible := stripEscapes(raw)
+	found = strings.Contains(visible, text)
+	return
+}
+
+func stripEscapes(raw string) (text string) {
+	cursor := "\x1b[7m \x1b[m"
+	raw = strings.ReplaceAll(raw, cursor, "")
+	var b strings.Builder
+	i := 0
+	for i < len(raw) {
+		backspace := raw[i] == '\b'
+		plain := raw[i] != 0x1b && !backspace
+		if plain {
+			b.WriteByte(raw[i])
+			i++
+			continue
+		}
+		if backspace {
+			i++
+			continue
+		}
+		i = skipEscape(raw, i)
+	}
+	text = b.String()
+	return
+}
+
+func skipEscape(raw string, i int) (next int) {
+	next = i + 1
+	if next >= len(raw) {
+		return
+	}
+	csi := raw[next] == '['
+	if csi {
+		next++
+		for next < len(raw) {
+			ch := raw[next]
+			next++
+			done := ch >= 0x40 && ch <= 0x7e
+			if done {
+				return
+			}
+		}
+		return
+	}
+	osc := raw[next] == ']'
+	if osc {
+		next++
+		for next < len(raw) {
+			ch := raw[next]
+			next++
+			ended := ch == 0x07
+			if ended {
+				return
+			}
+		}
+	}
+	next++
 	return
 }
 

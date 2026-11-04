@@ -8,11 +8,11 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
-	"strings"
 
 	"charm.land/log/v2"
 	"github.com/spf13/cobra"
 
+	"github.com/TigranOhanyan/gh-gcf/commands"
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 	workflowfile "github.com/TigranOhanyan/gh-gcf/github"
 )
@@ -55,7 +55,7 @@ func Bind(ctx context.Context, factoryDir string) (err error) {
 		return
 	}
 
-	err = requireCheckout(ctx, factoryDir)
+	err = commands.RequireCheckout(ctx, factoryDir)
 	if err != nil {
 		log.Error("factory repo", "path", factoryDir, "err", err)
 		return
@@ -83,29 +83,6 @@ func Bind(ctx context.Context, factoryDir string) (err error) {
 	files := []string{workflowRel, gitignoreRel, hintRel}
 	files = append(files, configRels...)
 	err = commitCheckout(ctx, factoryDir, files)
-	return
-}
-
-func requireCheckout(ctx context.Context, factoryDir string) (err error) {
-	top, err := git(ctx, factoryDir, "rev-parse", "--show-toplevel")
-	if err != nil {
-		err = fmt.Errorf("factory repo is not a git checkout")
-		return
-	}
-	root := strings.TrimSpace(string(top))
-	factoryAbs, err := filepath.Abs(factoryDir)
-	if err != nil {
-		return
-	}
-	rootAbs, err := filepath.Abs(root)
-	if err != nil {
-		return
-	}
-	sameRoot := filepath.Clean(factoryAbs) == filepath.Clean(rootAbs)
-	if !sameRoot {
-		err = fmt.Errorf("factory repo is not a git checkout")
-		return
-	}
 	return
 }
 

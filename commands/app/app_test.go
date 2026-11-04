@@ -184,7 +184,7 @@ func Test_App_should_refuse_a_missing_tick(t *testing.T) {
 	var output bytes.Buffer
 	cmd.SetOut(&output)
 	cmd.SetErr(&output)
-	cmd.SetArgs([]string{"--factory-repo", t.TempDir()})
+	cmd.SetArgs([]string{})
 
 	err := cmd.ExecuteContext(t.Context())
 	require.Error(t, err)
@@ -259,7 +259,7 @@ func runTick(t *testing.T, repoDir string) (id string) {
 	var output bytes.Buffer
 	cmd.SetOut(&output)
 	cmd.SetErr(&output)
-	cmd.SetArgs([]string{"--factory-repo", repoDir})
+	t.Chdir(repoDir)
 
 	err := cmd.ExecuteContext(t.Context())
 	require.NoError(t, err)
@@ -274,7 +274,8 @@ func runApp(t *testing.T, repoDir string, id string) (err error) {
 	var output bytes.Buffer
 	cmd.SetOut(&output)
 	cmd.SetErr(&output)
-	cmd.SetArgs([]string{"--factory-repo", repoDir, "--tick", id})
+	t.Chdir(repoDir)
+	cmd.SetArgs([]string{"--tick", id})
 	err = cmd.ExecuteContext(t.Context())
 	return
 }

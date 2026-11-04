@@ -20,12 +20,11 @@ import (
 
 func Test_Tick_should_print_the_stored_tick_id(t *testing.T) {
 	repoDir := setupFactory(t)
+	t.Chdir(repoDir)
 	cmd := NewTick()
 	var output bytes.Buffer
 	cmd.SetOut(&output)
 	cmd.SetErr(&output)
-	args := []string{"--factory-repo", repoDir}
-	cmd.SetArgs(args)
 
 	err := cmd.ExecuteContext(t.Context())
 	require.NoError(t, err)

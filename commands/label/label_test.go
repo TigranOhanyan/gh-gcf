@@ -364,7 +364,7 @@ func Test_Label_should_require_a_tick_id(t *testing.T) {
 	var output bytes.Buffer
 	cmd.SetOut(&output)
 	cmd.SetErr(&output)
-	cmd.SetArgs([]string{"--factory-repo", filepath.Join(JunkDir, "missing-tick")})
+	cmd.SetArgs([]string{})
 
 	err := cmd.ExecuteContext(t.Context())
 	require.Error(t, err)
@@ -427,7 +427,7 @@ func runTick(t *testing.T, repoDir string) (id string) {
 	var output bytes.Buffer
 	cmd.SetOut(&output)
 	cmd.SetErr(&output)
-	cmd.SetArgs([]string{"--factory-repo", repoDir})
+	t.Chdir(repoDir)
 
 	err := cmd.ExecuteContext(t.Context())
 	require.NoError(t, err)
@@ -445,7 +445,8 @@ func runLabel(t *testing.T, repoDir string, id string, authToken string) (err er
 	var output bytes.Buffer
 	cmd.SetOut(&output)
 	cmd.SetErr(&output)
-	cmd.SetArgs([]string{"--factory-repo", repoDir, "--tick", id})
+	t.Chdir(repoDir)
+	cmd.SetArgs([]string{"--tick", id})
 	err = cmd.ExecuteContext(t.Context())
 	if err == nil {
 		assert.Empty(t, output.String())
