@@ -20,70 +20,41 @@ import (
 
 func Test_Tick_should_print_the_stored_tick_id(t *testing.T) {
 	repoDir := setupFactory(t)
-	t.Chdir(repoDir)
-	cmd := NewTick()
-	var output bytes.Buffer
-	cmd.SetOut(&output)
-	cmd.SetErr(&output)
+	id := runTick(t, repoDir)
 
-	err := cmd.ExecuteContext(t.Context())
-	require.NoError(t, err)
-
-	id := strings.TrimSpace(output.String())
-	_, err = ulid.Parse(id)
+	_, err := ulid.Parse(id)
 	assert.NoError(t, err)
 	rows := ticksAtTip(t, repoDir, "repos/octo/app")
 	require.Len(t, rows, 1)
 	assert.Equal(t, id, rows[0].ID)
 }
 
-func Test_CreateTick_should_commit_the_tick_subject_on_the_state_branch(t *testing.T) {
+func Test_Tick_should_commit_the_tick_subject_on_the_state_branch(t *testing.T) {
 	repoDir := setupFactory(t)
-	tick := tickExecutor{
-		FactoryDir:   repoDir,
-		ConfigBranch: "main",
-		StateBranch:  "state",
-	}
-
-	id, err := tick.CreateTick(t.Context())
-	require.NoError(t, err)
+	id := runTick(t, repoDir)
 
 	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
 	expected := fmt.Sprintf("[%s] [tick] [octo/app] created", id)
 	assert.Equal(t, expected, strings.TrimSpace(string(message)))
 }
 
-func Test_CreateTick_should_store_one_tick_on_the_state_branch(t *testing.T) {
+func Test_Tick_should_store_one_tick_on_the_state_branch(t *testing.T) {
 	repoDir := setupFactory(t)
 	rel := "repos/octo/app"
-	tick := tickExecutor{
-		FactoryDir:   repoDir,
-		ConfigBranch: "main",
-		StateBranch:  "state",
-	}
+	id := runTick(t, repoDir)
 
-	id, err := tick.CreateTick(t.Context())
-	require.NoError(t, err)
-
-	_, err = ulid.Parse(id)
+	_, err := ulid.Parse(id)
 	assert.NoError(t, err)
 	rows := ticksAtTip(t, repoDir, rel)
 	require.Len(t, rows, 1)
 	assert.Equal(t, id, rows[0].ID)
 }
 
-func Test_CreateTick_should_store_a_utc_timestamp(t *testing.T) {
+func Test_Tick_should_store_a_utc_timestamp(t *testing.T) {
 	repoDir := setupFactory(t)
 	rel := "repos/octo/app"
-	tick := tickExecutor{
-		FactoryDir:   repoDir,
-		ConfigBranch: "main",
-		StateBranch:  "state",
-	}
-
 	startOfTest := time.Now().Add(-time.Second)
-	id, err := tick.CreateTick(t.Context())
-	require.NoError(t, err)
+	id := runTick(t, repoDir)
 	startOfCheck := time.Now().Add(time.Second)
 
 	rows := ticksAtTip(t, repoDir, rel)
@@ -95,19 +66,12 @@ func Test_CreateTick_should_store_a_utc_timestamp(t *testing.T) {
 	assert.WithinRange(t, createdAt, startOfTest, startOfCheck)
 }
 
-func Test_CreateTick_should_commit_once_for_each_repo(t *testing.T) {
+func Test_Tick_should_commit_once_for_each_repo(t *testing.T) {
 	app := appSetup{owner: "octo", name: "app"}
 	other := appSetup{owner: "octo", name: "other"}
 	apps := []appSetup{app, other}
 	repoDir := setupRepos(t, apps)
-	tick := tickExecutor{
-		FactoryDir:   repoDir,
-		ConfigBranch: "main",
-		StateBranch:  "state",
-	}
-
-	id, err := tick.CreateTick(t.Context())
-	require.NoError(t, err)
+	id := runTick(t, repoDir)
 
 	output := mustGit(t, repoDir, "log", "-2", "--format=%s", "state")
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
@@ -118,21 +82,14 @@ func Test_CreateTick_should_commit_once_for_each_repo(t *testing.T) {
 	assert.Equal(t, appSubject, lines[1])
 }
 
-func Test_CreateTick_should_store_the_same_tick_in_each_repo(t *testing.T) {
+func Test_Tick_should_store_the_same_tick_in_each_repo(t *testing.T) {
 	app := appSetup{owner: "octo", name: "app"}
 	other := appSetup{owner: "octo", name: "other"}
 	apps := []appSetup{app, other}
 	repoDir := setupRepos(t, apps)
 	appRel := "repos/octo/app"
 	otherRel := "repos/octo/other"
-	tick := tickExecutor{
-		FactoryDir:   repoDir,
-		ConfigBranch: "main",
-		StateBranch:  "state",
-	}
-
-	id, err := tick.CreateTick(t.Context())
-	require.NoError(t, err)
+	id := runTick(t, repoDir)
 
 	appRows := ticksAtTip(t, repoDir, appRel)
 	otherRows := ticksAtTip(t, repoDir, otherRel)
@@ -140,6 +97,20 @@ func Test_CreateTick_should_store_the_same_tick_in_each_repo(t *testing.T) {
 	require.Len(t, otherRows, 1)
 	assert.Equal(t, id, appRows[0].ID)
 	assert.Equal(t, id, otherRows[0].ID)
+}
+
+func runTick(t *testing.T, repoDir string) (id string) {
+	t.Helper()
+	t.Chdir(repoDir)
+	cmd := NewTick()
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+	err := cmd.ExecuteContext(t.Context())
+	require.NoError(t, err)
+	id = strings.TrimSpace(output.String())
+	require.NotEmpty(t, id)
+	return
 }
 
 type appSetup struct {
