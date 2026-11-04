@@ -45,3 +45,12 @@ Enter opens Repos or Apps. `a` adds a repo, a label, or an App ID. An App is the
 A label is a name you choose for one app repo. The starting label marks an issue as ready. The attention label marks an issue the factory stopped on, so a person has to look. The factory creates a missing label on that app repo. A label recorded for one app repo is not a label on another.
 
 Setup writes the config in the checkout you have open. Commit and push that change the same way as bind.
+
+The scheduled workflow records a tick, then runs `app`, then `label`, then pushes state. `app` checks each App ID configured for a repo. When that App is installed there, it records the client id and the installation id. A missing or suspended installation stops the step. `label` creates a configured label the app repo does not yet have.
+
+From the factory checkout, after `gh gcf tick` prints an id:
+
+```shell
+gh gcf app --tick <id>
+gh gcf label --tick <id>
+```
