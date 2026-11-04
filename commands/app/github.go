@@ -12,17 +12,15 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
-	"net/http"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"charm.land/log/v2"
-	"github.com/google/go-github/v93/github"
+
+	"github.com/TigranOhanyan/gh-gcf/commands"
 )
 
-const githubAPIURL = "GITHUB_API_URL"
 const keyPrefix = "GITHUB_APP_"
 const jwtHeader = `{"alg":"RS256","typ":"JWT"}`
 
@@ -44,14 +42,14 @@ func (step appStep) lookUp(ctx context.Context, owner string, repoName string, i
 		log.Error("app jwt", "owner", owner, "name", repoName, "app", id, "err", err)
 		return
 	}
-	client, err := newGitHubClientWithToken(signed)
+	client, err := commands.NewGitHubClientWithToken(signed)
 	if err != nil {
 		return
 	}
 
 	installation, resp, err := client.Apps.GetRepositoryInstallation(ctx, owner, repoName)
-	closeGitHub(resp)
-	missing := installationMissing(err)
+	commands.CloseGitHub(resp)
+	missing := commands.GitHubNotFound(err)
 	if missing {
 		err = nil
 		seen = sightMissing
@@ -153,61 +151,6 @@ func parseAppKey(pemText string) (key *rsa.PrivateKey, err error) {
 	}
 	key = rsaKey
 	return
-}
-
-func newGitHubClientWithToken(token string) (client *github.Client, err error) {
-	auth := github.WithAuthToken(token)
-	options := []github.ClientOptionsFunc{auth}
-	base := os.Getenv(githubAPIURL)
-	hasBase := base != ""
-	if hasBase {
-		baseURL := withTrailingSlash(base)
-		urls := github.WithURLs(&baseURL, nil)
-		options = append(options, urls)
-	}
-
-	client, err = github.NewClient(options...)
-	if err != nil {
-		log.Error("github client", "err", err)
-	}
-	return
-}
-
-func withTrailingSlash(base string) (url string) {
-	url = base
-	missing := !strings.HasSuffix(url, "/")
-	if missing {
-		url = url + "/"
-	}
-	return
-}
-
-func installationMissing(err error) (missing bool) {
-	if err == nil {
-		return
-	}
-	response, ok := err.(*github.ErrorResponse)
-	if !ok {
-		return
-	}
-	if response.Response == nil {
-		return
-	}
-	missing = response.Response.StatusCode == http.StatusNotFound
-	return
-}
-
-func closeGitHub(resp *github.Response) {
-	if resp == nil {
-		return
-	}
-	if resp.Response == nil {
-		return
-	}
-	err := resp.Body.Close()
-	if err != nil {
-		log.Error("close github response", "err", err)
-	}
 }
 
 func finishTx(tx *sql.Tx, workErr error) (err error) {

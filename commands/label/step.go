@@ -122,12 +122,12 @@ func (step labelStep) ensure(ctx context.Context, repo commands.Repo, stepRow re
 
 func (step labelStep) labelOnGitHub(ctx context.Context, owner string, repoName string, name string) (exists bool, err error) {
 	_, resp, err := step.GitHub.Issues.GetLabel(ctx, owner, repoName, name)
-	closeGitHub(resp)
+	commands.CloseGitHub(resp)
 	if err == nil {
 		exists = true
 		return
 	}
-	missing := labelMissing(err)
+	missing := commands.GitHubNotFound(err)
 	if missing {
 		err = nil
 		return
@@ -143,7 +143,7 @@ func (step labelStep) createOnGitHub(ctx context.Context, owner string, repoName
 		Color: &color,
 	}
 	_, resp, err := step.GitHub.Issues.CreateLabel(ctx, owner, repoName, request)
-	closeGitHub(resp)
+	commands.CloseGitHub(resp)
 	if err != nil {
 		log.Error("create github label", "owner", owner, "name", repoName, "label", label.Name, "err", err)
 	}

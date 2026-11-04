@@ -3,50 +3,22 @@ package label
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"os/exec"
 	"strings"
 
 	"charm.land/log/v2"
 	"github.com/google/go-github/v93/github"
-)
 
-const githubAPIURL = "GITHUB_API_URL"
+	"github.com/TigranOhanyan/gh-gcf/commands"
+)
 
 func newGitHubClient(ctx context.Context) (client *github.Client, err error) {
 	token, err := githubToken(ctx)
 	if err != nil {
 		return
 	}
-	client, err = newGitHubClientWithToken(token)
-	return
-}
-
-func newGitHubClientWithToken(token string) (client *github.Client, err error) {
-	auth := github.WithAuthToken(token)
-	options := []github.ClientOptionsFunc{auth}
-	base := os.Getenv(githubAPIURL)
-	hasBase := base != ""
-	if hasBase {
-		baseURL := withTrailingSlash(base)
-		urls := github.WithURLs(&baseURL, nil)
-		options = append(options, urls)
-	}
-
-	client, err = github.NewClient(options...)
-	if err != nil {
-		log.Error("github client", "err", err)
-	}
-	return
-}
-
-func withTrailingSlash(base string) (url string) {
-	url = base
-	missing := !strings.HasSuffix(url, "/")
-	if missing {
-		url = url + "/"
-	}
+	client, err = commands.NewGitHubClientWithToken(token)
 	return
 }
 
@@ -82,29 +54,4 @@ func ghAuthToken(ctx context.Context) (token string, err error) {
 		log.Error("gh auth token", "err", err)
 	}
 	return
-}
-
-func labelMissing(err error) (missing bool) {
-	response, ok := err.(*github.ErrorResponse)
-	if !ok {
-		return
-	}
-	if response.Response == nil {
-		return
-	}
-	missing = response.Response.StatusCode == http.StatusNotFound
-	return
-}
-
-func closeGitHub(resp *github.Response) {
-	if resp == nil {
-		return
-	}
-	if resp.Response == nil {
-		return
-	}
-	err := resp.Body.Close()
-	if err != nil {
-		log.Error("close github response", "err", err)
-	}
 }

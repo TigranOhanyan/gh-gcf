@@ -17,6 +17,8 @@ import (
 
 	"charm.land/log/v2"
 	"github.com/google/go-github/v93/github"
+
+	"github.com/TigranOhanyan/gh-gcf/commands"
 )
 
 const appIDEnv = "FACTORY_GITHUB_APP_ID"
@@ -73,13 +75,13 @@ func (app appAuth) clientFor(ctx context.Context, owner string, repo string) (cl
 		log.Error("app jwt", "owner", owner, "name", repo, "err", err)
 		return
 	}
-	appClient, err := newGitHubClientWithToken(signed)
+	appClient, err := commands.NewGitHubClientWithToken(signed)
 	if err != nil {
 		return
 	}
 
 	installation, resp, err := appClient.Apps.GetRepositoryInstallation(ctx, owner, repo)
-	closeGitHub(resp)
+	commands.CloseGitHub(resp)
 	if err != nil {
 		log.Error("repository installation", "owner", owner, "name", repo, "err", err)
 		return
@@ -98,7 +100,7 @@ func (app appAuth) clientFor(ctx context.Context, owner string, repo string) (cl
 
 	installationID := installation.GetID()
 	issued, resp, err := appClient.Apps.CreateInstallationToken(ctx, installationID, nil)
-	closeGitHub(resp)
+	commands.CloseGitHub(resp)
 	if err != nil {
 		log.Error("installation token", "owner", owner, "name", repo, "err", err)
 		return
@@ -115,7 +117,8 @@ func (app appAuth) clientFor(ctx context.Context, owner string, repo string) (cl
 		return
 	}
 
-	client, err = newGitHubClientWithToken(issued.GetToken())
+	token := issued.GetToken()
+	client, err = commands.NewGitHubClientWithToken(token)
 	return
 }
 
