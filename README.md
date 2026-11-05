@@ -1,6 +1,6 @@
 # gh gcf
 
-`gh gcf` is a GitHub CLI extension. A factory takes ready issues in app repos and turns them into reviewed pull requests. Cursor agents do the judgment work. The factory claims the issue, starts the agent, collects the reviews, and applies one fix.
+`gh gcf` is a GitHub CLI extension. A factory takes ready issues in app repos and turns them into reviewed pull requests. Cursor agents do the judgment work. The coding flow claims a ready issue and starts the agent that opens the pull request.
 
 ## Repos
 
@@ -42,15 +42,29 @@ gh gcf setup
 
 Enter opens Repos or Apps. `a` adds a repo, a label, or an App ID. An App is the number GitHub shows as the App ID. Setup writes that id as `apps/<app id>`, and a repo can then use it. The private key is the Actions secret `GITHUB_APP_<app id>`. Bind writes that secret into the tick workflow.
 
-A label is a name you choose for one app repo. The starting label marks an issue as ready. The attention label marks an issue the factory stopped on, so a person has to look. The factory creates a missing label on that app repo. A label recorded for one app repo is not a label on another.
+Inside a repo, setup records labels, the Apps that repo uses, and builders. A label is a name you choose for one app repo. The starting label marks an issue as ready. The attention label marks an issue the factory stopped on, so a person has to look. The factory creates a missing label on that app repo. A label recorded for one app repo is not a label on another.
+
+A builder has a name, a starting label, and a different attention label. One starting label belongs to one builder. Its instruction is the file `repos/<owner>/<name>/members/<name>.md`. You edit that file in your editor. A reviewer belongs to one builder and needs its own App. Two reviewers do not share an App. A builder has at most one fixer. Each of those members has its own instruction file, named the same way.
 
 Setup writes the config in the checkout you have open. Commit and push that change the same way as bind.
 
-The scheduled workflow records a tick, then runs `app`, then `label`, then pushes state. `app` checks each App ID configured for a repo. When that App is installed there, it records the client id and the installation id. A missing or suspended installation stops the step. `label` creates a configured label the app repo does not yet have.
+The scheduled workflow records a tick, then runs `app`, `label`, `compile_coding`, and `coding`, then pushes state. `app` checks each App ID configured for a repo. When that App is installed there, it records the client id and the installation id. A missing or suspended installation stops the step. `label` creates a configured label the app repo does not yet have.
 
 From the factory checkout, after `gh gcf tick` prints an id:
 
 ```shell
 gh gcf app --tick <id>
 gh gcf label --tick <id>
+gh gcf compile_coding --tick <id>
+gh gcf coding --tick <id>
 ```
+
+## Coding
+
+`compile_coding` copies the coding flow into that repo's state: each builder, its reviewers, its fixer, and its checks. It stores the SHA-256 of each instruction file, including an empty file. A missing instruction file stops the step.
+
+`coding` reads those builders in name order. It hashes each instruction file again. When the hash differs from the one compile stored, that builder waits for the next tick, and the other builders still start. When the hashes match, it looks for open issues that carry the builder's starting label.
+
+An issue is left alone when a coding work already has that issue number, or when a pull request references the issue. Otherwise coding writes the issue, the coding work, and the agent, then calls Cursor. The prompt is the instruction file, then the issue number, title, and body. Cursor is asked to open the pull request. The agent's id is `bc-` plus a UUID v7, and that id is what Cursor stores.
+
+A successful create records an ack and Cursor's run id. A failed create records the response body and adds the builder's attention label to the issue. The coding work stays. A later tick does not call Cursor again for that agent.
