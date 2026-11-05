@@ -1,6 +1,6 @@
 # Registered Apps are files named by App ID
 
-The factory keeps one empty file per App at `apps/<app id>` on main. The file name is the App ID. Setup creates the file, and a repo's config then stores that same id for the blueprints that use it. Bind reads the directory and writes one `GITHUB_APP_<app id>` line into the tick workflow, taken from the Actions secret of that name. The private key stays in the secret. The `app` step reads that environment variable and does not read the file. The factory app keeps `FACTORY_GITHUB_APP_ID` and `FACTORY_GITHUB_APP_PRIVATE_KEY`.
+The factory keeps one empty file per App at `apps/<app id>` on main. The file name is the App ID. Setup creates the file, and a repo's config then stores that same id for the reviewer members that use it (`0030-members-and-agents-replace-blueprints-and-runs.md`). Bind reads the directory and writes one `GITHUB_APP_<app id>` line into the tick workflow, taken from the Actions secret of that name. The private key stays in the secret. The `app` step reads that environment variable and does not read the file. The factory app keeps `FACTORY_GITHUB_APP_ID` and `FACTORY_GITHUB_APP_PRIVATE_KEY`.
 
 ## Considered Options
 

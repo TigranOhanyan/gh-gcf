@@ -8,8 +8,25 @@ import (
 	"database/sql"
 )
 
+type BuilderMember struct {
+	Name          string `json:"name"`
+	Role          string `json:"role"`
+	StartingLabel string `json:"starting_label"`
+}
+
+type FixerMember struct {
+	Name        string `json:"name"`
+	Role        string `json:"role"`
+	BuilderName string `json:"builder_name"`
+}
+
 type GithubApp struct {
 	AppID int64 `json:"app_id"`
+}
+
+type GithubCheck struct {
+	BuilderName string `json:"builder_name"`
+	Name        string `json:"name"`
 }
 
 type GooseDbVersion struct {
@@ -23,4 +40,17 @@ type Label struct {
 	Name         string `json:"name"`
 	Color        string `json:"color"`
 	RegisteredAt string `json:"registered_at"`
+}
+
+type Member struct {
+	Name           string `json:"name"`
+	Role           string `json:"role"`
+	AttentionLabel string `json:"attention_label"`
+}
+
+type ReviewerMember struct {
+	Name        string `json:"name"`
+	Role        string `json:"role"`
+	BuilderName string `json:"builder_name"`
+	GithubApp   int64  `json:"github_app"`
 }

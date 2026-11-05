@@ -5,5 +5,5 @@ The workflow runs compilation, then `app`, then labels, then the cycle steps. Ea
 ## Considered Options
 
 - One tick function that owns every decision: rejected, because each step has to be runnable alone and a failure in one must not half-write the next.
-- A compilation that only validates and writes nothing: rejected, because State's blueprint rows have to exist before a run can reference them.
+- A compilation that only validates and writes nothing: rejected, because State's member rows have to exist before an agent can reference them (`0030-members-and-agents-replace-blueprints-and-runs.md`).
 - Throwing when state has an App that config lacks: rejected, because that cleanup is the later deletion flow, and the label step already leaves such a row.

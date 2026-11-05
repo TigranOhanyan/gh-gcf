@@ -39,7 +39,7 @@ The part of the factory that carries one command across every app repo.
 _Avoid_: engine, runner
 
 **Config**:
-What the user wants the factory to do: its labels, Apps, blueprints, and the CI checks that can claim a fixer. Only the user changes it.
+What the user wants the factory to do: its labels, Apps, members, and the CI checks that can claim a fixer. Only the user changes it.
 _Avoid_: settings, desired state
 
 **Label**:
@@ -47,8 +47,12 @@ A name the user records in an app repo's config. The factory creates that name o
 _Avoid_: tag, marker
 
 **App**:
-A GitHub App a blueprint acts as. GitHub assigns its App ID, and that id identifies the app.
-_Avoid_: bot, installation, slug, display name
+A GitHub App a reviewer acts as. GitHub assigns its App ID, and that id identifies the app.
+_Avoid_: bot, installation, slug, display name, factory app
+
+**Factory app**:
+The GitHub App the tick uses when it creates and reads GitHub resources.
+_Avoid_: reviewer app, builder app, bot
 
 **Installation**:
 An App installed on the account that owns an app repo.
@@ -59,21 +63,25 @@ What the factory has done and seen. The tick and the steps write it. The user do
 _Avoid_: database, history
 
 **Compilation**:
-The tick's first step. It updates State's builders, reviewers, and fixers from Config.
+The tick's first step. It updates State's members from Config.
 _Avoid_: migration, validation
 
 ## Agents
 
-**Blueprint**:
-A named setup in Config for one kind of agent: a builder, a reviewer, or a fixer.
-_Avoid_: template, definition, spec
+**Member**:
+A builder, a reviewer, or a fixer named in an app repo's config.
+_Avoid_: blueprint, participant
+
+**Instruction**:
+The text a member gives its agent, kept in a file named after that member.
+_Avoid_: brief, prompt
 
 **Builder**:
-A blueprint tied to a starting label and an optional GitHub App. Its agent implements a ready issue and opens the pull request.
+A member tied to a starting label. Its agent implements a ready issue and opens the pull request.
 _Avoid_: implementer, coder
 
 **Reviewer**:
-A blueprint tied to one builder and to its own App. Its agent posts a verdict on that builder's pull request.
+A member tied to one builder and to its own App. Its agent posts a verdict on that builder's work.
 _Avoid_: code reviewer
 
 **Standards reviewer**:
@@ -85,23 +93,23 @@ The reviewer that judges a pull request against the issue it claims to implement
 _Avoid_: requirements reviewer, QA
 
 **Fixer**:
-A blueprint tied to one builder. Its agent applies the change requests on that builder's pull request, once.
+The one member a builder has for applying change requests on that builder's pull request, once. A builder may have none.
 _Avoid_: builder (second run), repairer, review applier
 
-**Agent**:
-The Cursor agent started for a run.
-_Avoid_: bot, builder
+**Work**:
+The factory's handling of one issue by one builder. Its agents point at it.
+_Avoid_: team, task, run, cycle
 
-**Run**:
-One blueprint's work on one issue.
-_Avoid_: execution, building
+**Agent**:
+One member acting through Cursor on one work. A builder, a reviewer, and a fixer are different kinds.
+_Avoid_: bot, run
 
 **Verdict**:
 A reviewer's decision on a pull request: approve or request changes. A plain comment is not a verdict.
 _Avoid_: result, outcome
 
 **Check**:
-A named CI result on a pull request that can claim a fixer.
+A named CI result recorded for one builder. It can claim that builder's fixer.
 _Avoid_: workflow, action, job
 
 **Attention**:

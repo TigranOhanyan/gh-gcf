@@ -1,6 +1,6 @@
 # Deletion is unsupported
 
-A row in any Config table cannot be removed. If State has a builder, reviewer, fixer, or check that Config no longer has, the step throws and deletes nothing. The label step and the `app` step do not look for a row that State has and Config lacks. Each leaves that row, writes no log, and does not delete it. Creating a missing row and updating one that both sides have are supported. Runs, agents, ticks, and events are not Config rows. How a removed config row should be cleaned up is deferred.
+A row in any Config table cannot be removed. If State has a builder, reviewer, fixer, or check that Config no longer has, the step throws and deletes nothing. The label step and the `app` step do not look for a row that State has and Config lacks. Each leaves that row, writes no log, and does not delete it. Creating a missing row and updating one that both sides have are supported. Works, agents, ticks, and events are not Config rows (`0030-members-and-agents-replace-blueprints-and-runs.md`). How a removed config row should be cleaned up is deferred.
 
 ## Considered Options
 
