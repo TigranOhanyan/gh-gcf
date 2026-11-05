@@ -48,6 +48,18 @@ A builder has a name, a starting label, and a different attention label. One sta
 
 Setup writes the config in the checkout you have open. Commit and push that change the same way as bind.
 
+The same writes are commands under `setup`. A command takes every value in one invocation, writes the open checkout, and does not commit.
+
+```shell
+gh gcf setup repo add --owner octo --name app
+gh gcf setup label add --owner octo --repo app --name ready --color ededed
+gh gcf setup label list --owner octo --repo app
+gh gcf setup apps add --id 42
+gh gcf setup apps attach --owner octo --repo app --id 42
+gh gcf setup member add-builder --owner octo --repo app --name features --starting ready --attention stop
+gh gcf setup check add --owner octo --repo app --builder features --name "ci / unit"
+```
+
 The scheduled workflow records a tick, then runs `app`, `label`, `compile_coding`, and `coding`, then pushes state. `app` checks each App ID configured for a repo. When that App is installed there, it records the client id and the installation id. A missing or suspended installation stops the step. `label` creates a configured label the app repo does not yet have.
 
 From the factory checkout, after `gh gcf tick` prints an id:

@@ -185,13 +185,22 @@ func addLabel(ctx context.Context, db *configdb.DB, rawName string, rawColor str
 	return
 }
 
-func createAppFile(factoryDir string, raw string) (id int64, err error) {
+func parseAppID(raw string) (id int64, err error) {
 	text := strings.TrimSpace(raw)
 	parsed, parseErr := strconv.ParseInt(text, 10, 64)
 	canonical := strconv.FormatInt(parsed, 10)
 	bad := parseErr != nil || parsed <= 0 || canonical != text
 	if bad {
 		err = fmt.Errorf("app id must be a positive integer")
+		return
+	}
+	id = parsed
+	return
+}
+
+func createAppFile(factoryDir string, raw string) (id int64, err error) {
+	id, err = parseAppID(raw)
+	if err != nil {
 		return
 	}
 
@@ -202,6 +211,7 @@ func createAppFile(factoryDir string, raw string) (id int64, err error) {
 		return
 	}
 
+	canonical := strconv.FormatInt(id, 10)
 	path := filepath.Join(dir, canonical)
 	_, statErr := os.Stat(path)
 	exists := statErr == nil
@@ -223,7 +233,6 @@ func createAppFile(factoryDir string, raw string) (id int64, err error) {
 		log.Error("create app", "path", path, "err", err)
 		return
 	}
-	id = parsed
 	log.Info("create app", "app", id, "path", path)
 	return
 }
