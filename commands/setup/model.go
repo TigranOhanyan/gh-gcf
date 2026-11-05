@@ -3,6 +3,7 @@ package setup
 import (
 	"context"
 	"strconv"
+	"strings"
 
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/textinput"
@@ -243,9 +244,9 @@ func (m model) render() (text string) {
 		text = m.renderForm()
 		return
 	}
-	title := titleStyle.Render(m.list.Title)
+	path := titleStyle.Render(m.nav())
 	body := m.listBody()
-	lines := []string{title, "", body, ""}
+	lines := []string{path, "", body, ""}
 	lines = appendNotice(lines, m.notice)
 	lines = append(lines, m.help)
 	text = joinLines(lines)
@@ -299,8 +300,8 @@ func (m model) emptyList() (text string) {
 }
 
 func (m model) renderForm() (text string) {
-	heading := titleStyle.Render(m.formTitle())
-	lines := []string{heading, "", m.first.View()}
+	path := titleStyle.Render(m.nav())
+	lines := []string{path, "", m.first.View()}
 	two := m.twoFields()
 	if two {
 		lines = append(lines, m.second.View())
@@ -312,22 +313,69 @@ func (m model) renderForm() (text string) {
 	return
 }
 
-func (m model) formTitle() (title string) {
+func (m model) nav() (path string) {
+	parts := []string{"gcf"}
 	switch m.place.screen {
+	case screenHome:
+	case screenRepos:
+		parts = append(parts, "repos")
 	case screenAddRepo:
-		title = "Add a repo"
-	case screenAddLabel:
-		title = "Add a label"
-	case screenAddBuilder:
-		title = "Add a builder"
-	case screenAddReviewer:
-		title = "Add a reviewer"
-	case screenAddFixer:
-		title = "Add a fixer"
-	case screenAddCheck:
-		title = "Add a check"
+		parts = append(parts, "repos", "add")
+	case screenApps:
+		parts = append(parts, "apps")
+	case screenAddApp:
+		parts = append(parts, "apps", "add")
 	default:
-		title = "Add an app"
+		repo := m.place.owner + "/" + m.place.name
+		parts = append(parts, "repos", repo)
+		tail := m.navTail()
+		parts = append(parts, tail...)
+	}
+	path = strings.Join(parts, ">")
+	return
+}
+
+func (m model) navTail() (parts []string) {
+	builder := m.place.builder
+	switch m.place.screen {
+	case screenLabels:
+		parts = []string{"labels"}
+	case screenAddLabel:
+		parts = []string{"labels", "add"}
+	case screenRepoApps:
+		parts = []string{"apps"}
+	case screenPickApp:
+		parts = []string{"apps", "add"}
+	case screenBuilders:
+		parts = []string{"builders"}
+	case screenAddBuilder:
+		parts = []string{"builders", "add"}
+	case screenPickStart:
+		parts = []string{"builders", "add", "starting"}
+	case screenPickAttention:
+		parts = []string{"builders", "add", "attention"}
+	case screenBuilder:
+		parts = []string{"builders", builder}
+	case screenReviewers:
+		parts = []string{"builders", builder, "reviewers"}
+	case screenAddReviewer:
+		parts = []string{"builders", builder, "reviewers", "add"}
+	case screenPickReviewerApp:
+		parts = []string{"builders", builder, "reviewers", "add", "app"}
+	case screenPickReviewerLabel:
+		parts = []string{"builders", builder, "reviewers", "add", "attention"}
+	case screenFixer:
+		parts = []string{"builders", builder, "fixer"}
+	case screenAddFixer:
+		parts = []string{"builders", builder, "fixer", "add"}
+	case screenPickFixerLabel:
+		parts = []string{"builders", builder, "fixer", "add", "attention"}
+	case screenChecks:
+		parts = []string{"builders", builder, "checks"}
+	case screenAddCheck:
+		parts = []string{"builders", builder, "checks", "add"}
+	default:
+		parts = []string{}
 	}
 	return
 }
@@ -778,7 +826,7 @@ func (m model) pickApp() (updated model) {
 func (m model) showHome() (updated model) {
 	updated = m
 	updated.place.screen = screenHome
-	items := []string{"Repos", "Apps"}
+	items := []string{"repos", "apps"}
 	values := []string{"repos", "apps"}
 	updated = updated.setList("Setup", items, values, 0, homeHelp)
 	return
@@ -806,7 +854,7 @@ func (m model) showSections() (updated model) {
 	updated = m
 	updated.place.screen = screenSections
 	heading := updated.place.owner + "/" + updated.place.name
-	items := []string{"Labels", "Apps", "Builders"}
+	items := []string{"labels", "apps", "builders"}
 	values := []string{"labels", "apps", "builders"}
 	updated = updated.setList(heading, items, values, 0, listHelp)
 	return
@@ -890,6 +938,7 @@ func (m model) setList(title string, items []string, values []string, index int,
 	delegate.SetHeight(1)
 	chooser := list.New(rows, delegate, 60, 16)
 	chooser.Title = title
+	chooser.SetShowTitle(false)
 	chooser.SetFilteringEnabled(false)
 	chooser.SetShowStatusBar(false)
 	chooser.SetShowHelp(false)

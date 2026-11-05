@@ -25,7 +25,7 @@ func (m model) showBuilders() (updated model) {
 func (m model) showBuilder() (updated model) {
 	updated = m
 	updated.place.screen = screenBuilder
-	items := []string{"Reviewers", "Fixer", "Checks"}
+	items := []string{"reviewers", "fixer", "checks"}
 	values := []string{"reviewers", "fixer", "checks"}
 	updated = updated.setList(updated.place.builder, items, values, 0, menuHelp)
 	return
