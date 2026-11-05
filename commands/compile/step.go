@@ -14,7 +14,7 @@ import (
 	"github.com/TigranOhanyan/gh-gcf/statedb/records"
 )
 
-const stepName = "compile"
+const stepName = "compile_coding"
 const roleBuilder = "builder"
 const roleReviewer = "reviewer"
 const roleFixer = "fixer"

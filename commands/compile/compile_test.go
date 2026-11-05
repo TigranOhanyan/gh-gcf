@@ -42,7 +42,7 @@ func Test_Compile_should_record_a_builder_and_its_members(t *testing.T) {
 	require.NoError(t, err)
 
 	subject := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
-	expectedSubject := fmt.Sprintf("✅ [%s] [compile] [octo/app]", id)
+	expectedSubject := fmt.Sprintf("✅ [%s] [compile_coding] [octo/app]", id)
 	assert.Equal(t, expectedSubject, strings.TrimSpace(string(subject)))
 	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
 	expectedBody := strings.Join([]string{

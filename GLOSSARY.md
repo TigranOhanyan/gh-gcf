@@ -63,7 +63,7 @@ What the factory has done and seen. The tick and the steps write it. The user do
 _Avoid_: database, history
 
 **Compilation**:
-The tick's first step. It updates State's members from Config.
+One flow's copy of its members from Config into State. The coding flow's compilation is separate from a later flow's.
 _Avoid_: migration, validation
 
 ## Agents

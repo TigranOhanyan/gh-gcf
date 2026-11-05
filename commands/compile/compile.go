@@ -16,8 +16,8 @@ func NewCompile() (cmd *cobra.Command) {
 	var tickID string
 
 	cmd = &cobra.Command{
-		Use:   "compile",
-		Short: "Record configured members in state",
+		Use:   "compile_coding",
+		Short: "Record the coding flow in state",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) (err error) {
 			dir, err := os.Getwd()

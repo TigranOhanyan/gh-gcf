@@ -38,7 +38,7 @@ func Test_NewRoot_should_list_tick(t *testing.T) {
 	assert.Contains(t, text, "Record a tick and print its id")
 }
 
-func Test_NewRoot_should_list_compile(t *testing.T) {
+func Test_NewRoot_should_list_compile_coding(t *testing.T) {
 	cmd := NewRoot()
 	var output bytes.Buffer
 	cmd.SetOut(&output)
@@ -49,8 +49,8 @@ func Test_NewRoot_should_list_compile(t *testing.T) {
 	require.NoError(t, err)
 
 	text := output.String()
-	assert.Contains(t, text, "compile")
-	assert.Contains(t, text, "Record configured members in state")
+	assert.Contains(t, text, "compile_coding")
+	assert.Contains(t, text, "Record the coding flow in state")
 }
 
 func Test_NewRoot_should_list_label(t *testing.T) {
