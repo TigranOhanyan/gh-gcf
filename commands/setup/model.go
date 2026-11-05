@@ -3,7 +3,6 @@ package setup
 import (
 	"context"
 	"strconv"
-	"strings"
 
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/textinput"
@@ -34,7 +33,10 @@ const noOtherLabel = "No other label."
 const menuHelp = "enter open   esc back   q quit"
 const pickHelp = "enter select   esc back   q quit"
 
-var titleStyle = lipgloss.NewStyle().Bold(true)
+const pathPastFg = "#E8EEF4"
+const pathPastBg = "#3C4F65"
+const pathNowFg = "#FFFFFF"
+const pathNowBg = "#2F6FED"
 
 type screen int
 
@@ -244,7 +246,7 @@ func (m model) render() (text string) {
 		text = m.renderForm()
 		return
 	}
-	path := titleStyle.Render(m.nav())
+	path := m.nav()
 	body := m.listBody()
 	lines := []string{path, "", body, ""}
 	lines = appendNotice(lines, m.notice)
@@ -300,7 +302,7 @@ func (m model) emptyList() (text string) {
 }
 
 func (m model) renderForm() (text string) {
-	path := titleStyle.Render(m.nav())
+	path := m.nav()
 	lines := []string{path, "", m.first.View()}
 	two := m.twoFields()
 	if two {
@@ -314,7 +316,13 @@ func (m model) renderForm() (text string) {
 }
 
 func (m model) nav() (path string) {
-	parts := []string{"gcf"}
+	parts := m.navParts()
+	path = paintPath(parts)
+	return
+}
+
+func (m model) navParts() (parts []string) {
+	parts = []string{"gcf"}
 	switch m.place.screen {
 	case screenHome:
 	case screenRepos:
@@ -331,7 +339,31 @@ func (m model) nav() (path string) {
 		tail := m.navTail()
 		parts = append(parts, tail...)
 	}
-	path = strings.Join(parts, ">")
+	return
+}
+
+func paintPath(parts []string) (path string) {
+	last := len(parts) - 1
+	for i, part := range parts {
+		chunk := part
+		end := i == last
+		seam := !end
+		if seam {
+			chunk = part + ">"
+		}
+		fg := pathPastFg
+		bg := pathPastBg
+		if end {
+			fg = pathNowFg
+			bg = pathNowBg
+		}
+		style := lipgloss.NewStyle().Foreground(lipgloss.Color(fg)).Background(lipgloss.Color(bg))
+		if end {
+			style = style.Bold(true)
+		}
+		painted := style.Render(chunk)
+		path = path + painted
+	}
 	return
 }
 
