@@ -1,4 +1,4 @@
-package builder_test
+package coding_test
 
 import (
 	"bytes"
@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/wiremock/go-wiremock"
 
-	"github.com/TigranOhanyan/gh-gcf/commands/builder"
+	"github.com/TigranOhanyan/gh-gcf/commands/coding"
 	"github.com/TigranOhanyan/gh-gcf/commands/compile"
 	"github.com/TigranOhanyan/gh-gcf/commands/tick"
 	"github.com/TigranOhanyan/gh-gcf/configdb"
@@ -168,7 +168,7 @@ func Test_Builder_should_reject_a_failed_create(t *testing.T) {
 }
 
 func Test_Builder_should_require_a_tick_id(t *testing.T) {
-	cmd := builder.NewBuilder()
+	cmd := coding.NewCoding()
 	var output bytes.Buffer
 	cmd.SetOut(&output)
 	cmd.SetErr(&output)
@@ -270,7 +270,7 @@ func runCompile(t *testing.T, repoDir string, id string) (err error) {
 func runBuilder(t *testing.T, repoDir string, id string) (err error) {
 	t.Helper()
 	t.Setenv("GH_TOKEN", token)
-	cmd := builder.NewBuilder()
+	cmd := coding.NewCoding()
 	var output bytes.Buffer
 	cmd.SetOut(&output)
 	cmd.SetErr(&output)

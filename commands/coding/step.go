@@ -1,4 +1,4 @@
-package builder
+package coding
 
 import (
 	"context"
@@ -18,24 +18,24 @@ import (
 	"github.com/TigranOhanyan/gh-gcf/statedb/records"
 )
 
-const stepName = "builder"
+const stepName = "coding"
 const roleBuilder = "builder"
 const eventStarting = "starting"
 const eventAck = "ack"
 const eventRejected = "rejected"
 
-type builderStep struct {
+type codingStep struct {
 	GitHub *github.Client
 	app    commands.FactoryApp
 	cursor cursorClient
 }
 
-func (builderStep) Name() (name string) {
+func (codingStep) Name() (name string) {
 	name = stepName
 	return
 }
 
-func (step builderStep) Apply(ctx context.Context, repo commands.Repo, _ records.Tick, stepRow records.Step) (message string, err error) {
+func (step codingStep) Apply(ctx context.Context, repo commands.Repo, _ records.Tick, stepRow records.Step) (message string, err error) {
 	builders, err := repo.State.Queries.ListBuilderMembers(ctx)
 	if err != nil {
 		log.Error("list builders", "owner", repo.Owner, "name", repo.Name, "err", err)
@@ -66,7 +66,7 @@ func (step builderStep) Apply(ctx context.Context, repo commands.Repo, _ records
 	return
 }
 
-func (step builderStep) startMember(ctx context.Context, repo commands.Repo, stepID string, client *github.Client, member records.ListBuilderMembersRow) (lines []string, err error) {
+func (step codingStep) startMember(ctx context.Context, repo commands.Repo, stepID string, client *github.Client, member records.ListBuilderMembersRow) (lines []string, err error) {
 	sum, err := commands.InstructionFingerprint(repo.Dir, member.Name)
 	if err != nil {
 		return
@@ -107,7 +107,7 @@ func (step builderStep) startMember(ctx context.Context, repo commands.Repo, ste
 	return
 }
 
-func (step builderStep) startIssue(ctx context.Context, repo commands.Repo, stepID string, client *github.Client, member records.ListBuilderMembersRow, instruction string, issue *github.Issue) (line string, err error) {
+func (step codingStep) startIssue(ctx context.Context, repo commands.Repo, stepID string, client *github.Client, member records.ListBuilderMembersRow, instruction string, issue *github.Issue) (line string, err error) {
 	number := issue.GetNumber()
 	_, err = repo.State.Queries.GetCodingWorkByIssue(ctx, int64(number))
 	absent := errors.Is(err, sql.ErrNoRows)
@@ -182,7 +182,7 @@ func (step builderStep) startIssue(ctx context.Context, repo commands.Repo, step
 func claim(ctx context.Context, repo commands.Repo, stepID string, member records.ListBuilderMembersRow, issue *github.Issue, agentID string, workID string) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
-		log.Error("begin builder", "err", err)
+		log.Error("begin coding", "err", err)
 		return
 	}
 	queries := repo.State.Queries.WithTx(tx)
@@ -242,7 +242,7 @@ func claim(ctx context.Context, repo commands.Repo, stepID string, member record
 func ack(ctx context.Context, repo commands.Repo, stepID string, agentID string, runID string) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
-		log.Error("begin builder", "err", err)
+		log.Error("begin coding", "err", err)
 		return
 	}
 	queries := repo.State.Queries.WithTx(tx)
@@ -276,7 +276,7 @@ func ack(ctx context.Context, repo commands.Repo, stepID string, agentID string,
 func reject(ctx context.Context, repo commands.Repo, stepID string, agentID string, reason string) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
-		log.Error("begin builder", "err", err)
+		log.Error("begin coding", "err", err)
 		return
 	}
 	queries := repo.State.Queries.WithTx(tx)

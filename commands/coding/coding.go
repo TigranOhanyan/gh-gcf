@@ -1,4 +1,4 @@
-package builder
+package coding
 
 import (
 	"os"
@@ -11,14 +11,14 @@ import (
 	"github.com/TigranOhanyan/gh-gcf/commands/executor"
 )
 
-func NewBuilder() (cmd *cobra.Command) {
+func NewCoding() (cmd *cobra.Command) {
 	var configBranch string
 	var stateBranch string
 	var tickID string
 
 	cmd = &cobra.Command{
-		Use:   "builder",
-		Short: "Start a builder for each open issue with its starting label",
+		Use:   "coding",
+		Short: "Start the coding flow for an open issue with its starting label",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) (err error) {
 			dir, err := os.Getwd()
@@ -53,7 +53,7 @@ func NewBuilder() (cmd *cobra.Command) {
 				StateBranch:  stateBranch,
 				TickID:       tickID,
 			}
-			step := builderStep{GitHub: client, app: app, cursor: cursor}
+			step := codingStep{GitHub: client, app: app, cursor: cursor}
 			err = exec.Execute(cmd.Context(), step)
 			return
 		},

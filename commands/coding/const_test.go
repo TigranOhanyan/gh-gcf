@@ -1,4 +1,4 @@
-package builder_test
+package coding_test
 
 import (
 	"os"

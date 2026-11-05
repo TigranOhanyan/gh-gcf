@@ -3,7 +3,7 @@
 #
 # GH_GCF_VERSION is the pin passed to `gh extension install --pin`.
 # Bind replaces __GCF_VERSION__ with the release tag of the binary that runs it.
-# The tick checks out main and state, sets the Actions bot as the git author, installs gh-gcf, records a tick, runs app, runs label, compiles the coding flow, starts builders, and pushes state.
+# The tick checks out main and state, sets the Actions bot as the git author, installs gh-gcf, records a tick, runs app, runs label, compiles the coding flow, starts it, and pushes state.
 # The runner has no git author. The bot is github-actions[bot], the account GITHUB_TOKEN pushes as.
 # CURSOR_API_KEY is available for later steps. It is never printed.
 # FACTORY_GITHUB_APP_ID and FACTORY_GITHUB_APP_PRIVATE_KEY let the label step mint an installation token.
@@ -62,6 +62,6 @@ jobs:
           gh gcf app --tick "${tick_id}"
           gh gcf label --tick "${tick_id}"
           gh gcf compile_coding --tick "${tick_id}"
-          gh gcf builder --tick "${tick_id}"
+          gh gcf coding --tick "${tick_id}"
 
           git push origin state
