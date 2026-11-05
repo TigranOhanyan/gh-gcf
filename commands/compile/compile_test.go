@@ -22,6 +22,7 @@ import (
 const owner = "octo"
 const repoName = "app"
 const appID int64 = 123
+const emptyInstructionHash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
 func Test_Compile_should_record_a_builder_and_its_members(t *testing.T) {
 	spec := builderSpec{
@@ -60,6 +61,7 @@ func Test_Compile_should_record_a_builder_and_its_members(t *testing.T) {
 	assert.Equal(t, "builder", builders[0].Role)
 	assert.Equal(t, "attention", builders[0].AttentionLabel)
 	assert.Equal(t, "todo", builders[0].StartingLabel)
+	assert.Equal(t, emptyInstructionHash, builders[0].InstructionSha256)
 
 	reviewers := listReviewers(t, db)
 	require.Len(t, reviewers, 1)
@@ -157,6 +159,57 @@ func Test_Compile_should_keep_a_member_config_no_longer_has(t *testing.T) {
 	assert.Equal(t, "attention", builders[0].AttentionLabel)
 }
 
+func Test_Compile_should_update_a_changed_instruction(t *testing.T) {
+	spec := builderSpec{
+		name:      "features",
+		starting:  "todo",
+		attention: "attention",
+	}
+	repoDir := setupFactory(t, spec)
+	id := runTick(t, repoDir)
+	err := runCompile(t, repoDir, id)
+	require.NoError(t, err)
+	writeInstruction(t, repoDir, "features", "Build it.")
+	rel := filepath.Join("repos", owner, repoName, "members", "features.md")
+	_ = mustGit(t, repoDir, "add", rel)
+	_ = mustGit(t, repoDir, "commit", "-m", "instruction")
+
+	err = runCompile(t, repoDir, id)
+	require.NoError(t, err)
+
+	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
+	assert.Equal(t, "✅ [features] updated", strings.TrimSpace(string(body)))
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	builders := listBuilders(t, db)
+	require.Len(t, builders, 1)
+	assert.NotEqual(t, emptyInstructionHash, builders[0].InstructionSha256)
+}
+
+func Test_Compile_should_fail_when_the_instruction_is_missing(t *testing.T) {
+	spec := builderSpec{
+		name:      "features",
+		starting:  "todo",
+		attention: "attention",
+	}
+	repoDir := setupFactory(t, spec)
+	id := runTick(t, repoDir)
+	rel := filepath.Join("repos", owner, repoName, "members", "features.md")
+	err := os.Remove(filepath.Join(repoDir, rel))
+	require.NoError(t, err)
+	_ = mustGit(t, repoDir, "add", rel)
+	_ = mustGit(t, repoDir, "commit", "-m", "remove instruction")
+
+	err = runCompile(t, repoDir, id)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "missing")
+
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	builders := listBuilders(t, db)
+	assert.Empty(t, builders)
+}
+
 func Test_Compile_should_require_a_tick_id(t *testing.T) {
 	cmd := compile.NewCompile()
 	var output bytes.Buffer
@@ -213,8 +266,16 @@ func setupFactory(t *testing.T, spec builderSpec) (repoDir string) {
 	seedConfig(t, configDB, spec)
 	err = configDB.Close()
 	require.NoError(t, err)
+	writeInstruction(t, repoDir, spec.name, "")
+	if spec.hasReview {
+		writeInstruction(t, repoDir, spec.reviewer.name, "")
+	}
+	if spec.hasFixer {
+		writeInstruction(t, repoDir, spec.fixer.name, "")
+	}
 	configRel := filepath.Join("repos", owner, repoName, "config.db")
-	_ = mustGit(t, repoDir, "add", configRel)
+	membersRel := filepath.Join("repos", owner, repoName, "members")
+	_ = mustGit(t, repoDir, "add", configRel, membersRel)
 	_ = mustGit(t, repoDir, "commit", "-m", "config")
 
 	_ = mustGit(t, repoDir, "checkout", "-b", "state")
@@ -312,6 +373,15 @@ func seedConfig(t *testing.T, db *configdb.DB, spec builderSpec) {
 		err = db.Queries.CreateGithubCheck(ctx, check)
 		require.NoError(t, err)
 	}
+}
+
+func writeInstruction(t *testing.T, repoDir string, name string, text string) {
+	t.Helper()
+	path := filepath.Join(repoDir, "repos", owner, repoName, "members", name+".md")
+	err := os.MkdirAll(filepath.Dir(path), 0755)
+	require.NoError(t, err)
+	err = os.WriteFile(path, []byte(text), 0644)
+	require.NoError(t, err)
 }
 
 func setAttention(t *testing.T, repoDir string, name string, attention string) {

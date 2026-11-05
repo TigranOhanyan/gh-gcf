@@ -11,7 +11,7 @@ CREATE TABLE builder_member (
     name           TEXT PRIMARY KEY,
     role           TEXT NOT NULL DEFAULT 'builder' CHECK (role = 'builder'),
     starting_label TEXT NOT NULL REFERENCES label (name),
-    FOREIGN KEY (name, role) REFERENCES member (name, role)
+    FOREIGN KEY (name) REFERENCES member (name)
 );
 
 -- One builder per starting label.
@@ -22,7 +22,7 @@ CREATE TABLE reviewer_member (
     role         TEXT NOT NULL DEFAULT 'reviewer' CHECK (role = 'reviewer'),
     builder_name TEXT NOT NULL REFERENCES builder_member (name),
     github_app   INTEGER NOT NULL REFERENCES github_app (app_id),
-    FOREIGN KEY (name, role) REFERENCES member (name, role)
+    FOREIGN KEY (name) REFERENCES member (name)
 );
 
 -- Two reviewers do not share an App.
@@ -32,7 +32,7 @@ CREATE TABLE fixer_member (
     name         TEXT PRIMARY KEY,
     role         TEXT NOT NULL DEFAULT 'fixer' CHECK (role = 'fixer'),
     builder_name TEXT NOT NULL UNIQUE REFERENCES builder_member (name),
-    FOREIGN KEY (name, role) REFERENCES member (name, role)
+    FOREIGN KEY (name) REFERENCES member (name)
 );
 
 -- The check run name GitHub shows on the pull request head.

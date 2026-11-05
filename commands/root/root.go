@@ -5,6 +5,7 @@ import (
 
 	"github.com/TigranOhanyan/gh-gcf/commands/app"
 	"github.com/TigranOhanyan/gh-gcf/commands/bind"
+	"github.com/TigranOhanyan/gh-gcf/commands/builder"
 	"github.com/TigranOhanyan/gh-gcf/commands/compile"
 	"github.com/TigranOhanyan/gh-gcf/commands/label"
 	"github.com/TigranOhanyan/gh-gcf/commands/setup"
@@ -28,5 +29,7 @@ func NewRoot() (cmd *cobra.Command) {
 	cmd.AddCommand(appCmd)
 	setupCmd := setup.NewSetup()
 	cmd.AddCommand(setupCmd)
+	builderCmd := builder.NewBuilder()
+	cmd.AddCommand(builderCmd)
 	return
 }

@@ -16,6 +16,7 @@ require (
 	github.com/charmbracelet/fang v1.0.0
 	github.com/charmbracelet/x/vttest v0.0.0-20260323091123-df7b1bcffcca
 	github.com/google/go-github/v93 v93.0.0
+	github.com/google/uuid v1.6.0
 	github.com/ncruces/go-sqlite3 v0.32.0
 	github.com/oklog/ulid/v2 v2.1.2
 	github.com/pressly/goose/v3 v3.29.0
@@ -59,7 +60,6 @@ require (
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/google/cel-go v0.28.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect

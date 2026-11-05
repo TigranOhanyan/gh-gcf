@@ -63,11 +63,7 @@ func Test_Label_should_create_a_missing_label(t *testing.T) {
 	assert.WithinRange(t, createdAt, startOfTest, startOfCheck)
 
 	events := eventsAtTip(t, repoDir)
-	require.Len(t, events, 2)
-	assert.Equal(t, "starting", events[0].Kind)
-	assert.Equal(t, "[octo/app] [todo] creating label", events[0].Message)
-	assert.Equal(t, "completed", events[1].Kind)
-	assert.Equal(t, "[octo/app] [todo] label is created", events[1].Message)
+	assert.Empty(t, events)
 }
 
 func Test_Label_should_record_a_label_that_already_exists(t *testing.T) {
@@ -147,12 +143,7 @@ func Test_Label_should_keep_the_row_when_create_fails(t *testing.T) {
 	assert.Equal(t, "ededed", rows[0].Color)
 	assert.False(t, rows[0].CreatedAt.Valid)
 	events := eventsAtTip(t, repoDir)
-	require.Len(t, events, 2)
-	assert.Equal(t, "starting", events[0].Kind)
-	assert.Equal(t, "[octo/app] [todo] creating label", events[0].Message)
-	assert.Equal(t, "failed", events[1].Kind)
-	assert.Contains(t, events[1].Message, "Validation Failed")
-	assert.NotContains(t, events[1].Message, "[todo]")
+	assert.Empty(t, events)
 }
 
 func Test_Label_should_set_created_at_when_a_failed_label_is_created_later(t *testing.T) {
@@ -180,9 +171,7 @@ func Test_Label_should_set_created_at_when_a_failed_label_is_created_later(t *te
 	require.NoError(t, err)
 	assert.WithinRange(t, createdAt, startOfTest, startOfCheck)
 	events := eventsAtTip(t, repoDir)
-	require.Len(t, events, 4)
-	assert.Equal(t, "completed", events[3].Kind)
-	assert.Equal(t, "[octo/app] [todo] label is created", events[3].Message)
+	assert.Empty(t, events)
 }
 
 func Test_Label_should_stop_after_the_first_create_error(t *testing.T) {
@@ -227,10 +216,7 @@ func Test_Label_should_stop_when_the_label_lookup_fails(t *testing.T) {
 	rows := labelsAtTip(t, repoDir)
 	assert.Empty(t, rows)
 	events := eventsAtTip(t, repoDir)
-	require.Len(t, events, 1)
-	assert.Equal(t, "failed", events[0].Kind)
-	assert.Contains(t, events[0].Message, "Bad credentials")
-	assert.NotContains(t, events[0].Message, "[todo]")
+	assert.Empty(t, events)
 	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
 	assert.Contains(t, string(body), "❌ [todo]")
 	assert.Contains(t, string(body), "Bad credentials")
@@ -311,9 +297,7 @@ func Test_Label_should_create_a_label_with_an_installation_token(t *testing.T) {
 	require.NoError(t, err)
 	assert.WithinRange(t, createdAt, startOfTest, startOfCheck)
 	events := eventsAtTip(t, repoDir)
-	require.Len(t, events, 2)
-	assert.Equal(t, "starting", events[0].Kind)
-	assert.Equal(t, "completed", events[1].Kind)
+	assert.Empty(t, events)
 }
 
 func Test_Label_should_stop_when_the_token_exchange_fails(t *testing.T) {

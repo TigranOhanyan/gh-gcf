@@ -1,11 +1,11 @@
 -- name: GetMember :one
-SELECT name, role, attention_label FROM member WHERE name = ?;
+SELECT name, role, attention_label, instruction_sha256 FROM member WHERE name = ?;
 
 -- name: CreateMember :exec
-INSERT INTO member (name, role, attention_label) VALUES (?, ?, ?);
+INSERT INTO member (name, role, attention_label, instruction_sha256) VALUES (?, ?, ?, ?);
 
--- name: UpdateMemberAttention :exec
-UPDATE member SET attention_label = ? WHERE name = ?;
+-- name: UpdateMember :exec
+UPDATE member SET attention_label = ?, instruction_sha256 = ? WHERE name = ?;
 
 -- name: GetBuilderMember :one
 SELECT name, role, starting_label FROM builder_member WHERE name = ?;
@@ -41,19 +41,19 @@ SELECT builder_name, name FROM github_check WHERE builder_name = ? AND name = ?;
 INSERT INTO github_check (builder_name, name) VALUES (?, ?);
 
 -- name: ListBuilderMembers :many
-SELECT m.name, m.role, m.attention_label, b.starting_label
+SELECT m.name, m.role, m.attention_label, m.instruction_sha256, b.starting_label
 FROM builder_member b
 JOIN member m ON m.name = b.name
 ORDER BY m.name;
 
 -- name: ListReviewerMembers :many
-SELECT m.name, m.role, m.attention_label, r.builder_name, r.github_app
+SELECT m.name, m.role, m.attention_label, m.instruction_sha256, r.builder_name, r.github_app
 FROM reviewer_member r
 JOIN member m ON m.name = r.name
 ORDER BY m.name;
 
 -- name: ListFixerMembers :many
-SELECT m.name, m.role, m.attention_label, f.builder_name
+SELECT m.name, m.role, m.attention_label, m.instruction_sha256, f.builder_name
 FROM fixer_member f
 JOIN member m ON m.name = f.name
 ORDER BY m.name;

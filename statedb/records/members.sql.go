@@ -52,17 +52,23 @@ func (q *Queries) CreateGithubCheck(ctx context.Context, arg CreateGithubCheckPa
 }
 
 const createMember = `-- name: CreateMember :exec
-INSERT INTO member (name, role, attention_label) VALUES (?, ?, ?)
+INSERT INTO member (name, role, attention_label, instruction_sha256) VALUES (?, ?, ?, ?)
 `
 
 type CreateMemberParams struct {
-	Name           string `json:"name"`
-	Role           string `json:"role"`
-	AttentionLabel string `json:"attention_label"`
+	Name              string `json:"name"`
+	Role              string `json:"role"`
+	AttentionLabel    string `json:"attention_label"`
+	InstructionSha256 string `json:"instruction_sha256"`
 }
 
 func (q *Queries) CreateMember(ctx context.Context, arg CreateMemberParams) error {
-	_, err := q.db.ExecContext(ctx, createMember, arg.Name, arg.Role, arg.AttentionLabel)
+	_, err := q.db.ExecContext(ctx, createMember,
+		arg.Name,
+		arg.Role,
+		arg.AttentionLabel,
+		arg.InstructionSha256,
+	)
 	return err
 }
 
@@ -120,13 +126,18 @@ func (q *Queries) GetGithubCheck(ctx context.Context, arg GetGithubCheckParams) 
 }
 
 const getMember = `-- name: GetMember :one
-SELECT name, role, attention_label FROM member WHERE name = ?
+SELECT name, role, attention_label, instruction_sha256 FROM member WHERE name = ?
 `
 
 func (q *Queries) GetMember(ctx context.Context, name string) (Member, error) {
 	row := q.db.QueryRowContext(ctx, getMember, name)
 	var i Member
-	err := row.Scan(&i.Name, &i.Role, &i.AttentionLabel)
+	err := row.Scan(
+		&i.Name,
+		&i.Role,
+		&i.AttentionLabel,
+		&i.InstructionSha256,
+	)
 	return i, err
 }
 
@@ -147,17 +158,18 @@ func (q *Queries) GetReviewerMember(ctx context.Context, name string) (ReviewerM
 }
 
 const listBuilderMembers = `-- name: ListBuilderMembers :many
-SELECT m.name, m.role, m.attention_label, b.starting_label
+SELECT m.name, m.role, m.attention_label, m.instruction_sha256, b.starting_label
 FROM builder_member b
 JOIN member m ON m.name = b.name
 ORDER BY m.name
 `
 
 type ListBuilderMembersRow struct {
-	Name           string `json:"name"`
-	Role           string `json:"role"`
-	AttentionLabel string `json:"attention_label"`
-	StartingLabel  string `json:"starting_label"`
+	Name              string `json:"name"`
+	Role              string `json:"role"`
+	AttentionLabel    string `json:"attention_label"`
+	InstructionSha256 string `json:"instruction_sha256"`
+	StartingLabel     string `json:"starting_label"`
 }
 
 func (q *Queries) ListBuilderMembers(ctx context.Context) ([]ListBuilderMembersRow, error) {
@@ -173,6 +185,7 @@ func (q *Queries) ListBuilderMembers(ctx context.Context) ([]ListBuilderMembersR
 			&i.Name,
 			&i.Role,
 			&i.AttentionLabel,
+			&i.InstructionSha256,
 			&i.StartingLabel,
 		); err != nil {
 			return nil, err
@@ -189,17 +202,18 @@ func (q *Queries) ListBuilderMembers(ctx context.Context) ([]ListBuilderMembersR
 }
 
 const listFixerMembers = `-- name: ListFixerMembers :many
-SELECT m.name, m.role, m.attention_label, f.builder_name
+SELECT m.name, m.role, m.attention_label, m.instruction_sha256, f.builder_name
 FROM fixer_member f
 JOIN member m ON m.name = f.name
 ORDER BY m.name
 `
 
 type ListFixerMembersRow struct {
-	Name           string `json:"name"`
-	Role           string `json:"role"`
-	AttentionLabel string `json:"attention_label"`
-	BuilderName    string `json:"builder_name"`
+	Name              string `json:"name"`
+	Role              string `json:"role"`
+	AttentionLabel    string `json:"attention_label"`
+	InstructionSha256 string `json:"instruction_sha256"`
+	BuilderName       string `json:"builder_name"`
 }
 
 func (q *Queries) ListFixerMembers(ctx context.Context) ([]ListFixerMembersRow, error) {
@@ -215,6 +229,7 @@ func (q *Queries) ListFixerMembers(ctx context.Context) ([]ListFixerMembersRow, 
 			&i.Name,
 			&i.Role,
 			&i.AttentionLabel,
+			&i.InstructionSha256,
 			&i.BuilderName,
 		); err != nil {
 			return nil, err
@@ -258,18 +273,19 @@ func (q *Queries) ListGithubChecks(ctx context.Context) ([]GithubCheck, error) {
 }
 
 const listReviewerMembers = `-- name: ListReviewerMembers :many
-SELECT m.name, m.role, m.attention_label, r.builder_name, r.github_app
+SELECT m.name, m.role, m.attention_label, m.instruction_sha256, r.builder_name, r.github_app
 FROM reviewer_member r
 JOIN member m ON m.name = r.name
 ORDER BY m.name
 `
 
 type ListReviewerMembersRow struct {
-	Name           string `json:"name"`
-	Role           string `json:"role"`
-	AttentionLabel string `json:"attention_label"`
-	BuilderName    string `json:"builder_name"`
-	GithubApp      int64  `json:"github_app"`
+	Name              string `json:"name"`
+	Role              string `json:"role"`
+	AttentionLabel    string `json:"attention_label"`
+	InstructionSha256 string `json:"instruction_sha256"`
+	BuilderName       string `json:"builder_name"`
+	GithubApp         int64  `json:"github_app"`
 }
 
 func (q *Queries) ListReviewerMembers(ctx context.Context) ([]ListReviewerMembersRow, error) {
@@ -285,6 +301,7 @@ func (q *Queries) ListReviewerMembers(ctx context.Context) ([]ListReviewerMember
 			&i.Name,
 			&i.Role,
 			&i.AttentionLabel,
+			&i.InstructionSha256,
 			&i.BuilderName,
 			&i.GithubApp,
 		); err != nil {
@@ -329,17 +346,18 @@ func (q *Queries) UpdateFixerBuilder(ctx context.Context, arg UpdateFixerBuilder
 	return err
 }
 
-const updateMemberAttention = `-- name: UpdateMemberAttention :exec
-UPDATE member SET attention_label = ? WHERE name = ?
+const updateMember = `-- name: UpdateMember :exec
+UPDATE member SET attention_label = ?, instruction_sha256 = ? WHERE name = ?
 `
 
-type UpdateMemberAttentionParams struct {
-	AttentionLabel string `json:"attention_label"`
-	Name           string `json:"name"`
+type UpdateMemberParams struct {
+	AttentionLabel    string `json:"attention_label"`
+	InstructionSha256 string `json:"instruction_sha256"`
+	Name              string `json:"name"`
 }
 
-func (q *Queries) UpdateMemberAttention(ctx context.Context, arg UpdateMemberAttentionParams) error {
-	_, err := q.db.ExecContext(ctx, updateMemberAttention, arg.AttentionLabel, arg.Name)
+func (q *Queries) UpdateMember(ctx context.Context, arg UpdateMemberParams) error {
+	_, err := q.db.ExecContext(ctx, updateMember, arg.AttentionLabel, arg.InstructionSha256, arg.Name)
 	return err
 }
 

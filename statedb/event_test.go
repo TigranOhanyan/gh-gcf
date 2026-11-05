@@ -13,6 +13,8 @@ import (
 
 const stepID = "01ARZ3NDEKTSV4RRFFQ69G5FB0"
 const eventID = "01ARZ3NDEKTSV4RRFFQ69G5FB1"
+const agentID = "bc-018f6b2c-7c3a-7b2e-8a1d-5c3e9f0a1b2d"
+const workID = "01ARZ3NDEKTSV4RRFFQ69G5FB2"
 
 func Test_CreateEvent_should_store_the_event(t *testing.T) {
 	ctx := t.Context()
@@ -32,11 +34,13 @@ func Test_CreateEvent_should_store_the_event(t *testing.T) {
 	}
 	err = db.Queries.CreateStep(ctx, step)
 	require.NoError(t, err)
+	seedAgent(t, db)
 
 	startOfTest := time.Now().Add(-time.Second)
 	event := records.CreateEventParams{
 		ID:      eventID,
 		StepID:  stepID,
+		AgentID: agentID,
 		Kind:    "starting",
 		Message: "claimed",
 	}
@@ -75,10 +79,12 @@ func Test_CreateEvent_should_store_an_empty_message(t *testing.T) {
 	}
 	err = db.Queries.CreateStep(ctx, step)
 	require.NoError(t, err)
+	seedAgent(t, db)
 
 	event := records.CreateEventParams{
 		ID:      eventID,
 		StepID:  stepID,
+		AgentID: agentID,
 		Kind:    "ack",
 		Message: "",
 	}
@@ -109,10 +115,12 @@ func Test_CreateEvent_should_refuse_an_id_that_is_not_26_characters(t *testing.T
 	}
 	err = db.Queries.CreateStep(ctx, step)
 	require.NoError(t, err)
+	seedAgent(t, db)
 
 	event := records.CreateEventParams{
 		ID:      "short",
 		StepID:  stepID,
+		AgentID: agentID,
 		Kind:    "starting",
 		Message: "claimed",
 	}
@@ -142,10 +150,12 @@ func Test_CreateEvent_should_refuse_an_unknown_kind(t *testing.T) {
 	}
 	err = db.Queries.CreateStep(ctx, step)
 	require.NoError(t, err)
+	seedAgent(t, db)
 
 	event := records.CreateEventParams{
 		ID:      eventID,
 		StepID:  stepID,
+		AgentID: agentID,
 		Kind:    "running",
 		Message: "still going",
 	}
@@ -169,6 +179,7 @@ func Test_CreateEvent_should_refuse_a_missing_step(t *testing.T) {
 	event := records.CreateEventParams{
 		ID:      eventID,
 		StepID:  stepID,
+		AgentID: agentID,
 		Kind:    "starting",
 		Message: "claimed",
 	}
@@ -178,4 +189,46 @@ func Test_CreateEvent_should_refuse_a_missing_step(t *testing.T) {
 	rows, err := db.Queries.GetEvents(ctx)
 	require.NoError(t, err)
 	assert.Empty(t, rows)
+}
+
+func seedAgent(t *testing.T, db *DB) {
+	t.Helper()
+	ctx := t.Context()
+	member := records.CreateMemberParams{
+		Name:              "features",
+		Role:              "builder",
+		AttentionLabel:    "attention",
+		InstructionSha256: "abc",
+	}
+	err := db.Queries.CreateMember(ctx, member)
+	require.NoError(t, err)
+	builder := records.CreateBuilderMemberParams{
+		Name:          "features",
+		StartingLabel: "todo",
+	}
+	err = db.Queries.CreateBuilderMember(ctx, builder)
+	require.NoError(t, err)
+	issue := records.CreateIssueParams{
+		Number: 7,
+		Url:    "https://github.com/octo/app/issues/7",
+	}
+	err = db.Queries.CreateIssue(ctx, issue)
+	require.NoError(t, err)
+	work := records.CreateCodingWorkParams{
+		ID:          workID,
+		IssueNumber: 7,
+		BuilderName: "features",
+	}
+	err = db.Queries.CreateCodingWork(ctx, work)
+	require.NoError(t, err)
+	agent := records.CreateAgentParams{
+		ID:         agentID,
+		Role:       "builder",
+		WorkID:     workID,
+		MemberName: "features",
+	}
+	err = db.Queries.CreateAgent(ctx, agent)
+	require.NoError(t, err)
+	err = db.Queries.CreateBuilderAgent(ctx, agentID)
+	require.NoError(t, err)
 }

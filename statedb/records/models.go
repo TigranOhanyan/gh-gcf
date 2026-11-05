@@ -8,18 +8,45 @@ import (
 	"database/sql"
 )
 
+type Agent struct {
+	ID          string         `json:"id"`
+	Role        string         `json:"role"`
+	WorkID      string         `json:"work_id"`
+	MemberName  string         `json:"member_name"`
+	CursorRunID sql.NullString `json:"cursor_run_id"`
+}
+
+type BuilderAgent struct {
+	ID   string `json:"id"`
+	Role string `json:"role"`
+}
+
 type BuilderMember struct {
 	Name          string `json:"name"`
 	Role          string `json:"role"`
 	StartingLabel string `json:"starting_label"`
 }
 
+type CodingWork struct {
+	ID                string         `json:"id"`
+	IssueNumber       int64          `json:"issue_number"`
+	BuilderName       string         `json:"builder_name"`
+	PullRequestNumber sql.NullInt64  `json:"pull_request_number"`
+	HeadSha           sql.NullString `json:"head_sha"`
+}
+
 type Event struct {
 	ID        string `json:"id"`
 	StepID    string `json:"step_id"`
+	AgentID   string `json:"agent_id"`
 	Kind      string `json:"kind"`
 	Message   string `json:"message"`
 	CreatedAt string `json:"created_at"`
+}
+
+type FixerAgent struct {
+	ID   string `json:"id"`
+	Role string `json:"role"`
 }
 
 type FixerMember struct {
@@ -39,6 +66,11 @@ type GithubCheck struct {
 	Name        string `json:"name"`
 }
 
+type Issue struct {
+	Number int64  `json:"number"`
+	Url    string `json:"url"`
+}
+
 type Label struct {
 	Name         string         `json:"name"`
 	Color        string         `json:"color"`
@@ -47,9 +79,16 @@ type Label struct {
 }
 
 type Member struct {
-	Name           string `json:"name"`
-	Role           string `json:"role"`
-	AttentionLabel string `json:"attention_label"`
+	Name              string `json:"name"`
+	Role              string `json:"role"`
+	AttentionLabel    string `json:"attention_label"`
+	InstructionSha256 string `json:"instruction_sha256"`
+}
+
+type ReviewerAgent struct {
+	ID      string         `json:"id"`
+	Role    string         `json:"role"`
+	Verdict sql.NullString `json:"verdict"`
 }
 
 type ReviewerMember struct {

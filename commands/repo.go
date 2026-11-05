@@ -16,9 +16,11 @@ import (
 
 // Repo is one app repo with config and state open.
 // Owner and Name are the repos/<owner>/<name> folder.
+// Dir is that folder in the config checkout.
 type Repo struct {
 	Owner  string
 	Name   string
+	Dir    string
 	Config *configdb.DB
 	State  *statedb.DB
 }
@@ -234,6 +236,7 @@ func openRepo(ctx context.Context, configDir string, stateDir string, folder rep
 	repo = Repo{
 		Owner:  folder.owner,
 		Name:   folder.name,
+		Dir:    filepath.Join(configDir, folder.rel),
 		Config: configDB,
 		State:  stateDB,
 	}

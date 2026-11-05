@@ -61,7 +61,11 @@ func (step compileStep) Apply(ctx context.Context, repo commands.Repo, _ records
 }
 
 func copyBuilder(ctx context.Context, repo commands.Repo, queries *records.Queries, builder configrecords.ListBuilderMembersRow) (lines []string, err error) {
-	memberLine, err := saveMember(ctx, queries, builder.Name, roleBuilder, builder.AttentionLabel)
+	sum, err := commands.InstructionFingerprint(repo.Dir, builder.Name)
+	if err != nil {
+		return
+	}
+	memberLine, err := saveMember(ctx, queries, builder.Name, roleBuilder, builder.AttentionLabel, sum)
 	if err != nil {
 		return
 	}
@@ -79,7 +83,7 @@ func copyBuilder(ctx context.Context, repo commands.Repo, queries *records.Queri
 	}
 	for _, reviewer := range reviewers {
 		var added []string
-		added, err = copyReviewer(ctx, queries, builder.Name, reviewer)
+		added, err = copyReviewer(ctx, repo.Dir, queries, builder.Name, reviewer)
 		if err != nil {
 			return
 		}
@@ -93,7 +97,7 @@ func copyBuilder(ctx context.Context, repo commands.Repo, queries *records.Queri
 	}
 	for _, fixer := range fixers {
 		var added []string
-		added, err = copyFixer(ctx, queries, builder.Name, fixer)
+		added, err = copyFixer(ctx, repo.Dir, queries, builder.Name, fixer)
 		if err != nil {
 			return
 		}
@@ -116,8 +120,12 @@ func copyBuilder(ctx context.Context, repo commands.Repo, queries *records.Queri
 	return
 }
 
-func copyReviewer(ctx context.Context, queries *records.Queries, builderName string, reviewer configrecords.ListReviewerMembersRow) (lines []string, err error) {
-	memberLine, err := saveMember(ctx, queries, reviewer.Name, roleReviewer, reviewer.AttentionLabel)
+func copyReviewer(ctx context.Context, dir string, queries *records.Queries, builderName string, reviewer configrecords.ListReviewerMembersRow) (lines []string, err error) {
+	sum, err := commands.InstructionFingerprint(dir, reviewer.Name)
+	if err != nil {
+		return
+	}
+	memberLine, err := saveMember(ctx, queries, reviewer.Name, roleReviewer, reviewer.AttentionLabel, sum)
 	if err != nil {
 		return
 	}
@@ -130,8 +138,12 @@ func copyReviewer(ctx context.Context, queries *records.Queries, builderName str
 	return
 }
 
-func copyFixer(ctx context.Context, queries *records.Queries, builderName string, fixer configrecords.ListFixerMembersRow) (lines []string, err error) {
-	memberLine, err := saveMember(ctx, queries, fixer.Name, roleFixer, fixer.AttentionLabel)
+func copyFixer(ctx context.Context, dir string, queries *records.Queries, builderName string, fixer configrecords.ListFixerMembersRow) (lines []string, err error) {
+	sum, err := commands.InstructionFingerprint(dir, fixer.Name)
+	if err != nil {
+		return
+	}
+	memberLine, err := saveMember(ctx, queries, fixer.Name, roleFixer, fixer.AttentionLabel, sum)
 	if err != nil {
 		return
 	}
@@ -144,7 +156,7 @@ func copyFixer(ctx context.Context, queries *records.Queries, builderName string
 	return
 }
 
-func saveMember(ctx context.Context, queries *records.Queries, name string, role string, attention string) (line string, err error) {
+func saveMember(ctx context.Context, queries *records.Queries, name string, role string, attention string, fingerprint string) (line string, err error) {
 	stored, err := queries.GetMember(ctx, name)
 	absent := errors.Is(err, sql.ErrNoRows)
 	lookupFailed := err != nil && !absent
@@ -156,9 +168,10 @@ func saveMember(ctx context.Context, queries *records.Queries, name string, role
 
 	if absent {
 		params := records.CreateMemberParams{
-			Name:           name,
-			Role:           role,
-			AttentionLabel: attention,
+			Name:              name,
+			Role:              role,
+			AttentionLabel:    attention,
+			InstructionSha256: fingerprint,
 		}
 		err = queries.CreateMember(ctx, params)
 		if err != nil {
@@ -175,16 +188,19 @@ func saveMember(ctx context.Context, queries *records.Queries, name string, role
 		log.Error("member role", "member", name, "role", stored.Role, "err", err)
 		return
 	}
-	same := stored.AttentionLabel == attention
+	sameAttention := stored.AttentionLabel == attention
+	sameHash := stored.InstructionSha256 == fingerprint
+	same := sameAttention && sameHash
 	if same {
 		return
 	}
 
-	params := records.UpdateMemberAttentionParams{
-		AttentionLabel: attention,
-		Name:           name,
+	params := records.UpdateMemberParams{
+		AttentionLabel:    attention,
+		InstructionSha256: fingerprint,
+		Name:              name,
 	}
-	err = queries.UpdateMemberAttention(ctx, params)
+	err = queries.UpdateMember(ctx, params)
 	if err != nil {
 		log.Error("update member", "member", name, "err", err)
 		return

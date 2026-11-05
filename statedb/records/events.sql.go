@@ -10,12 +10,13 @@ import (
 )
 
 const createEvent = `-- name: CreateEvent :exec
-INSERT INTO event (id, step_id, kind, message) VALUES (?, ?, ?, ?)
+INSERT INTO event (id, step_id, agent_id, kind, message) VALUES (?, ?, ?, ?, ?)
 `
 
 type CreateEventParams struct {
 	ID      string `json:"id"`
 	StepID  string `json:"step_id"`
+	AgentID string `json:"agent_id"`
 	Kind    string `json:"kind"`
 	Message string `json:"message"`
 }
@@ -24,6 +25,7 @@ func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) error 
 	_, err := q.db.ExecContext(ctx, createEvent,
 		arg.ID,
 		arg.StepID,
+		arg.AgentID,
 		arg.Kind,
 		arg.Message,
 	)
@@ -31,7 +33,7 @@ func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) error 
 }
 
 const getEvents = `-- name: GetEvents :many
-SELECT id, step_id, kind, message, created_at FROM event ORDER BY id
+SELECT id, step_id, agent_id, kind, message, created_at FROM event ORDER BY id
 `
 
 func (q *Queries) GetEvents(ctx context.Context) ([]Event, error) {
@@ -46,6 +48,7 @@ func (q *Queries) GetEvents(ctx context.Context) ([]Event, error) {
 		if err := rows.Scan(
 			&i.ID,
 			&i.StepID,
+			&i.AgentID,
 			&i.Kind,
 			&i.Message,
 			&i.CreatedAt,

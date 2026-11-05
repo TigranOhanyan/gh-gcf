@@ -13,7 +13,7 @@ CREATE TABLE builder_member (
     name           TEXT PRIMARY KEY,
     role           TEXT NOT NULL DEFAULT 'builder' CHECK (role = 'builder'),
     starting_label TEXT NOT NULL,
-    FOREIGN KEY (name, role) REFERENCES member (name, role)
+    FOREIGN KEY (name) REFERENCES member (name)
 );
 
 CREATE TABLE reviewer_member (
@@ -21,14 +21,14 @@ CREATE TABLE reviewer_member (
     role         TEXT NOT NULL DEFAULT 'reviewer' CHECK (role = 'reviewer'),
     builder_name TEXT NOT NULL REFERENCES builder_member (name),
     github_app   INTEGER NOT NULL,
-    FOREIGN KEY (name, role) REFERENCES member (name, role)
+    FOREIGN KEY (name) REFERENCES member (name)
 );
 
 CREATE TABLE fixer_member (
     name         TEXT PRIMARY KEY,
     role         TEXT NOT NULL DEFAULT 'fixer' CHECK (role = 'fixer'),
     builder_name TEXT NOT NULL UNIQUE REFERENCES builder_member (name),
-    FOREIGN KEY (name, role) REFERENCES member (name, role)
+    FOREIGN KEY (name) REFERENCES member (name)
 );
 
 CREATE TABLE github_check (

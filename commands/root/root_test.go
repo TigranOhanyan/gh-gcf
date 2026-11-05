@@ -98,6 +98,21 @@ func Test_NewRoot_should_list_setup(t *testing.T) {
 	assert.Contains(t, text, "Record config for app repos")
 }
 
+func Test_NewRoot_should_list_builder(t *testing.T) {
+	cmd := NewRoot()
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+	cmd.SetArgs([]string{"--help"})
+
+	err := cmd.ExecuteContext(t.Context())
+	require.NoError(t, err)
+
+	text := output.String()
+	assert.Contains(t, text, "builder")
+	assert.Contains(t, text, "Start a builder for each open issue with its starting label")
+}
+
 func Test_NewRoot_should_not_list_copy(t *testing.T) {
 	cmd := NewRoot()
 	var output bytes.Buffer

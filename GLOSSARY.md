@@ -31,7 +31,7 @@ One named piece of a tick, recorded in each app repo's state.
 _Avoid_: phase, stage, job, action
 
 **Event**:
-A moment a step recorded: starting, ack, rejected, completed, or failed. A poll that finds the agent still running writes none.
+A moment of one agent call: starting, ack, rejected, completed, or failed. A poll that finds the agent still running writes none.
 _Avoid_: log, status
 
 **Executor**:
@@ -96,12 +96,12 @@ _Avoid_: requirements reviewer, QA
 The one member a builder has for applying change requests on that builder's pull request, once. A builder may have none.
 _Avoid_: builder (second run), repairer, review applier
 
-**Work**:
+**Coding work**:
 The factory's handling of one issue by one builder. Its agents point at it.
-_Avoid_: team, task, run, cycle
+_Avoid_: work, team, task, run, cycle
 
 **Agent**:
-One member acting through Cursor on one work. A builder, a reviewer, and a fixer are different kinds.
+One member acting through Cursor on one coding work. A builder, a reviewer, and a fixer are different kinds.
 _Avoid_: bot, run
 
 **Verdict**:
