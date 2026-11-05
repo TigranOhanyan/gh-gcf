@@ -18,8 +18,8 @@ import (
 const homeHelp = "enter open   q quit"
 const listHelp = "a add   enter open   esc back   q quit"
 const backHelp = "esc back   q quit"
-const formContinueHelp = "enter continues   esc back"
-const formSaveHelp = "enter saves   esc back"
+const formContinueHelp = "tab next   enter next   esc back"
+const formSaveHelp = "tab saves   enter saves   esc back"
 const missingConfig = "config.db is missing"
 const noRepos = "No app repos yet."
 const noLabels = "No labels yet."
@@ -104,7 +104,7 @@ func (m model) Init() (cmd tea.Cmd) {
 func (m model) Update(msg tea.Msg) (updated tea.Model, cmd tea.Cmd) {
 	press, isPress := msg.(tea.KeyPressMsg)
 	if !isPress {
-		updated = m
+		updated, cmd = m.passForm(msg)
 		return
 	}
 	stroke := press.String()
@@ -130,7 +130,7 @@ func (m model) onListKey(key tea.KeyPressMsg) (updated model, cmd tea.Cmd) {
 	}
 	add := stroke == "a"
 	if add {
-		updated = m.startAdd()
+		updated, cmd = m.startAdd()
 		return
 	}
 	open := stroke == "enter"
@@ -160,9 +160,9 @@ func (m model) onFormKey(key tea.KeyPressMsg) (updated model, cmd tea.Cmd) {
 		updated = m.cancelForm()
 		return
 	}
-	enter := stroke == "enter"
-	if enter {
-		updated = m.advanceForm()
+	forward := movesForward(key)
+	if forward {
+		updated, cmd = m.advanceForm()
 		return
 	}
 	updated = m
@@ -170,6 +170,26 @@ func (m model) onFormKey(key tea.KeyPressMsg) (updated model, cmd tea.Cmd) {
 	field, cmd = field.Update(key)
 	updated = updated.setActiveField(field)
 	updated.notice = ""
+	return
+}
+
+func (m model) passForm(msg tea.Msg) (updated model, cmd tea.Cmd) {
+	updated = m
+	form := updated.onForm()
+	if !form {
+		return
+	}
+	field := updated.activeField()
+	field, cmd = field.Update(msg)
+	updated = updated.setActiveField(field)
+	return
+}
+
+func movesForward(key tea.KeyPressMsg) (forward bool) {
+	plain := key.Mod == 0
+	enter := key.Code == tea.KeyEnter || key.Code == tea.KeyKpEnter
+	tab := key.Code == tea.KeyTab
+	forward = plain && (enter || tab)
 	return
 }
 
@@ -280,7 +300,7 @@ func (m model) quit() (updated model, cmd tea.Cmd) {
 	return
 }
 
-func (m model) startAdd() (updated model) {
+func (m model) startAdd() (updated model, cmd tea.Cmd) {
 	updated = m
 	switch updated.place.screen {
 	case screenRepos:
@@ -289,6 +309,7 @@ func (m model) startAdd() (updated model) {
 		updated.first = newField("owner: ")
 		updated.second = newField("name: ")
 		updated.notice = ""
+		updated, cmd = updated.focusActive()
 	case screenLabels:
 		missing := updated.db == nil
 		if missing {
@@ -300,11 +321,13 @@ func (m model) startAdd() (updated model) {
 		updated.first = newField("name: ")
 		updated.second = newField("color: ")
 		updated.notice = ""
+		updated, cmd = updated.focusActive()
 	case screenApps:
 		updated.place.screen = screenAddApp
 		updated.field = 0
 		updated.first = newField("app id: ")
 		updated.notice = ""
+		updated, cmd = updated.focusActive()
 	case screenRepoApps:
 		missing := updated.db == nil
 		if missing {
@@ -439,7 +462,7 @@ func (m model) cancelForm() (updated model) {
 	return
 }
 
-func (m model) advanceForm() (updated model) {
+func (m model) advanceForm() (updated model, cmd tea.Cmd) {
 	one := m.place.screen == screenAddApp
 	if one {
 		updated = m.submitApp()
@@ -450,6 +473,7 @@ func (m model) advanceForm() (updated model) {
 		updated = m
 		updated.field = 1
 		updated.notice = ""
+		updated, cmd = updated.focusActive()
 		return
 	}
 	addingRepo := m.place.screen == screenAddRepo
@@ -725,7 +749,16 @@ func (m model) setActiveField(field textinput.Model) (updated model) {
 func newField(prompt string) (field textinput.Model) {
 	field = textinput.New()
 	field.Prompt = prompt
-	field.Focus()
+	return
+}
+
+func (m model) focusActive() (updated model, cmd tea.Cmd) {
+	updated = m
+	updated.first.Blur()
+	updated.second.Blur()
+	field := updated.activeField()
+	cmd = field.Focus()
+	updated = updated.setActiveField(field)
 	return
 }
 

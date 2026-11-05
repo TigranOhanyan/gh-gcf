@@ -314,6 +314,29 @@ func Test_Setup_should_refuse_a_repo_name_that_is_not_a_single_path_segment(t *t
 	assert.True(t, os.IsNotExist(err))
 }
 
+func Test_Setup_should_store_a_repo_when_tab_moves_to_the_name(t *testing.T) {
+	repoDir := setupCheckout(t)
+	session := startSetup(t, repoDir)
+	openRepoList(t, session)
+	session.write("a")
+	session.wait("Add a repo")
+	session.write("octo")
+	session.wait("octo")
+	session.write("\t")
+	session.wait("save")
+	session.write("app")
+	session.wait("name: app")
+	screen := session.screen()
+	assert.NotContains(t, screen, "octoapp")
+	session.write("\r")
+	session.wait("octo/app")
+	err := session.quit()
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(repoDir, "repos", "octo", "app", "config.db"))
+	require.NoError(t, err)
+}
+
 func Test_Setup_should_refuse_an_empty_repo_name(t *testing.T) {
 	repoDir := setupCheckout(t)
 	session := startSetup(t, repoDir)
