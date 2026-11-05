@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -12,6 +13,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -21,6 +23,50 @@ import (
 )
 
 const githubAPIURL = "GITHUB_API_URL"
+
+// UserGitHubClient returns a client for GH_TOKEN, then GITHUB_TOKEN, then `gh auth token`.
+func UserGitHubClient(ctx context.Context) (client *github.Client, err error) {
+	token, err := userGitHubToken(ctx)
+	if err != nil {
+		return
+	}
+	client, err = NewGitHubClientWithToken(token)
+	return
+}
+
+func userGitHubToken(ctx context.Context) (token string, err error) {
+	token = os.Getenv("GH_TOKEN")
+	if token != "" {
+		return
+	}
+	token = os.Getenv("GITHUB_TOKEN")
+	if token != "" {
+		return
+	}
+	token, err = ghAuthToken(ctx)
+	return
+}
+
+func ghAuthToken(ctx context.Context) (token string, err error) {
+	exe := os.Getenv("GH_PATH")
+	if exe == "" {
+		exe = "gh"
+	}
+	cmd := exec.CommandContext(ctx, exe, "auth", "token")
+	output, err := cmd.Output()
+	if err != nil {
+		log.Error("gh auth token", "err", err)
+		err = fmt.Errorf("github token is missing")
+		return
+	}
+	token = strings.TrimSpace(string(output))
+	missing := token == ""
+	if missing {
+		err = fmt.Errorf("github token is missing")
+		log.Error("gh auth token", "err", err)
+	}
+	return
+}
 
 // NewGitHubClientWithToken returns a client whose requests send token.
 // GITHUB_API_URL, when set, replaces the API host.

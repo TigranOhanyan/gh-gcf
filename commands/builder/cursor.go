@@ -67,8 +67,8 @@ func newCursorClient() (client cursorClient, err error) {
 }
 
 // create posts one agent. A transport failure returns status 0.
-// A response status outside 2xx returns that status and an error.
-func (client cursorClient) create(ctx context.Context, body cursorCreate) (runID string, status int, err error) {
+// 200, 201, and 204 are success. Any other status returns the response body.
+func (client cursorClient) create(ctx context.Context, body cursorCreate) (runID string, responseBody string, status int, err error) {
 	payload, err := json.Marshal(body)
 	if err != nil {
 		log.Error("cursor create", "err", err)
@@ -95,10 +95,15 @@ func (client cursorClient) create(ctx context.Context, body cursorCreate) (runID
 		log.Error("cursor create", "err", err)
 		return
 	}
-	accepted := status >= 200 && status < 300
-	if !accepted {
+	responseBody = string(raw)
+	success := status == http.StatusOK || status == http.StatusCreated || status == http.StatusNoContent
+	if !success {
 		err = fmt.Errorf("cursor create returned %d", status)
-		log.Error("cursor create", "status", status, "err", err)
+		log.Error("cursor create", "status", status, "body", responseBody, "err", err)
+		return
+	}
+	empty := status == http.StatusNoContent
+	if empty {
 		return
 	}
 	var parsed cursorCreateResponse

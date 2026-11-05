@@ -20,7 +20,7 @@ const stepName = "label"
 
 type labelStep struct {
 	GitHub *github.Client
-	app    appAuth
+	app    commands.FactoryApp
 }
 
 func (labelStep) Name() (name string) {
@@ -35,9 +35,9 @@ func (step labelStep) Apply(ctx context.Context, repo commands.Repo, _ records.T
 		return
 	}
 
-	useApp := step.app.key != nil && len(labels) > 0
-	if useApp {
-		client, clientErr := step.app.clientFor(ctx, repo.Owner, repo.Name)
+	needsClient := len(labels) > 0
+	if needsClient {
+		client, clientErr := commands.GitHubClient(ctx, step.app, repo.Owner, repo.Name, step.GitHub)
 		if clientErr != nil {
 			err = clientErr
 			return

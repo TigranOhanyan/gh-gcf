@@ -31,14 +31,14 @@ func NewLabel() (cmd *cobra.Command) {
 				log.Error("factory repo", "path", dir, "err", err)
 				return
 			}
-			app, err := loadAppAuth()
+			app, err := commands.LoadFactoryApp()
 			if err != nil {
 				return
 			}
 			var client *github.Client
-			needsUserToken := app.key == nil
+			needsUserToken := !app.Configured()
 			if needsUserToken {
-				client, err = newGitHubClient(cmd.Context())
+				client, err = commands.UserGitHubClient(cmd.Context())
 				if err != nil {
 					return
 				}

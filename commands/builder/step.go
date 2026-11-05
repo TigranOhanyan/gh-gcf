@@ -26,7 +26,7 @@ const eventRejected = "rejected"
 
 type builderStep struct {
 	GitHub *github.Client
-	app    appAuth
+	app    commands.FactoryApp
 	cursor cursorClient
 }
 
@@ -46,7 +46,7 @@ func (step builderStep) Apply(ctx context.Context, repo commands.Repo, _ records
 		return
 	}
 
-	client, err := step.githubClient(ctx, repo)
+	client, err := commands.GitHubClient(ctx, step.app, repo.Owner, repo.Name, step.GitHub)
 	if err != nil {
 		return
 	}
@@ -63,20 +63,6 @@ func (step builderStep) Apply(ctx context.Context, repo commands.Repo, _ records
 		}
 	}
 	message = strings.Join(lines, "\n")
-	return
-}
-
-func (step builderStep) githubClient(ctx context.Context, repo commands.Repo) (client *github.Client, err error) {
-	useApp := step.app.key != nil
-	if useApp {
-		client, err = step.app.clientFor(ctx, repo.Owner, repo.Name)
-		return
-	}
-	client = step.GitHub
-	if client == nil {
-		err = fmt.Errorf("github token is missing")
-		log.Error("github", "owner", repo.Owner, "name", repo.Name, "err", err)
-	}
 	return
 }
 
@@ -164,13 +150,13 @@ func (step builderStep) startIssue(ctx context.Context, repo commands.Repo, step
 	}
 	repoURL := fmt.Sprintf("https://github.com/%s/%s", repo.Owner, repo.Name)
 	body.Repos = []cursorRepo{{URL: repoURL}}
-	runID, status, err := step.cursor.create(ctx, body)
+	runID, raw, status, err := step.cursor.create(ctx, body)
 	lost := err != nil && status == 0
 	if lost {
 		return
 	}
 	if err != nil {
-		rejectErr := reject(ctx, repo, stepID, agentID, err.Error())
+		rejectErr := reject(ctx, repo, stepID, agentID, raw)
 		if rejectErr != nil {
 			err = rejectErr
 			return

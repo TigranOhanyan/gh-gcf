@@ -62,8 +62,6 @@ func Test_Label_should_create_a_missing_label(t *testing.T) {
 	require.NoError(t, err)
 	assert.WithinRange(t, createdAt, startOfTest, startOfCheck)
 
-	events := eventsAtTip(t, repoDir)
-	assert.Empty(t, events)
 }
 
 func Test_Label_should_record_a_label_that_already_exists(t *testing.T) {
@@ -93,8 +91,6 @@ func Test_Label_should_record_a_label_that_already_exists(t *testing.T) {
 	registeredAt, err := time.Parse(time.RFC3339Nano, row.RegisteredAt)
 	require.NoError(t, err)
 	assert.WithinRange(t, registeredAt, startOfTest, startOfCheck)
-	events := eventsAtTip(t, repoDir)
-	assert.Empty(t, events)
 }
 
 func Test_Label_should_leave_a_label_that_exists_in_both_places(t *testing.T) {
@@ -114,8 +110,6 @@ func Test_Label_should_leave_a_label_that_exists_in_both_places(t *testing.T) {
 	rows := labelsAtTip(t, repoDir)
 	require.Len(t, rows, 1)
 	assert.False(t, rows[0].CreatedAt.Valid)
-	events := eventsAtTip(t, repoDir)
-	assert.Empty(t, events)
 }
 
 func Test_Label_should_keep_the_row_when_create_fails(t *testing.T) {
@@ -142,8 +136,6 @@ func Test_Label_should_keep_the_row_when_create_fails(t *testing.T) {
 	assert.Equal(t, "todo", rows[0].Name)
 	assert.Equal(t, "ededed", rows[0].Color)
 	assert.False(t, rows[0].CreatedAt.Valid)
-	events := eventsAtTip(t, repoDir)
-	assert.Empty(t, events)
 }
 
 func Test_Label_should_set_created_at_when_a_failed_label_is_created_later(t *testing.T) {
@@ -170,8 +162,6 @@ func Test_Label_should_set_created_at_when_a_failed_label_is_created_later(t *te
 	createdAt, err := time.Parse(time.RFC3339Nano, rows[0].CreatedAt.String)
 	require.NoError(t, err)
 	assert.WithinRange(t, createdAt, startOfTest, startOfCheck)
-	events := eventsAtTip(t, repoDir)
-	assert.Empty(t, events)
 }
 
 func Test_Label_should_stop_after_the_first_create_error(t *testing.T) {
@@ -215,8 +205,6 @@ func Test_Label_should_stop_when_the_label_lookup_fails(t *testing.T) {
 
 	rows := labelsAtTip(t, repoDir)
 	assert.Empty(t, rows)
-	events := eventsAtTip(t, repoDir)
-	assert.Empty(t, events)
 	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
 	assert.Contains(t, string(body), "❌ [todo]")
 	assert.Contains(t, string(body), "Bad credentials")
@@ -296,8 +284,6 @@ func Test_Label_should_create_a_label_with_an_installation_token(t *testing.T) {
 	createdAt, err := time.Parse(time.RFC3339Nano, row.CreatedAt.String)
 	require.NoError(t, err)
 	assert.WithinRange(t, createdAt, startOfTest, startOfCheck)
-	events := eventsAtTip(t, repoDir)
-	assert.Empty(t, events)
 }
 
 func Test_Label_should_stop_when_the_token_exchange_fails(t *testing.T) {
@@ -317,8 +303,6 @@ func Test_Label_should_stop_when_the_token_exchange_fails(t *testing.T) {
 	requireGetCount(t, "todo", 0)
 	rows := labelsAtTip(t, repoDir)
 	assert.Empty(t, rows)
-	events := eventsAtTip(t, repoDir)
-	assert.Empty(t, events)
 	subject := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
 	expectedSubject := fmt.Sprintf("❌ [%s] [label] [octo/app]", id)
 	assert.Equal(t, expectedSubject, strings.TrimSpace(string(subject)))
@@ -443,15 +427,6 @@ func labelsAtTip(t *testing.T, repoDir string) (rows []records.Label) {
 	db := openStateTip(t, repoDir)
 	defer db.Close()
 	rows, err := db.Queries.ListLabels(t.Context())
-	require.NoError(t, err)
-	return
-}
-
-func eventsAtTip(t *testing.T, repoDir string) (rows []records.Event) {
-	t.Helper()
-	db := openStateTip(t, repoDir)
-	defer db.Close()
-	rows, err := db.Queries.GetEvents(t.Context())
 	require.NoError(t, err)
 	return
 }

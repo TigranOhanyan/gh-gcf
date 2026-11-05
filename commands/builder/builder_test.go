@@ -163,7 +163,7 @@ func Test_Builder_should_reject_a_failed_create(t *testing.T) {
 	require.Len(t, events, 2)
 	assert.Equal(t, "starting", events[0].Kind)
 	assert.Equal(t, "rejected", events[1].Kind)
-	assert.Contains(t, events[1].Message, "500")
+	assert.Equal(t, `{"error":"nope"}`, events[1].Message)
 	assert.Len(t, labelRequests(t), 1)
 }
 
