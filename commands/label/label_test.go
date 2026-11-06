@@ -18,10 +18,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/wiremock/go-wiremock"
 
-	"github.com/TigranOhanyan/gh-gcf/commands/label"
-	"github.com/TigranOhanyan/gh-gcf/commands/tick"
-	"github.com/TigranOhanyan/gh-gcf/configdb"
-	configrecords "github.com/TigranOhanyan/gh-gcf/configdb/records"
+	"github.com/TigranOhanyan/gh-gcf/commands"
+	"github.com/TigranOhanyan/gh-gcf/commands/root"
 	"github.com/TigranOhanyan/gh-gcf/statedb"
 	"github.com/TigranOhanyan/gh-gcf/statedb/records"
 )
@@ -328,13 +326,7 @@ func Test_Label_should_refuse_an_app_id_without_a_private_key(t *testing.T) {
 }
 
 func Test_Label_should_require_a_tick_id(t *testing.T) {
-	cmd := label.NewLabel()
-	var output bytes.Buffer
-	cmd.SetOut(&output)
-	cmd.SetErr(&output)
-	cmd.SetArgs([]string{})
-
-	err := cmd.ExecuteContext(t.Context())
+	_, err := runRoot(t, "label")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "tick")
 }
@@ -346,62 +338,49 @@ type configLabel struct {
 
 func setupFactory(t *testing.T, labels []configLabel) (repoDir string) {
 	t.Helper()
-	ctx := t.Context()
+	repoDir = initFactory(t)
+	mustRoot(t, "setup repo add --owner octo --name app")
+	for _, label := range labels {
+		line := fmt.Sprintf("setup label add --owner octo --repo app --name %q --color %q", label.name, label.color)
+		mustRoot(t, line)
+	}
+	commitConfig(t, repoDir)
+	useStateBranch(t, repoDir)
+	return
+}
+
+func initFactory(t *testing.T) (repoDir string) {
+	t.Helper()
 	repoDir = filepath.Join(JunkDir, t.Name())
 	err := os.RemoveAll(repoDir)
 	require.NoError(t, err)
 	err = os.MkdirAll(repoDir, 0755)
 	require.NoError(t, err)
-
 	_ = mustGit(t, repoDir, "init -b main")
 	_ = mustGit(t, repoDir, "config user.email test@example.com")
 	_ = mustGit(t, repoDir, "config user.name test")
-
-	configPath := filepath.Join(repoDir, "repos", owner, repoName, "config.db")
-	err = os.MkdirAll(filepath.Dir(configPath), 0755)
-	require.NoError(t, err)
-	configDB, err := configdb.OpenAndMigrate(ctx, configPath)
-	require.NoError(t, err)
-	for _, label := range labels {
-		params := configrecords.CreateLabelParams{
-			Name:  label.name,
-			Color: label.color,
-		}
-		err = configDB.Queries.CreateLabel(ctx, params)
-		require.NoError(t, err)
-	}
-	err = configDB.Close()
-	require.NoError(t, err)
-	configRel := filepath.Join("repos", owner, repoName, "config.db")
-	addLine := fmt.Sprintf("add %s", configRel)
-	_ = mustGit(t, repoDir, addLine)
-	_ = mustGit(t, repoDir, "commit -m config")
-
-	_ = mustGit(t, repoDir, "checkout -b state")
-	statePath := filepath.Join(repoDir, "repos", owner, repoName, "state.db")
-	stateDB, err := statedb.Open(ctx, statePath)
-	require.NoError(t, err)
-	err = stateDB.Close()
-	require.NoError(t, err)
-	stateRel := filepath.Join("repos", owner, repoName, "state.db")
-	stateLine := fmt.Sprintf("add %s", stateRel)
-	_ = mustGit(t, repoDir, stateLine)
-	_ = mustGit(t, repoDir, "commit -m state")
-	_ = mustGit(t, repoDir, "checkout main")
+	_ = mustGit(t, repoDir, "commit --allow-empty -m init")
+	t.Chdir(repoDir)
 	return
+}
+
+func commitConfig(t *testing.T, repoDir string) {
+	t.Helper()
+	_ = mustGit(t, repoDir, "add -A")
+	_ = mustGit(t, repoDir, "commit -m config")
+}
+
+func useStateBranch(t *testing.T, repoDir string) {
+	t.Helper()
+	_ = mustGit(t, repoDir, "checkout -b state")
+	_ = mustGit(t, repoDir, "checkout main")
 }
 
 func runTick(t *testing.T, repoDir string) (id string) {
 	t.Helper()
-	cmd := tick.NewTick()
-	var output bytes.Buffer
-	cmd.SetOut(&output)
-	cmd.SetErr(&output)
 	t.Chdir(repoDir)
-
-	err := cmd.ExecuteContext(t.Context())
-	require.NoError(t, err)
-	id = strings.TrimSpace(output.String())
+	stdout := mustRoot(t, "tick")
+	id = strings.TrimSpace(stdout)
 	require.NotEmpty(t, id)
 	return
 }
@@ -411,16 +390,32 @@ func runLabel(t *testing.T, repoDir string, id string, authToken string) (err er
 	if authToken != "" {
 		t.Setenv("GH_TOKEN", authToken)
 	}
-	cmd := label.NewLabel()
-	var output bytes.Buffer
-	cmd.SetOut(&output)
-	cmd.SetErr(&output)
 	t.Chdir(repoDir)
-	cmd.SetArgs([]string{"--tick", id})
-	err = cmd.ExecuteContext(t.Context())
+	line := fmt.Sprintf("label --tick %s", id)
+	stdout, err := runRoot(t, line)
 	if err == nil {
-		assert.Empty(t, output.String())
+		assert.Empty(t, stdout)
 	}
+	return
+}
+
+func runRoot(t *testing.T, line string) (stdout string, err error) {
+	t.Helper()
+	command := root.NewRoot()
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	command.SetOut(&out)
+	command.SetErr(&errOut)
+	wrapped := commands.NewCmd(command)
+	err = wrapped.Shell(t.Context(), line)
+	stdout = out.String()
+	return
+}
+
+func mustRoot(t *testing.T, line string) (stdout string) {
+	t.Helper()
+	stdout, err := runRoot(t, line)
+	require.NoError(t, err)
 	return
 }
 

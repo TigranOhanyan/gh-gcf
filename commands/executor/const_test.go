@@ -1,4 +1,4 @@
-package executor
+package executor_test
 
 import (
 	"os"

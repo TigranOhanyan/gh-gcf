@@ -1,4 +1,4 @@
-package executor
+package executor_test
 
 import (
 	"bytes"
@@ -15,8 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
-	"github.com/TigranOhanyan/gh-gcf/commands/tick"
-	"github.com/TigranOhanyan/gh-gcf/configdb"
+	"github.com/TigranOhanyan/gh-gcf/commands/executor"
+	"github.com/TigranOhanyan/gh-gcf/commands/root"
 	"github.com/TigranOhanyan/gh-gcf/statedb"
 	"github.com/TigranOhanyan/gh-gcf/statedb/records"
 )
@@ -26,7 +26,7 @@ func Test_Execute_should_commit_the_tick_subject_on_the_state_branch(t *testing.
 	id := runTick(t, repoDir)
 	step := recordStep{}
 
-	exec := StepExecutor{
+	exec := executor.StepExecutor{
 		FactoryDir:   repoDir,
 		ConfigBranch: "main",
 		StateBranch:  "state",
@@ -48,7 +48,7 @@ func Test_Execute_should_store_one_step_named_for_the_step(t *testing.T) {
 	id := runTick(t, repoDir)
 	step := recordStep{}
 
-	exec := StepExecutor{
+	exec := executor.StepExecutor{
 		FactoryDir:   repoDir,
 		ConfigBranch: "main",
 		StateBranch:  "state",
@@ -72,7 +72,7 @@ func Test_Execute_should_store_a_utc_timestamp_for_the_step(t *testing.T) {
 	id := runTick(t, repoDir)
 	step := recordStep{}
 
-	exec := StepExecutor{
+	exec := executor.StepExecutor{
 		FactoryDir:   repoDir,
 		ConfigBranch: "main",
 		StateBranch:  "state",
@@ -98,7 +98,7 @@ func Test_Execute_should_commit_once_for_each_repo(t *testing.T) {
 	id := runTick(t, repoDir)
 	step := recordStep{}
 
-	exec := StepExecutor{
+	exec := executor.StepExecutor{
 		FactoryDir:   repoDir,
 		ConfigBranch: "main",
 		StateBranch:  "state",
@@ -124,7 +124,7 @@ func Test_Execute_should_refuse_a_path_that_is_not_repos_owner_name(t *testing.T
 	require.NoError(t, err)
 	step := recordStep{}
 
-	exec := StepExecutor{
+	exec := executor.StepExecutor{
 		FactoryDir:   repoDir,
 		ConfigBranch: "main",
 		StateBranch:  "state",
@@ -143,7 +143,7 @@ func Test_Execute_should_commit_when_the_step_writes_nothing(t *testing.T) {
 	id := runTick(t, repoDir)
 	step := quietStep{}
 
-	exec := StepExecutor{
+	exec := executor.StepExecutor{
 		FactoryDir:   repoDir,
 		ConfigBranch: "main",
 		StateBranch:  "state",
@@ -165,7 +165,7 @@ func Test_Execute_should_commit_the_error_when_the_step_returns_an_error(t *test
 	id := runTick(t, repoDir)
 	step := failStep{}
 
-	exec := StepExecutor{
+	exec := executor.StepExecutor{
 		FactoryDir:   repoDir,
 		ConfigBranch: "main",
 		StateBranch:  "state",
@@ -187,7 +187,7 @@ func Test_Execute_should_keep_the_message_and_the_error(t *testing.T) {
 	id := runTick(t, repoDir)
 	step := bothStep{}
 
-	exec := StepExecutor{
+	exec := executor.StepExecutor{
 		FactoryDir:   repoDir,
 		ConfigBranch: "main",
 		StateBranch:  "state",
@@ -209,7 +209,7 @@ func Test_Execute_should_store_the_step_when_the_step_returns_an_error(t *testin
 	id := runTick(t, repoDir)
 	step := failStep{}
 
-	exec := StepExecutor{
+	exec := executor.StepExecutor{
 		FactoryDir:   repoDir,
 		ConfigBranch: "main",
 		StateBranch:  "state",
@@ -227,7 +227,7 @@ func Test_Execute_should_store_the_step_when_the_step_returns_an_error(t *testin
 func Test_Execute_should_refuse_a_missing_tick_id(t *testing.T) {
 	step := recordStep{}
 
-	exec := StepExecutor{
+	exec := executor.StepExecutor{
 		FactoryDir:   filepath.Join(JunkDir, "missing-tick"),
 		ConfigBranch: "main",
 		StateBranch:  "state",
@@ -311,46 +311,54 @@ func setupFactory(t *testing.T) (repoDir string) {
 
 func setupRepos(t *testing.T, apps []appSetup) (repoDir string) {
 	t.Helper()
-	ctx := t.Context()
+	repoDir = initFactory(t)
+	for _, app := range apps {
+		line := fmt.Sprintf("setup repo add --owner %s --name %s", app.owner, app.name)
+		mustRoot(t, line)
+	}
+	commitConfig(t, repoDir)
+	useStateBranch(t, repoDir)
+	return
+}
+
+func initFactory(t *testing.T) (repoDir string) {
+	t.Helper()
 	repoDir = filepath.Join(JunkDir, t.Name())
 	err := os.RemoveAll(repoDir)
 	require.NoError(t, err)
 	err = os.MkdirAll(repoDir, 0755)
 	require.NoError(t, err)
-
 	_ = mustGit(t, repoDir, "init -b main")
 	_ = mustGit(t, repoDir, "config user.email test@example.com")
 	_ = mustGit(t, repoDir, "config user.name test")
+	_ = mustGit(t, repoDir, "commit --allow-empty -m init")
+	t.Chdir(repoDir)
+	return
+}
 
-	for _, app := range apps {
-		configPath := filepath.Join(repoDir, "repos", app.owner, app.name, "config.db")
-		configDir := filepath.Dir(configPath)
-		err = os.MkdirAll(configDir, 0755)
-		require.NoError(t, err)
-		configDB, openErr := configdb.OpenAndMigrate(ctx, configPath)
-		require.NoError(t, openErr)
-		err = configDB.Close()
-		require.NoError(t, err)
-		configRel := filepath.Join("repos", app.owner, app.name, "config.db")
-		addLine := fmt.Sprintf("add %s", configRel)
-		_ = mustGit(t, repoDir, addLine)
-	}
+func commitConfig(t *testing.T, repoDir string) {
+	t.Helper()
+	_ = mustGit(t, repoDir, "add -A")
 	_ = mustGit(t, repoDir, "commit -m config")
+}
 
+func useStateBranch(t *testing.T, repoDir string) {
+	t.Helper()
 	_ = mustGit(t, repoDir, "checkout -b state")
-	for _, app := range apps {
-		statePath := filepath.Join(repoDir, "repos", app.owner, app.name, "state.db")
-		stateDB, openErr := statedb.Open(ctx, statePath)
-		require.NoError(t, openErr)
-		err = stateDB.Close()
-		require.NoError(t, err)
-		stateRel := filepath.Join("repos", app.owner, app.name, "state.db")
-		stateLine := fmt.Sprintf("add %s", stateRel)
-		_ = mustGit(t, repoDir, stateLine)
-	}
-	_ = mustGit(t, repoDir, "commit -m state")
-
 	_ = mustGit(t, repoDir, "checkout main")
+}
+
+func mustRoot(t *testing.T, line string) (stdout string) {
+	t.Helper()
+	command := root.NewRoot()
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	command.SetOut(&out)
+	command.SetErr(&errOut)
+	wrapped := commands.NewCmd(command)
+	err := wrapped.Shell(t.Context(), line)
+	require.NoError(t, err)
+	stdout = out.String()
 	return
 }
 
@@ -375,15 +383,8 @@ func stepsAtTip(t *testing.T, repoDir string, rel string) (rows []records.Step) 
 func runTick(t *testing.T, repoDir string) (id string) {
 	t.Helper()
 	t.Chdir(repoDir)
-	cmd := tick.NewTick()
-	var output bytes.Buffer
-	cmd.SetOut(&output)
-	cmd.SetErr(&output)
-
-	err := cmd.ExecuteContext(t.Context())
-	require.NoError(t, err)
-
-	id = strings.TrimSpace(output.String())
+	stdout := mustRoot(t, "tick")
+	id = strings.TrimSpace(stdout)
 	require.NotEmpty(t, id)
 	return
 }

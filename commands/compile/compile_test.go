@@ -11,10 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/TigranOhanyan/gh-gcf/commands/compile"
-	"github.com/TigranOhanyan/gh-gcf/commands/tick"
+	"github.com/TigranOhanyan/gh-gcf/commands"
+	"github.com/TigranOhanyan/gh-gcf/commands/root"
 	"github.com/TigranOhanyan/gh-gcf/configdb"
-	configrecords "github.com/TigranOhanyan/gh-gcf/configdb/records"
 	"github.com/TigranOhanyan/gh-gcf/statedb"
 	"github.com/TigranOhanyan/gh-gcf/statedb/records"
 )
@@ -213,13 +212,7 @@ func Test_Compile_should_fail_when_the_instruction_is_missing(t *testing.T) {
 }
 
 func Test_Compile_should_require_a_tick_id(t *testing.T) {
-	cmd := compile.NewCompile()
-	var output bytes.Buffer
-	cmd.SetOut(&output)
-	cmd.SetErr(&output)
-	cmd.SetArgs([]string{})
-
-	err := cmd.ExecuteContext(t.Context())
+	_, err := runRoot(t, "compile_coding")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "tick")
 }
@@ -249,134 +242,78 @@ type builderSpec struct {
 
 func setupFactory(t *testing.T, spec builderSpec) (repoDir string) {
 	t.Helper()
-	ctx := t.Context()
+	repoDir = initFactory(t)
+	mustRoot(t, "setup repo add --owner octo --name app")
+	names := []string{spec.starting, spec.attention}
+	names = append(names, spec.extra...)
+	if spec.hasReview {
+		names = append(names, spec.reviewer.attention)
+		text := fmt.Sprintf("%d", spec.reviewer.app)
+		mustRoot(t, "setup apps add --id "+text)
+		mustRoot(t, "setup apps attach --owner octo --repo app --id "+text)
+	}
+	if spec.hasFixer {
+		names = append(names, spec.fixer.attention)
+	}
+	addLabels(t, names)
+	builderLine := fmt.Sprintf("setup member add-builder --owner octo --repo app --name %q --starting %q --attention %q", spec.name, spec.starting, spec.attention)
+	mustRoot(t, builderLine)
+	if spec.hasReview {
+		reviewLine := fmt.Sprintf("setup member add-reviewer --owner octo --repo app --builder %q --name %q --app %d --attention %q", spec.name, spec.reviewer.name, spec.reviewer.app, spec.reviewer.attention)
+		mustRoot(t, reviewLine)
+	}
+	if spec.hasFixer {
+		fixLine := fmt.Sprintf("setup member add-fixer --owner octo --repo app --builder %q --name %q --attention %q", spec.name, spec.fixer.name, spec.fixer.attention)
+		mustRoot(t, fixLine)
+	}
+	if spec.check != "" {
+		checkLine := fmt.Sprintf("setup check add --owner octo --repo app --builder %q --name %q", spec.name, spec.check)
+		mustRoot(t, checkLine)
+	}
+	commitConfig(t, repoDir)
+	useStateBranch(t, repoDir)
+	return
+}
+
+func addLabels(t *testing.T, names []string) {
+	t.Helper()
+	seen := map[string]bool{}
+	for _, name := range names {
+		already := seen[name]
+		if already {
+			continue
+		}
+		seen[name] = true
+		line := fmt.Sprintf("setup label add --owner octo --repo app --name %q --color ededed", name)
+		mustRoot(t, line)
+	}
+}
+
+func initFactory(t *testing.T) (repoDir string) {
+	t.Helper()
 	repoDir = filepath.Join(JunkDir, t.Name())
 	err := os.RemoveAll(repoDir)
 	require.NoError(t, err)
 	err = os.MkdirAll(repoDir, 0755)
 	require.NoError(t, err)
-
 	_ = mustGit(t, repoDir, "init -b main")
 	_ = mustGit(t, repoDir, "config user.email test@example.com")
 	_ = mustGit(t, repoDir, "config user.name test")
-
-	configPath := filepath.Join(repoDir, "repos", owner, repoName, "config.db")
-	err = os.MkdirAll(filepath.Dir(configPath), 0755)
-	require.NoError(t, err)
-	configDB, err := configdb.OpenAndMigrate(ctx, configPath)
-	require.NoError(t, err)
-	seedConfig(t, configDB, spec)
-	err = configDB.Close()
-	require.NoError(t, err)
-	writeInstruction(t, repoDir, spec.name, "")
-	if spec.hasReview {
-		writeInstruction(t, repoDir, spec.reviewer.name, "")
-	}
-	if spec.hasFixer {
-		writeInstruction(t, repoDir, spec.fixer.name, "")
-	}
-	configRel := filepath.Join("repos", owner, repoName, "config.db")
-	membersRel := filepath.Join("repos", owner, repoName, "members")
-	addLine := fmt.Sprintf("add %s %s", configRel, membersRel)
-	_ = mustGit(t, repoDir, addLine)
-	_ = mustGit(t, repoDir, "commit -m config")
-
-	_ = mustGit(t, repoDir, "checkout -b state")
-	statePath := filepath.Join(repoDir, "repos", owner, repoName, "state.db")
-	stateDB, err := statedb.Open(ctx, statePath)
-	require.NoError(t, err)
-	err = stateDB.Close()
-	require.NoError(t, err)
-	stateRel := filepath.Join("repos", owner, repoName, "state.db")
-	stateLine := fmt.Sprintf("add %s", stateRel)
-	_ = mustGit(t, repoDir, stateLine)
-	_ = mustGit(t, repoDir, "commit -m state")
-	_ = mustGit(t, repoDir, "checkout main")
+	_ = mustGit(t, repoDir, "commit --allow-empty -m init")
+	t.Chdir(repoDir)
 	return
 }
 
-func seedConfig(t *testing.T, db *configdb.DB, spec builderSpec) {
+func commitConfig(t *testing.T, repoDir string) {
 	t.Helper()
-	ctx := t.Context()
-	labels := []string{spec.starting, spec.attention}
-	labels = append(labels, spec.extra...)
-	if spec.hasReview {
-		labels = append(labels, spec.reviewer.attention)
-	}
-	if spec.hasFixer {
-		labels = append(labels, spec.fixer.attention)
-	}
-	seen := map[string]bool{}
-	for _, name := range labels {
-		if seen[name] {
-			continue
-		}
-		seen[name] = true
-		params := configrecords.CreateLabelParams{
-			Name:  name,
-			Color: "ededed",
-		}
-		err := db.Queries.CreateLabel(ctx, params)
-		require.NoError(t, err)
-	}
-	if spec.hasReview {
-		err := db.Queries.CreateGithubApp(ctx, spec.reviewer.app)
-		require.NoError(t, err)
-	}
+	_ = mustGit(t, repoDir, "add -A")
+	_ = mustGit(t, repoDir, "commit -m config")
+}
 
-	member := configrecords.CreateMemberParams{
-		Name:           spec.name,
-		Role:           "builder",
-		AttentionLabel: spec.attention,
-	}
-	err := db.Queries.CreateMember(ctx, member)
-	require.NoError(t, err)
-	builder := configrecords.CreateBuilderMemberParams{
-		Name:          spec.name,
-		StartingLabel: spec.starting,
-	}
-	err = db.Queries.CreateBuilderMember(ctx, builder)
-	require.NoError(t, err)
-
-	if spec.hasReview {
-		reviewMember := configrecords.CreateMemberParams{
-			Name:           spec.reviewer.name,
-			Role:           "reviewer",
-			AttentionLabel: spec.reviewer.attention,
-		}
-		err = db.Queries.CreateMember(ctx, reviewMember)
-		require.NoError(t, err)
-		reviewer := configrecords.CreateReviewerMemberParams{
-			Name:        spec.reviewer.name,
-			BuilderName: spec.name,
-			GithubApp:   spec.reviewer.app,
-		}
-		err = db.Queries.CreateReviewerMember(ctx, reviewer)
-		require.NoError(t, err)
-	}
-	if spec.hasFixer {
-		fixMember := configrecords.CreateMemberParams{
-			Name:           spec.fixer.name,
-			Role:           "fixer",
-			AttentionLabel: spec.fixer.attention,
-		}
-		err = db.Queries.CreateMember(ctx, fixMember)
-		require.NoError(t, err)
-		fixer := configrecords.CreateFixerMemberParams{
-			Name:        spec.fixer.name,
-			BuilderName: spec.name,
-		}
-		err = db.Queries.CreateFixerMember(ctx, fixer)
-		require.NoError(t, err)
-	}
-	if spec.check != "" {
-		check := configrecords.CreateGithubCheckParams{
-			BuilderName: spec.name,
-			Name:        spec.check,
-		}
-		err = db.Queries.CreateGithubCheck(ctx, check)
-		require.NoError(t, err)
-	}
+func useStateBranch(t *testing.T, repoDir string) {
+	t.Helper()
+	_ = mustGit(t, repoDir, "checkout -b state")
+	_ = mustGit(t, repoDir, "checkout main")
 }
 
 func writeInstruction(t *testing.T, repoDir string, name string, text string) {
@@ -429,31 +366,41 @@ func clearMembers(t *testing.T, repoDir string) {
 
 func runTick(t *testing.T, repoDir string) (id string) {
 	t.Helper()
-	cmd := tick.NewTick()
-	var output bytes.Buffer
-	cmd.SetOut(&output)
-	cmd.SetErr(&output)
 	t.Chdir(repoDir)
-
-	err := cmd.ExecuteContext(t.Context())
-	require.NoError(t, err)
-	id = strings.TrimSpace(output.String())
+	stdout := mustRoot(t, "tick")
+	id = strings.TrimSpace(stdout)
 	require.NotEmpty(t, id)
 	return
 }
 
 func runCompile(t *testing.T, repoDir string, id string) (err error) {
 	t.Helper()
-	cmd := compile.NewCompile()
-	var output bytes.Buffer
-	cmd.SetOut(&output)
-	cmd.SetErr(&output)
 	t.Chdir(repoDir)
-	cmd.SetArgs([]string{"--tick", id})
-	err = cmd.ExecuteContext(t.Context())
+	line := fmt.Sprintf("compile_coding --tick %s", id)
+	stdout, err := runRoot(t, line)
 	if err == nil {
-		assert.Empty(t, output.String())
+		assert.Empty(t, stdout)
 	}
+	return
+}
+
+func runRoot(t *testing.T, line string) (stdout string, err error) {
+	t.Helper()
+	command := root.NewRoot()
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	command.SetOut(&out)
+	command.SetErr(&errOut)
+	wrapped := commands.NewCmd(command)
+	err = wrapped.Shell(t.Context(), line)
+	stdout = out.String()
+	return
+}
+
+func mustRoot(t *testing.T, line string) (stdout string) {
+	t.Helper()
+	stdout, err := runRoot(t, line)
+	require.NoError(t, err)
 	return
 }
 

@@ -17,8 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/wiremock/go-wiremock"
 
-	"github.com/TigranOhanyan/gh-gcf/commands/app"
-	"github.com/TigranOhanyan/gh-gcf/commands/tick"
+	"github.com/TigranOhanyan/gh-gcf/commands"
+	"github.com/TigranOhanyan/gh-gcf/commands/root"
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 	"github.com/TigranOhanyan/gh-gcf/statedb"
 	"github.com/TigranOhanyan/gh-gcf/statedb/records"
@@ -162,11 +162,17 @@ func Test_App_should_refuse_a_missing_key_and_write_nothing(t *testing.T) {
 
 func Test_App_should_leave_an_app_that_config_lacks(t *testing.T) {
 	resetWireMock(t)
-	repoDir := setupFactory(t, nil)
-	storeApp(t, repoDir, 9, "Iv1.old", 3)
+	stubInstallation(t, 3, "Iv1.old", "")
+	repoDir := setupFactory(t, []int64{9})
 	id := runTick(t, repoDir)
-
+	pemText := testAppKey(t)
+	t.Setenv("GITHUB_APP_9", pemText)
 	err := runApp(t, repoDir, id)
+	require.NoError(t, err)
+	dropConfigApp(t, repoDir)
+	resetWireMock(t)
+
+	err = runApp(t, repoDir, id)
 	require.NoError(t, err)
 
 	journal, err := wiremockClient.GetAllRequests()
@@ -180,106 +186,103 @@ func Test_App_should_leave_an_app_that_config_lacks(t *testing.T) {
 }
 
 func Test_App_should_refuse_a_missing_tick(t *testing.T) {
-	cmd := app.NewApp()
-	var output bytes.Buffer
-	cmd.SetOut(&output)
-	cmd.SetErr(&output)
-	cmd.SetArgs([]string{})
-
-	err := cmd.ExecuteContext(t.Context())
+	_, err := runRoot(t, "app")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "tick")
 }
 
 func setupFactory(t *testing.T, ids []int64) (repoDir string) {
 	t.Helper()
-	ctx := t.Context()
+	repoDir = initFactory(t)
+	mustRoot(t, "setup repo add --owner octo --name app")
+	for _, id := range ids {
+		text := fmt.Sprintf("%d", id)
+		addLine := "setup apps add --id " + text
+		mustRoot(t, addLine)
+		attachLine := "setup apps attach --owner octo --repo app --id " + text
+		mustRoot(t, attachLine)
+	}
+	commitConfig(t, repoDir)
+	useStateBranch(t, repoDir)
+	return
+}
+
+func initFactory(t *testing.T) (repoDir string) {
+	t.Helper()
 	repoDir = filepath.Join(JunkDir, t.Name())
 	err := os.RemoveAll(repoDir)
 	require.NoError(t, err)
 	err = os.MkdirAll(repoDir, 0755)
 	require.NoError(t, err)
-
 	_ = mustGit(t, repoDir, "init -b main")
 	_ = mustGit(t, repoDir, "config user.email test@example.com")
 	_ = mustGit(t, repoDir, "config user.name test")
-
-	configPath := filepath.Join(repoDir, "repos", owner, repoName, "config.db")
-	err = os.MkdirAll(filepath.Dir(configPath), 0755)
-	require.NoError(t, err)
-	configDB, err := configdb.OpenAndMigrate(ctx, configPath)
-	require.NoError(t, err)
-	for _, id := range ids {
-		err = configDB.Queries.CreateGithubApp(ctx, id)
-		require.NoError(t, err)
-	}
-	err = configDB.Close()
-	require.NoError(t, err)
-	configRel := filepath.Join("repos", owner, repoName, "config.db")
-	addLine := fmt.Sprintf("add %s", configRel)
-	_ = mustGit(t, repoDir, addLine)
-	_ = mustGit(t, repoDir, "commit -m config")
-
-	_ = mustGit(t, repoDir, "checkout -b state")
-	statePath := filepath.Join(repoDir, "repos", owner, repoName, "state.db")
-	stateDB, err := statedb.Open(ctx, statePath)
-	require.NoError(t, err)
-	err = stateDB.Close()
-	require.NoError(t, err)
-	stateRel := filepath.Join("repos", owner, repoName, "state.db")
-	stateLine := fmt.Sprintf("add %s", stateRel)
-	_ = mustGit(t, repoDir, stateLine)
-	_ = mustGit(t, repoDir, "commit -m state")
-	_ = mustGit(t, repoDir, "checkout main")
+	_ = mustGit(t, repoDir, "commit --allow-empty -m init")
+	t.Chdir(repoDir)
 	return
 }
 
-func storeApp(t *testing.T, repoDir string, id int64, client string, installationID int64) {
+func commitConfig(t *testing.T, repoDir string) {
 	t.Helper()
-	_ = mustGit(t, repoDir, "checkout state")
-	path := filepath.Join(repoDir, "repos", owner, repoName, "state.db")
-	db, err := statedb.Open(t.Context(), path)
+	_ = mustGit(t, repoDir, "add -A")
+	_ = mustGit(t, repoDir, "commit -m config")
+}
+
+func useStateBranch(t *testing.T, repoDir string) {
+	t.Helper()
+	_ = mustGit(t, repoDir, "checkout -b state")
+	_ = mustGit(t, repoDir, "checkout main")
+}
+
+func dropConfigApp(t *testing.T, repoDir string) {
+	t.Helper()
+	path := filepath.Join(repoDir, "repos", owner, repoName, "config.db")
+	db, err := configdb.OpenAndMigrate(t.Context(), path)
 	require.NoError(t, err)
-	params := records.CreateGithubAppParams{
-		AppID:          id,
-		ClientID:       client,
-		InstallationID: installationID,
-	}
-	err = db.Queries.CreateGithubApp(t.Context(), params)
+	_, err = db.DB.ExecContext(t.Context(), `DELETE FROM github_app`)
 	require.NoError(t, err)
 	err = db.Close()
 	require.NoError(t, err)
-	rel := filepath.Join("repos", owner, repoName, "state.db")
+	rel := filepath.Join("repos", owner, repoName, "config.db")
 	addLine := fmt.Sprintf("add %s", rel)
 	_ = mustGit(t, repoDir, addLine)
-	_ = mustGit(t, repoDir, "commit -m app")
-	_ = mustGit(t, repoDir, "checkout main")
+	_ = mustGit(t, repoDir, "commit -m config")
 }
 
 func runTick(t *testing.T, repoDir string) (id string) {
 	t.Helper()
-	cmd := tick.NewTick()
-	var output bytes.Buffer
-	cmd.SetOut(&output)
-	cmd.SetErr(&output)
 	t.Chdir(repoDir)
-
-	err := cmd.ExecuteContext(t.Context())
-	require.NoError(t, err)
-	id = strings.TrimSpace(output.String())
+	stdout := mustRoot(t, "tick")
+	id = strings.TrimSpace(stdout)
 	require.NotEmpty(t, id)
 	return
 }
 
 func runApp(t *testing.T, repoDir string, id string) (err error) {
 	t.Helper()
-	cmd := app.NewApp()
-	var output bytes.Buffer
-	cmd.SetOut(&output)
-	cmd.SetErr(&output)
 	t.Chdir(repoDir)
-	cmd.SetArgs([]string{"--tick", id})
-	err = cmd.ExecuteContext(t.Context())
+	line := fmt.Sprintf("app --tick %s", id)
+	_, err = runRoot(t, line)
+	return
+}
+
+func runRoot(t *testing.T, line string) (stdout string, err error) {
+	t.Helper()
+	command := root.NewRoot()
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	command.SetOut(&out)
+	command.SetErr(&errOut)
+	wrapped := commands.NewCmd(command)
+	err = wrapped.Shell(t.Context(), line)
+	stdout = out.String()
+	return
+}
+
+func mustRoot(t *testing.T, line string) (stdout string) {
+	t.Helper()
+	stdout, err := runRoot(t, line)
+	require.NoError(t, err)
 	return
 }
 

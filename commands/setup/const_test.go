@@ -1,4 +1,4 @@
-package setup
+package setup_test
 
 import (
 	"os"

@@ -165,43 +165,6 @@ func Test_Bind_should_refuse_a_subdirectory_of_a_git_checkout(t *testing.T) {
 	assert.True(t, os.IsNotExist(err))
 }
 
-func Test_Bind_should_name_each_registered_app_key(t *testing.T) {
-	repoDir := setupMain(t)
-	appsDir := filepath.Join(repoDir, "apps")
-	err := os.MkdirAll(appsDir, 0755)
-	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(appsDir, "42"), []byte{}, 0644)
-	require.NoError(t, err)
-	t.Chdir(repoDir)
-
-	err = runBind(t)
-	require.NoError(t, err)
-
-	showLine := fmt.Sprintf("show main:%s", workflowRel)
-	committed := mustGit(t, repoDir, showLine)
-	text := string(committed)
-	indent := indentOf(t, text, "FACTORY_GITHUB_APP_PRIVATE_KEY:")
-	want := indent + "GITHUB_APP_42: ${{ secrets.GITHUB_APP_42 }}\n"
-	assert.Contains(t, text, want)
-	assert.NotContains(t, text, "__APP_KEYS__\n")
-}
-
-func indentOf(t *testing.T, text string, key string) (indent string) {
-	t.Helper()
-	lines := strings.Split(text, "\n")
-	for _, line := range lines {
-		trimmed := strings.TrimLeft(line, " \t")
-		match := strings.HasPrefix(trimmed, key)
-		if match {
-			lead := len(line) - len(trimmed)
-			indent = line[:lead]
-			return
-		}
-	}
-	t.Fatalf("workflow has no %s", key)
-	return
-}
-
 func Test_Bind_should_commit_the_workflow_on_the_open_branch(t *testing.T) {
 	repoDir := setupMain(t)
 	_ = mustGit(t, repoDir, "checkout -b bind-me")

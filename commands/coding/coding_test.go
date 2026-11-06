@@ -12,11 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/wiremock/go-wiremock"
 
-	"github.com/TigranOhanyan/gh-gcf/commands/coding"
-	"github.com/TigranOhanyan/gh-gcf/commands/compile"
-	"github.com/TigranOhanyan/gh-gcf/commands/tick"
-	"github.com/TigranOhanyan/gh-gcf/configdb"
-	configrecords "github.com/TigranOhanyan/gh-gcf/configdb/records"
+	"github.com/TigranOhanyan/gh-gcf/commands"
+	"github.com/TigranOhanyan/gh-gcf/commands/root"
 	"github.com/TigranOhanyan/gh-gcf/statedb"
 	"github.com/TigranOhanyan/gh-gcf/statedb/records"
 )
@@ -168,20 +165,26 @@ func Test_Builder_should_reject_a_failed_create(t *testing.T) {
 }
 
 func Test_Builder_should_require_a_tick_id(t *testing.T) {
-	cmd := coding.NewCoding()
-	var output bytes.Buffer
-	cmd.SetOut(&output)
-	cmd.SetErr(&output)
-	cmd.SetArgs([]string{})
-
-	err := cmd.ExecuteContext(t.Context())
+	_, err := runRoot(t, "coding")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "tick")
 }
 
 func setupFactory(t *testing.T, text string) (repoDir string) {
 	t.Helper()
-	ctx := t.Context()
+	repoDir = initFactory(t)
+	mustRoot(t, "setup repo add --owner octo --name app")
+	mustRoot(t, "setup label add --owner octo --repo app --name todo --color ededed")
+	mustRoot(t, "setup label add --owner octo --repo app --name attention --color ededed")
+	mustRoot(t, "setup member add-builder --owner octo --repo app --name features --starting todo --attention attention")
+	writeInstruction(t, repoDir, "features", text)
+	commitConfig(t, repoDir)
+	useStateBranch(t, repoDir)
+	return
+}
+
+func initFactory(t *testing.T) (repoDir string) {
+	t.Helper()
 	repoDir = filepath.Join(JunkDir, t.Name())
 	err := os.RemoveAll(repoDir)
 	require.NoError(t, err)
@@ -190,48 +193,21 @@ func setupFactory(t *testing.T, text string) (repoDir string) {
 	_ = mustGit(t, repoDir, "init -b main")
 	_ = mustGit(t, repoDir, "config user.email test@example.com")
 	_ = mustGit(t, repoDir, "config user.name test")
-
-	configPath := filepath.Join(repoDir, "repos", owner, repoName, "config.db")
-	err = os.MkdirAll(filepath.Dir(configPath), 0755)
-	require.NoError(t, err)
-	configDB, err := configdb.OpenAndMigrate(ctx, configPath)
-	require.NoError(t, err)
-	err = configDB.Queries.CreateLabel(ctx, configrecords.CreateLabelParams{Name: "todo", Color: "ededed"})
-	require.NoError(t, err)
-	err = configDB.Queries.CreateLabel(ctx, configrecords.CreateLabelParams{Name: "attention", Color: "ededed"})
-	require.NoError(t, err)
-	err = configDB.Queries.CreateMember(ctx, configrecords.CreateMemberParams{
-		Name:           "features",
-		Role:           "builder",
-		AttentionLabel: "attention",
-	})
-	require.NoError(t, err)
-	err = configDB.Queries.CreateBuilderMember(ctx, configrecords.CreateBuilderMemberParams{
-		Name:          "features",
-		StartingLabel: "todo",
-	})
-	require.NoError(t, err)
-	err = configDB.Close()
-	require.NoError(t, err)
-	writeInstruction(t, repoDir, "features", text)
-	configRel := filepath.Join("repos", owner, repoName, "config.db")
-	membersRel := filepath.Join("repos", owner, repoName, "members")
-	addLine := fmt.Sprintf("add %s %s", configRel, membersRel)
-	_ = mustGit(t, repoDir, addLine)
-	_ = mustGit(t, repoDir, "commit -m config")
-
-	_ = mustGit(t, repoDir, "checkout -b state")
-	statePath := filepath.Join(repoDir, "repos", owner, repoName, "state.db")
-	stateDB, err := statedb.Open(ctx, statePath)
-	require.NoError(t, err)
-	err = stateDB.Close()
-	require.NoError(t, err)
-	stateRel := filepath.Join("repos", owner, repoName, "state.db")
-	stateLine := fmt.Sprintf("add %s", stateRel)
-	_ = mustGit(t, repoDir, stateLine)
-	_ = mustGit(t, repoDir, "commit -m state")
-	_ = mustGit(t, repoDir, "checkout main")
+	_ = mustGit(t, repoDir, "commit --allow-empty -m init")
+	t.Chdir(repoDir)
 	return
+}
+
+func commitConfig(t *testing.T, repoDir string) {
+	t.Helper()
+	_ = mustGit(t, repoDir, "add -A")
+	_ = mustGit(t, repoDir, "commit -m config")
+}
+
+func useStateBranch(t *testing.T, repoDir string) {
+	t.Helper()
+	_ = mustGit(t, repoDir, "checkout -b state")
+	_ = mustGit(t, repoDir, "checkout main")
 }
 
 func writeInstruction(t *testing.T, repoDir string, name string, text string) {
@@ -245,40 +221,47 @@ func writeInstruction(t *testing.T, repoDir string, name string, text string) {
 
 func runTick(t *testing.T, repoDir string) (id string) {
 	t.Helper()
-	cmd := tick.NewTick()
-	var output bytes.Buffer
-	cmd.SetOut(&output)
-	cmd.SetErr(&output)
 	t.Chdir(repoDir)
-	err := cmd.ExecuteContext(t.Context())
-	require.NoError(t, err)
-	id = strings.TrimSpace(output.String())
+	stdout := mustRoot(t, "tick")
+	id = strings.TrimSpace(stdout)
 	require.NotEmpty(t, id)
 	return
 }
 
 func runCompile(t *testing.T, repoDir string, id string) (err error) {
 	t.Helper()
-	cmd := compile.NewCompile()
-	var output bytes.Buffer
-	cmd.SetOut(&output)
-	cmd.SetErr(&output)
 	t.Chdir(repoDir)
-	cmd.SetArgs([]string{"--tick", id})
-	err = cmd.ExecuteContext(t.Context())
+	line := fmt.Sprintf("compile_coding --tick %s", id)
+	_, err = runRoot(t, line)
 	return
 }
 
 func runBuilder(t *testing.T, repoDir string, id string) (err error) {
 	t.Helper()
 	t.Setenv("GH_TOKEN", token)
-	cmd := coding.NewCoding()
-	var output bytes.Buffer
-	cmd.SetOut(&output)
-	cmd.SetErr(&output)
 	t.Chdir(repoDir)
-	cmd.SetArgs([]string{"--tick", id})
-	err = cmd.ExecuteContext(t.Context())
+	line := fmt.Sprintf("coding --tick %s", id)
+	_, err = runRoot(t, line)
+	return
+}
+
+func runRoot(t *testing.T, line string) (stdout string, err error) {
+	t.Helper()
+	command := root.NewRoot()
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	command.SetOut(&out)
+	command.SetErr(&errOut)
+	wrapped := commands.NewCmd(command)
+	err = wrapped.Shell(t.Context(), line)
+	stdout = out.String()
+	return
+}
+
+func mustRoot(t *testing.T, line string) (stdout string) {
+	t.Helper()
+	stdout, err := runRoot(t, line)
+	require.NoError(t, err)
 	return
 }
 

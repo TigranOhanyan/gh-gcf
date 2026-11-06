@@ -1,4 +1,4 @@
-package tick
+package tick_test
 
 import (
 	"os"

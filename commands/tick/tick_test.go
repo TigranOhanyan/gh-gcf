@@ -1,4 +1,4 @@
-package tick
+package tick_test
 
 import (
 	"bytes"
@@ -13,7 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/TigranOhanyan/gh-gcf/configdb"
+	"github.com/TigranOhanyan/gh-gcf/commands"
+	"github.com/TigranOhanyan/gh-gcf/commands/root"
 	"github.com/TigranOhanyan/gh-gcf/statedb"
 	"github.com/TigranOhanyan/gh-gcf/statedb/records"
 )
@@ -102,13 +103,8 @@ func Test_Tick_should_store_the_same_tick_in_each_repo(t *testing.T) {
 func runTick(t *testing.T, repoDir string) (id string) {
 	t.Helper()
 	t.Chdir(repoDir)
-	cmd := NewTick()
-	var output bytes.Buffer
-	cmd.SetOut(&output)
-	cmd.SetErr(&output)
-	err := cmd.ExecuteContext(t.Context())
-	require.NoError(t, err)
-	id = strings.TrimSpace(output.String())
+	stdout := mustRoot(t, "tick")
+	id = strings.TrimSpace(stdout)
 	require.NotEmpty(t, id)
 	return
 }
@@ -128,46 +124,54 @@ func setupFactory(t *testing.T) (repoDir string) {
 
 func setupRepos(t *testing.T, apps []appSetup) (repoDir string) {
 	t.Helper()
-	ctx := t.Context()
+	repoDir = initFactory(t)
+	for _, app := range apps {
+		line := fmt.Sprintf("setup repo add --owner %s --name %s", app.owner, app.name)
+		mustRoot(t, line)
+	}
+	commitConfig(t, repoDir)
+	useStateBranch(t, repoDir)
+	return
+}
+
+func initFactory(t *testing.T) (repoDir string) {
+	t.Helper()
 	repoDir = filepath.Join(JunkDir, t.Name())
 	err := os.RemoveAll(repoDir)
 	require.NoError(t, err)
 	err = os.MkdirAll(repoDir, 0755)
 	require.NoError(t, err)
-
 	_ = mustGit(t, repoDir, "init -b main")
 	_ = mustGit(t, repoDir, "config user.email test@example.com")
 	_ = mustGit(t, repoDir, "config user.name test")
+	_ = mustGit(t, repoDir, "commit --allow-empty -m init")
+	t.Chdir(repoDir)
+	return
+}
 
-	for _, app := range apps {
-		configPath := filepath.Join(repoDir, "repos", app.owner, app.name, "config.db")
-		configDir := filepath.Dir(configPath)
-		err = os.MkdirAll(configDir, 0755)
-		require.NoError(t, err)
-		configDB, openErr := configdb.OpenAndMigrate(ctx, configPath)
-		require.NoError(t, openErr)
-		err = configDB.Close()
-		require.NoError(t, err)
-		configRel := filepath.Join("repos", app.owner, app.name, "config.db")
-		addLine := fmt.Sprintf("add %s", configRel)
-		_ = mustGit(t, repoDir, addLine)
-	}
+func commitConfig(t *testing.T, repoDir string) {
+	t.Helper()
+	_ = mustGit(t, repoDir, "add -A")
 	_ = mustGit(t, repoDir, "commit -m config")
+}
 
+func useStateBranch(t *testing.T, repoDir string) {
+	t.Helper()
 	_ = mustGit(t, repoDir, "checkout -b state")
-	for _, app := range apps {
-		statePath := filepath.Join(repoDir, "repos", app.owner, app.name, "state.db")
-		stateDB, openErr := statedb.Open(ctx, statePath)
-		require.NoError(t, openErr)
-		err = stateDB.Close()
-		require.NoError(t, err)
-		stateRel := filepath.Join("repos", app.owner, app.name, "state.db")
-		stateLine := fmt.Sprintf("add %s", stateRel)
-		_ = mustGit(t, repoDir, stateLine)
-	}
-	_ = mustGit(t, repoDir, "commit -m state")
-
 	_ = mustGit(t, repoDir, "checkout main")
+}
+
+func mustRoot(t *testing.T, line string) (stdout string) {
+	t.Helper()
+	command := root.NewRoot()
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	command.SetOut(&out)
+	command.SetErr(&errOut)
+	wrapped := commands.NewCmd(command)
+	err := wrapped.Shell(t.Context(), line)
+	require.NoError(t, err)
+	stdout = out.String()
 	return
 }
 
