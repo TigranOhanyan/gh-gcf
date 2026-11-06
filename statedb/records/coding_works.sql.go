@@ -70,7 +70,7 @@ func (q *Queries) CreateIssue(ctx context.Context, arg CreateIssueParams) error 
 }
 
 const getCodingWorkByIssue = `-- name: GetCodingWorkByIssue :one
-SELECT id, issue_number, builder_name, pull_request_number, head_sha
+SELECT id, issue_number, builder_name, pull_request_number, builder_head_sha, fixer_head_sha, status
 FROM coding_work WHERE issue_number = ?
 `
 
@@ -82,7 +82,9 @@ func (q *Queries) GetCodingWorkByIssue(ctx context.Context, issueNumber int64) (
 		&i.IssueNumber,
 		&i.BuilderName,
 		&i.PullRequestNumber,
-		&i.HeadSha,
+		&i.BuilderHeadSha,
+		&i.FixerHeadSha,
+		&i.Status,
 	)
 	return i, err
 }
@@ -148,7 +150,7 @@ func (q *Queries) ListBuilderAgents(ctx context.Context) ([]BuilderAgent, error)
 }
 
 const listCodingWorks = `-- name: ListCodingWorks :many
-SELECT id, issue_number, builder_name, pull_request_number, head_sha
+SELECT id, issue_number, builder_name, pull_request_number, builder_head_sha, fixer_head_sha, status
 FROM coding_work ORDER BY issue_number
 `
 
@@ -166,7 +168,9 @@ func (q *Queries) ListCodingWorks(ctx context.Context) ([]CodingWork, error) {
 			&i.IssueNumber,
 			&i.BuilderName,
 			&i.PullRequestNumber,
-			&i.HeadSha,
+			&i.BuilderHeadSha,
+			&i.FixerHeadSha,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}

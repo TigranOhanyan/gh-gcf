@@ -32,7 +32,9 @@ type CodingWork struct {
 	IssueNumber       int64          `json:"issue_number"`
 	BuilderName       string         `json:"builder_name"`
 	PullRequestNumber sql.NullInt64  `json:"pull_request_number"`
-	HeadSha           sql.NullString `json:"head_sha"`
+	BuilderHeadSha    sql.NullString `json:"builder_head_sha"`
+	FixerHeadSha      sql.NullString `json:"fixer_head_sha"`
+	Status            string         `json:"status"`
 }
 
 type Event struct {
