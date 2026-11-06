@@ -61,7 +61,7 @@ jobs:
 
           gh gcf app --tick "${tick_id}"
           gh gcf label --tick "${tick_id}"
-          gh gcf compile_coding --tick "${tick_id}"
+          gh gcf compile coding --tick "${tick_id}"
           gh gcf coding --tick "${tick_id}"
 
           git push origin state

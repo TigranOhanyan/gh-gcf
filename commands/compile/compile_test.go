@@ -212,7 +212,7 @@ func Test_Compile_should_fail_when_the_instruction_is_missing(t *testing.T) {
 }
 
 func Test_Compile_should_require_a_tick_id(t *testing.T) {
-	_, err := runRoot(t, "compile_coding")
+	_, err := runRoot(t, "compile coding")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "tick")
 }
@@ -376,7 +376,7 @@ func runTick(t *testing.T, repoDir string) (id string) {
 func runCompile(t *testing.T, repoDir string, id string) (err error) {
 	t.Helper()
 	t.Chdir(repoDir)
-	line := fmt.Sprintf("compile_coding --tick %s", id)
+	line := fmt.Sprintf("compile coding --tick %s", id)
 	stdout, err := runRoot(t, line)
 	if err == nil {
 		assert.Empty(t, stdout)

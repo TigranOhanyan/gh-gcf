@@ -60,20 +60,20 @@ gh gcf setup member add-builder --owner octo --repo app --name features --starti
 gh gcf setup check add --owner octo --repo app --builder features --name "ci / unit"
 ```
 
-The scheduled workflow records a tick, then runs `app`, `label`, `compile_coding`, and `coding`, then pushes state. `app` checks each App ID configured for a repo. When that App is installed there, it records the client id and the installation id. A missing or suspended installation stops the step. `label` creates a configured label the app repo does not yet have.
+The scheduled workflow records a tick, then runs `app`, `label`, `compile coding`, and `coding`, then pushes state. `app` checks each App ID configured for a repo. When that App is installed there, it records the client id and the installation id. A missing or suspended installation stops the step. `label` creates a configured label the app repo does not yet have.
 
 From the factory checkout, after `gh gcf tick` prints an id:
 
 ```shell
 gh gcf app --tick <id>
 gh gcf label --tick <id>
-gh gcf compile_coding --tick <id>
+gh gcf compile coding --tick <id>
 gh gcf coding --tick <id>
 ```
 
 ## Coding
 
-`compile_coding` copies the coding flow into that repo's state: each builder, its reviewers, its fixer, and its checks. It stores the SHA-256 of each instruction file, including an empty file. A missing instruction file stops the step.
+`compile coding` copies the coding flow into that repo's state: each builder, its reviewers, its fixer, and its checks. It stores the SHA-256 of each instruction file, including an empty file. A missing instruction file stops the step.
 
 `coding` reads those builders in name order. It hashes each instruction file again. When the hash differs from the one compile stored, that builder waits for the next tick, and the other builders still start. When the hashes match, it looks for open issues that carry the builder's starting label.
 

@@ -231,7 +231,7 @@ func runTick(t *testing.T, repoDir string) (id string) {
 func runCompile(t *testing.T, repoDir string, id string) (err error) {
 	t.Helper()
 	t.Chdir(repoDir)
-	line := fmt.Sprintf("compile_coding --tick %s", id)
+	line := fmt.Sprintf("compile coding --tick %s", id)
 	_, err = runRoot(t, line)
 	return
 }

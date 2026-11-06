@@ -11,12 +11,22 @@ import (
 )
 
 func NewCompile() (cmd *cobra.Command) {
+	cmd = &cobra.Command{
+		Use:   "compile",
+		Short: "Copy a flow from config into state",
+	}
+	coding := newCompileCoding()
+	cmd.AddCommand(coding)
+	return
+}
+
+func newCompileCoding() (cmd *cobra.Command) {
 	var configBranch string
 	var stateBranch string
 	var tickID string
 
 	cmd = &cobra.Command{
-		Use:   "compile_coding",
+		Use:   "coding",
 		Short: "Record the coding flow in state",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) (err error) {
