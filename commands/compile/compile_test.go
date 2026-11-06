@@ -41,10 +41,10 @@ func Test_Compile_should_record_a_builder_and_its_members(t *testing.T) {
 	err := runCompile(t, repoDir, id)
 	require.NoError(t, err)
 
-	subject := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
+	subject := mustGit(t, repoDir, "log -1 --format=%s state")
 	expectedSubject := fmt.Sprintf("✅ [%s] [compile_coding] [octo/app]", id)
 	assert.Equal(t, expectedSubject, strings.TrimSpace(string(subject)))
-	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
 	expectedBody := strings.Join([]string{
 		"✅ [features] recorded",
 		"✅ [standards] recorded",
@@ -98,7 +98,7 @@ func Test_Compile_should_leave_an_unchanged_builder(t *testing.T) {
 	err = runCompile(t, repoDir, id)
 	require.NoError(t, err)
 
-	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
 	assert.Empty(t, strings.TrimSpace(string(body)))
 	db := openStateTip(t, repoDir)
 	defer db.Close()
@@ -123,7 +123,7 @@ func Test_Compile_should_update_a_changed_attention_label(t *testing.T) {
 	err = runCompile(t, repoDir, id)
 	require.NoError(t, err)
 
-	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
 	assert.Equal(t, "✅ [features] updated", strings.TrimSpace(string(body)))
 	db := openStateTip(t, repoDir)
 	defer db.Close()
@@ -148,7 +148,7 @@ func Test_Compile_should_keep_a_member_config_no_longer_has(t *testing.T) {
 	err = runCompile(t, repoDir, id)
 	require.NoError(t, err)
 
-	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
 	assert.Empty(t, strings.TrimSpace(string(body)))
 	db := openStateTip(t, repoDir)
 	defer db.Close()
@@ -171,13 +171,14 @@ func Test_Compile_should_update_a_changed_instruction(t *testing.T) {
 	require.NoError(t, err)
 	writeInstruction(t, repoDir, "features", "Build it.")
 	rel := filepath.Join("repos", owner, repoName, "members", "features.md")
-	_ = mustGit(t, repoDir, "add", rel)
-	_ = mustGit(t, repoDir, "commit", "-m", "instruction")
+	addLine := fmt.Sprintf("add %s", rel)
+	_ = mustGit(t, repoDir, addLine)
+	_ = mustGit(t, repoDir, "commit -m instruction")
 
 	err = runCompile(t, repoDir, id)
 	require.NoError(t, err)
 
-	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
 	assert.Equal(t, "✅ [features] updated", strings.TrimSpace(string(body)))
 	db := openStateTip(t, repoDir)
 	defer db.Close()
@@ -197,8 +198,9 @@ func Test_Compile_should_fail_when_the_instruction_is_missing(t *testing.T) {
 	rel := filepath.Join("repos", owner, repoName, "members", "features.md")
 	err := os.Remove(filepath.Join(repoDir, rel))
 	require.NoError(t, err)
-	_ = mustGit(t, repoDir, "add", rel)
-	_ = mustGit(t, repoDir, "commit", "-m", "remove instruction")
+	addLine := fmt.Sprintf("add %s", rel)
+	_ = mustGit(t, repoDir, addLine)
+	_ = mustGit(t, repoDir, `commit -m "remove instruction"`)
 
 	err = runCompile(t, repoDir, id)
 	require.Error(t, err)
@@ -254,9 +256,9 @@ func setupFactory(t *testing.T, spec builderSpec) (repoDir string) {
 	err = os.MkdirAll(repoDir, 0755)
 	require.NoError(t, err)
 
-	_ = mustGit(t, repoDir, "init", "-b", "main")
-	_ = mustGit(t, repoDir, "config", "user.email", "test@example.com")
-	_ = mustGit(t, repoDir, "config", "user.name", "test")
+	_ = mustGit(t, repoDir, "init -b main")
+	_ = mustGit(t, repoDir, "config user.email test@example.com")
+	_ = mustGit(t, repoDir, "config user.name test")
 
 	configPath := filepath.Join(repoDir, "repos", owner, repoName, "config.db")
 	err = os.MkdirAll(filepath.Dir(configPath), 0755)
@@ -275,19 +277,21 @@ func setupFactory(t *testing.T, spec builderSpec) (repoDir string) {
 	}
 	configRel := filepath.Join("repos", owner, repoName, "config.db")
 	membersRel := filepath.Join("repos", owner, repoName, "members")
-	_ = mustGit(t, repoDir, "add", configRel, membersRel)
-	_ = mustGit(t, repoDir, "commit", "-m", "config")
+	addLine := fmt.Sprintf("add %s %s", configRel, membersRel)
+	_ = mustGit(t, repoDir, addLine)
+	_ = mustGit(t, repoDir, "commit -m config")
 
-	_ = mustGit(t, repoDir, "checkout", "-b", "state")
+	_ = mustGit(t, repoDir, "checkout -b state")
 	statePath := filepath.Join(repoDir, "repos", owner, repoName, "state.db")
 	stateDB, err := statedb.Open(ctx, statePath)
 	require.NoError(t, err)
 	err = stateDB.Close()
 	require.NoError(t, err)
 	stateRel := filepath.Join("repos", owner, repoName, "state.db")
-	_ = mustGit(t, repoDir, "add", stateRel)
-	_ = mustGit(t, repoDir, "commit", "-m", "state")
-	_ = mustGit(t, repoDir, "checkout", "main")
+	stateLine := fmt.Sprintf("add %s", stateRel)
+	_ = mustGit(t, repoDir, stateLine)
+	_ = mustGit(t, repoDir, "commit -m state")
+	_ = mustGit(t, repoDir, "checkout main")
 	return
 }
 
@@ -394,8 +398,9 @@ func setAttention(t *testing.T, repoDir string, name string, attention string) {
 	err = db.Close()
 	require.NoError(t, err)
 	rel := filepath.Join("repos", owner, repoName, "config.db")
-	_ = mustGit(t, repoDir, "add", rel)
-	_ = mustGit(t, repoDir, "commit", "-m", "attention")
+	addLine := fmt.Sprintf("add %s", rel)
+	_ = mustGit(t, repoDir, addLine)
+	_ = mustGit(t, repoDir, "commit -m attention")
 }
 
 func clearMembers(t *testing.T, repoDir string) {
@@ -417,8 +422,9 @@ func clearMembers(t *testing.T, repoDir string) {
 	err = db.Close()
 	require.NoError(t, err)
 	rel := filepath.Join("repos", owner, repoName, "config.db")
-	_ = mustGit(t, repoDir, "add", rel)
-	_ = mustGit(t, repoDir, "commit", "-m", "clear members")
+	addLine := fmt.Sprintf("add %s", rel)
+	_ = mustGit(t, repoDir, addLine)
+	_ = mustGit(t, repoDir, `commit -m "clear members"`)
 }
 
 func runTick(t *testing.T, repoDir string) (id string) {
@@ -455,7 +461,8 @@ func openStateTip(t *testing.T, repoDir string) (db *statedb.DB) {
 	t.Helper()
 	tipPath := filepath.Join(JunkDir, t.Name()+"-state-tip.db")
 	spec := "state:repos/" + owner + "/" + repoName + "/state.db"
-	blob := mustGit(t, repoDir, "show", spec)
+	showLine := fmt.Sprintf("show %s", spec)
+	blob := mustGit(t, repoDir, showLine)
 	err := os.WriteFile(tipPath, blob, 0644)
 	require.NoError(t, err)
 	db, err = statedb.Open(t.Context(), tipPath)

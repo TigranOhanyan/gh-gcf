@@ -43,10 +43,10 @@ func Test_Label_should_create_a_missing_label(t *testing.T) {
 	startOfCheck := time.Now().Add(time.Second)
 
 	requirePost(t, "todo", "ededed", token, 1)
-	subject := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
+	subject := mustGit(t, repoDir, "log -1 --format=%s state")
 	expectedSubject := fmt.Sprintf("✅ [%s] [label] [octo/app]", id)
 	assert.Equal(t, expectedSubject, strings.TrimSpace(string(subject)))
-	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
 	assert.Equal(t, "✅ [todo] created", strings.TrimSpace(string(body)))
 
 	rows := labelsAtTip(t, repoDir)
@@ -76,10 +76,10 @@ func Test_Label_should_record_a_label_that_already_exists(t *testing.T) {
 	startOfCheck := time.Now().Add(time.Second)
 
 	requirePost(t, "todo", "ededed", token, 0)
-	subject := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
+	subject := mustGit(t, repoDir, "log -1 --format=%s state")
 	expectedSubject := fmt.Sprintf("✅ [%s] [label] [octo/app]", id)
 	assert.Equal(t, expectedSubject, strings.TrimSpace(string(subject)))
-	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
 	assert.Empty(t, strings.TrimSpace(string(body)))
 
 	rows := labelsAtTip(t, repoDir)
@@ -122,10 +122,10 @@ func Test_Label_should_keep_the_row_when_create_fails(t *testing.T) {
 	err := runLabel(t, repoDir, id, token)
 	require.Error(t, err)
 
-	subject := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
+	subject := mustGit(t, repoDir, "log -1 --format=%s state")
 	expectedSubject := fmt.Sprintf("❌ [%s] [label] [octo/app]", id)
 	assert.Equal(t, expectedSubject, strings.TrimSpace(string(subject)))
-	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
 	bodyText := strings.TrimSpace(string(body))
 	assert.Contains(t, bodyText, "❌ [todo]")
 	assert.Contains(t, bodyText, "Validation Failed")
@@ -180,7 +180,7 @@ func Test_Label_should_stop_after_the_first_create_error(t *testing.T) {
 	err := runLabel(t, repoDir, id, token)
 	require.Error(t, err)
 
-	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
 	bodyText := strings.TrimSpace(string(body))
 	assert.Contains(t, bodyText, "✅ [alpha] created")
 	assert.Contains(t, bodyText, "❌ [beta]")
@@ -205,7 +205,7 @@ func Test_Label_should_stop_when_the_label_lookup_fails(t *testing.T) {
 
 	rows := labelsAtTip(t, repoDir)
 	assert.Empty(t, rows)
-	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
 	assert.Contains(t, string(body), "❌ [todo]")
 	assert.Contains(t, string(body), "Bad credentials")
 }
@@ -218,10 +218,10 @@ func Test_Label_should_commit_when_config_has_no_labels(t *testing.T) {
 	err := runLabel(t, repoDir, id, token)
 	require.NoError(t, err)
 
-	subject := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
+	subject := mustGit(t, repoDir, "log -1 --format=%s state")
 	expectedSubject := fmt.Sprintf("✅ [%s] [label] [octo/app]", id)
 	assert.Equal(t, expectedSubject, strings.TrimSpace(string(subject)))
-	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
 	assert.Empty(t, strings.TrimSpace(string(body)))
 	requests, err := wiremockClient.GetAllRequests()
 	require.NoError(t, err)
@@ -303,10 +303,10 @@ func Test_Label_should_stop_when_the_token_exchange_fails(t *testing.T) {
 	requireGetCount(t, "todo", 0)
 	rows := labelsAtTip(t, repoDir)
 	assert.Empty(t, rows)
-	subject := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
+	subject := mustGit(t, repoDir, "log -1 --format=%s state")
 	expectedSubject := fmt.Sprintf("❌ [%s] [label] [octo/app]", id)
 	assert.Equal(t, expectedSubject, strings.TrimSpace(string(subject)))
-	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
 	assert.Contains(t, string(body), "Bad credentials")
 }
 
@@ -322,7 +322,7 @@ func Test_Label_should_refuse_an_app_id_without_a_private_key(t *testing.T) {
 	assert.Contains(t, err.Error(), "github app credentials are incomplete")
 	rows := labelsAtTip(t, repoDir)
 	assert.Empty(t, rows)
-	subject := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
+	subject := mustGit(t, repoDir, "log -1 --format=%s state")
 	expectedSubject := fmt.Sprintf("[%s] [tick] [octo/app] created", id)
 	assert.Equal(t, expectedSubject, strings.TrimSpace(string(subject)))
 }
@@ -353,9 +353,9 @@ func setupFactory(t *testing.T, labels []configLabel) (repoDir string) {
 	err = os.MkdirAll(repoDir, 0755)
 	require.NoError(t, err)
 
-	_ = mustGit(t, repoDir, "init", "-b", "main")
-	_ = mustGit(t, repoDir, "config", "user.email", "test@example.com")
-	_ = mustGit(t, repoDir, "config", "user.name", "test")
+	_ = mustGit(t, repoDir, "init -b main")
+	_ = mustGit(t, repoDir, "config user.email test@example.com")
+	_ = mustGit(t, repoDir, "config user.name test")
 
 	configPath := filepath.Join(repoDir, "repos", owner, repoName, "config.db")
 	err = os.MkdirAll(filepath.Dir(configPath), 0755)
@@ -373,19 +373,21 @@ func setupFactory(t *testing.T, labels []configLabel) (repoDir string) {
 	err = configDB.Close()
 	require.NoError(t, err)
 	configRel := filepath.Join("repos", owner, repoName, "config.db")
-	_ = mustGit(t, repoDir, "add", configRel)
-	_ = mustGit(t, repoDir, "commit", "-m", "config")
+	addLine := fmt.Sprintf("add %s", configRel)
+	_ = mustGit(t, repoDir, addLine)
+	_ = mustGit(t, repoDir, "commit -m config")
 
-	_ = mustGit(t, repoDir, "checkout", "-b", "state")
+	_ = mustGit(t, repoDir, "checkout -b state")
 	statePath := filepath.Join(repoDir, "repos", owner, repoName, "state.db")
 	stateDB, err := statedb.Open(ctx, statePath)
 	require.NoError(t, err)
 	err = stateDB.Close()
 	require.NoError(t, err)
 	stateRel := filepath.Join("repos", owner, repoName, "state.db")
-	_ = mustGit(t, repoDir, "add", stateRel)
-	_ = mustGit(t, repoDir, "commit", "-m", "state")
-	_ = mustGit(t, repoDir, "checkout", "main")
+	stateLine := fmt.Sprintf("add %s", stateRel)
+	_ = mustGit(t, repoDir, stateLine)
+	_ = mustGit(t, repoDir, "commit -m state")
+	_ = mustGit(t, repoDir, "checkout main")
 	return
 }
 
@@ -435,7 +437,8 @@ func openStateTip(t *testing.T, repoDir string) (db *statedb.DB) {
 	t.Helper()
 	tipPath := filepath.Join(JunkDir, t.Name()+"-state-tip.db")
 	spec := "state:repos/" + owner + "/" + repoName + "/state.db"
-	blob := mustGit(t, repoDir, "show", spec)
+	showLine := fmt.Sprintf("show %s", spec)
+	blob := mustGit(t, repoDir, showLine)
 	err := os.WriteFile(tipPath, blob, 0644)
 	require.NoError(t, err)
 	db, err = statedb.Open(t.Context(), tipPath)

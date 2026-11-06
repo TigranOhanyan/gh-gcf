@@ -33,7 +33,7 @@ func Test_Tick_should_commit_the_tick_subject_on_the_state_branch(t *testing.T) 
 	repoDir := setupFactory(t)
 	id := runTick(t, repoDir)
 
-	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
+	message := mustGit(t, repoDir, "log -1 --format=%s state")
 	expected := fmt.Sprintf("[%s] [tick] [octo/app] created", id)
 	assert.Equal(t, expected, strings.TrimSpace(string(message)))
 }
@@ -73,7 +73,7 @@ func Test_Tick_should_commit_once_for_each_repo(t *testing.T) {
 	repoDir := setupRepos(t, apps)
 	id := runTick(t, repoDir)
 
-	output := mustGit(t, repoDir, "log", "-2", "--format=%s", "state")
+	output := mustGit(t, repoDir, "log -2 --format=%s state")
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	require.Len(t, lines, 2)
 	appSubject := fmt.Sprintf("[%s] [tick] [octo/app] created", id)
@@ -135,9 +135,9 @@ func setupRepos(t *testing.T, apps []appSetup) (repoDir string) {
 	err = os.MkdirAll(repoDir, 0755)
 	require.NoError(t, err)
 
-	_ = mustGit(t, repoDir, "init", "-b", "main")
-	_ = mustGit(t, repoDir, "config", "user.email", "test@example.com")
-	_ = mustGit(t, repoDir, "config", "user.name", "test")
+	_ = mustGit(t, repoDir, "init -b main")
+	_ = mustGit(t, repoDir, "config user.email test@example.com")
+	_ = mustGit(t, repoDir, "config user.name test")
 
 	for _, app := range apps {
 		configPath := filepath.Join(repoDir, "repos", app.owner, app.name, "config.db")
@@ -149,11 +149,12 @@ func setupRepos(t *testing.T, apps []appSetup) (repoDir string) {
 		err = configDB.Close()
 		require.NoError(t, err)
 		configRel := filepath.Join("repos", app.owner, app.name, "config.db")
-		_ = mustGit(t, repoDir, "add", configRel)
+		addLine := fmt.Sprintf("add %s", configRel)
+		_ = mustGit(t, repoDir, addLine)
 	}
-	_ = mustGit(t, repoDir, "commit", "-m", "config")
+	_ = mustGit(t, repoDir, "commit -m config")
 
-	_ = mustGit(t, repoDir, "checkout", "-b", "state")
+	_ = mustGit(t, repoDir, "checkout -b state")
 	for _, app := range apps {
 		statePath := filepath.Join(repoDir, "repos", app.owner, app.name, "state.db")
 		stateDB, openErr := statedb.Open(ctx, statePath)
@@ -161,11 +162,12 @@ func setupRepos(t *testing.T, apps []appSetup) (repoDir string) {
 		err = stateDB.Close()
 		require.NoError(t, err)
 		stateRel := filepath.Join("repos", app.owner, app.name, "state.db")
-		_ = mustGit(t, repoDir, "add", stateRel)
+		stateLine := fmt.Sprintf("add %s", stateRel)
+		_ = mustGit(t, repoDir, stateLine)
 	}
-	_ = mustGit(t, repoDir, "commit", "-m", "state")
+	_ = mustGit(t, repoDir, "commit -m state")
 
-	_ = mustGit(t, repoDir, "checkout", "main")
+	_ = mustGit(t, repoDir, "checkout main")
 	return
 }
 
@@ -173,7 +175,8 @@ func ticksAtTip(t *testing.T, repoDir string, rel string) (rows []records.Tick) 
 	t.Helper()
 	tipPath := filepath.Join(JunkDir, t.Name()+"-state-tip.db")
 	spec := "state:" + filepath.ToSlash(rel) + "/state.db"
-	blob := mustGit(t, repoDir, "show", spec)
+	showLine := fmt.Sprintf("show %s", spec)
+	blob := mustGit(t, repoDir, showLine)
 	err := os.WriteFile(tipPath, blob, 0644)
 	require.NoError(t, err)
 

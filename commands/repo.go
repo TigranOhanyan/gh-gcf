@@ -251,7 +251,7 @@ func CommitSubject(id string, name string, repoName string, message string) (sub
 }
 
 func ensureCheckout(ctx context.Context, factoryDir string, branch string) (dir string, added bool, err error) {
-	list, err := Git(ctx, factoryDir, "worktree", "list", "--porcelain")
+	list, err := Git(ctx, factoryDir, "worktree list --porcelain")
 	if err != nil {
 		log.Error("list worktrees", "err", err)
 		return
@@ -263,7 +263,8 @@ func ensureCheckout(ctx context.Context, factoryDir string, branch string) (dir 
 	}
 
 	dir = filepath.Join(factoryDir, ".worktrees", branch)
-	_, err = Git(ctx, factoryDir, "worktree", "add", dir, branch)
+	addLine := "worktree add " + quoteWord(dir) + " " + quoteWord(branch)
+	_, err = Git(ctx, factoryDir, addLine)
 	if err != nil {
 		log.Error("add worktree", "branch", branch, "path", dir, "err", err)
 		return
@@ -274,7 +275,8 @@ func ensureCheckout(ctx context.Context, factoryDir string, branch string) (dir 
 }
 
 func removeWorktree(ctx context.Context, factoryDir string, worktreePath string) {
-	_, err := Git(ctx, factoryDir, "worktree", "remove", "--force", worktreePath)
+	removeLine := "worktree remove --force " + quoteWord(worktreePath)
+	_, err := Git(ctx, factoryDir, removeLine)
 	if err != nil {
 		log.Warn("remove worktree", "path", worktreePath, "err", err)
 	}
@@ -283,19 +285,20 @@ func removeWorktree(ctx context.Context, factoryDir string, worktreePath string)
 func commitState(ctx context.Context, stateDir string, rel string, commit StateCommit) (err error) {
 	statePath := filepath.Join(rel, "state.db")
 	stateFile := filepath.ToSlash(statePath)
-	_, err = Git(ctx, stateDir, "add", "--", stateFile)
+	addLine := "add -- " + quoteWord(stateFile)
+	_, err = Git(ctx, stateDir, addLine)
 	if err != nil {
 		log.Error("stage state", "dir", stateDir, "err", err)
 		return
 	}
 
-	args := []string{"commit", "--allow-empty", "-m", commit.Subject}
+	line := "commit --allow-empty -m " + quoteWord(commit.Subject)
 	hasBody := commit.Body != ""
 	if hasBody {
-		args = append(args, "-m", commit.Body)
+		line = line + " -m " + quoteWord(commit.Body)
 	}
-	args = append(args, "--", stateFile)
-	_, err = Git(ctx, stateDir, args...)
+	line = line + " -- " + quoteWord(stateFile)
+	_, err = Git(ctx, stateDir, line)
 	if err != nil {
 		log.Error("commit state", "dir", stateDir, "err", err)
 		return

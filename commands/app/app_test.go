@@ -41,10 +41,10 @@ func Test_App_should_record_an_installation(t *testing.T) {
 	require.NoError(t, err)
 
 	requireJWT(t, "GET", "/repos/octo/app/installation")
-	subject := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
+	subject := mustGit(t, repoDir, "log -1 --format=%s state")
 	expectedSubject := fmt.Sprintf("✅ [%s] [app] [octo/app]", id)
 	assert.Equal(t, expectedSubject, strings.TrimSpace(string(subject)))
-	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
 	assert.Equal(t, "✅ [123] recorded", strings.TrimSpace(string(body)))
 
 	rows := appsAtTip(t, repoDir)
@@ -69,7 +69,7 @@ func Test_App_should_leave_a_matching_installation(t *testing.T) {
 	err = runApp(t, repoDir, id)
 	require.NoError(t, err)
 
-	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
 	assert.Empty(t, strings.TrimSpace(string(body)))
 	rows := appsAtTip(t, repoDir)
 	require.Len(t, rows, 1)
@@ -92,7 +92,7 @@ func Test_App_should_update_a_changed_installation(t *testing.T) {
 	err = runApp(t, repoDir, id)
 	require.NoError(t, err)
 
-	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
 	assert.Equal(t, "✅ [123] installation updated", strings.TrimSpace(string(body)))
 	rows := appsAtTip(t, repoDir)
 	require.Len(t, rows, 1)
@@ -112,7 +112,7 @@ func Test_App_should_refuse_a_missing_installation(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "installation is missing")
 
-	subject := mustGit(t, repoDir, "log", "-1", "--format=%s", "state")
+	subject := mustGit(t, repoDir, "log -1 --format=%s state")
 	expectedSubject := fmt.Sprintf("❌ [%s] [app] [octo/app]", id)
 	assert.Equal(t, expectedSubject, strings.TrimSpace(string(subject)))
 	rows := appsAtTip(t, repoDir)
@@ -200,9 +200,9 @@ func setupFactory(t *testing.T, ids []int64) (repoDir string) {
 	err = os.MkdirAll(repoDir, 0755)
 	require.NoError(t, err)
 
-	_ = mustGit(t, repoDir, "init", "-b", "main")
-	_ = mustGit(t, repoDir, "config", "user.email", "test@example.com")
-	_ = mustGit(t, repoDir, "config", "user.name", "test")
+	_ = mustGit(t, repoDir, "init -b main")
+	_ = mustGit(t, repoDir, "config user.email test@example.com")
+	_ = mustGit(t, repoDir, "config user.name test")
 
 	configPath := filepath.Join(repoDir, "repos", owner, repoName, "config.db")
 	err = os.MkdirAll(filepath.Dir(configPath), 0755)
@@ -216,25 +216,27 @@ func setupFactory(t *testing.T, ids []int64) (repoDir string) {
 	err = configDB.Close()
 	require.NoError(t, err)
 	configRel := filepath.Join("repos", owner, repoName, "config.db")
-	_ = mustGit(t, repoDir, "add", configRel)
-	_ = mustGit(t, repoDir, "commit", "-m", "config")
+	addLine := fmt.Sprintf("add %s", configRel)
+	_ = mustGit(t, repoDir, addLine)
+	_ = mustGit(t, repoDir, "commit -m config")
 
-	_ = mustGit(t, repoDir, "checkout", "-b", "state")
+	_ = mustGit(t, repoDir, "checkout -b state")
 	statePath := filepath.Join(repoDir, "repos", owner, repoName, "state.db")
 	stateDB, err := statedb.Open(ctx, statePath)
 	require.NoError(t, err)
 	err = stateDB.Close()
 	require.NoError(t, err)
 	stateRel := filepath.Join("repos", owner, repoName, "state.db")
-	_ = mustGit(t, repoDir, "add", stateRel)
-	_ = mustGit(t, repoDir, "commit", "-m", "state")
-	_ = mustGit(t, repoDir, "checkout", "main")
+	stateLine := fmt.Sprintf("add %s", stateRel)
+	_ = mustGit(t, repoDir, stateLine)
+	_ = mustGit(t, repoDir, "commit -m state")
+	_ = mustGit(t, repoDir, "checkout main")
 	return
 }
 
 func storeApp(t *testing.T, repoDir string, id int64, client string, installationID int64) {
 	t.Helper()
-	_ = mustGit(t, repoDir, "checkout", "state")
+	_ = mustGit(t, repoDir, "checkout state")
 	path := filepath.Join(repoDir, "repos", owner, repoName, "state.db")
 	db, err := statedb.Open(t.Context(), path)
 	require.NoError(t, err)
@@ -248,9 +250,10 @@ func storeApp(t *testing.T, repoDir string, id int64, client string, installatio
 	err = db.Close()
 	require.NoError(t, err)
 	rel := filepath.Join("repos", owner, repoName, "state.db")
-	_ = mustGit(t, repoDir, "add", rel)
-	_ = mustGit(t, repoDir, "commit", "-m", "app")
-	_ = mustGit(t, repoDir, "checkout", "main")
+	addLine := fmt.Sprintf("add %s", rel)
+	_ = mustGit(t, repoDir, addLine)
+	_ = mustGit(t, repoDir, "commit -m app")
+	_ = mustGit(t, repoDir, "checkout main")
 }
 
 func runTick(t *testing.T, repoDir string) (id string) {
@@ -284,7 +287,8 @@ func appsAtTip(t *testing.T, repoDir string) (rows []records.GithubApp) {
 	t.Helper()
 	tipPath := filepath.Join(JunkDir, t.Name()+"-state-tip.db")
 	spec := "state:repos/" + owner + "/" + repoName + "/state.db"
-	blob := mustGit(t, repoDir, "show", spec)
+	showLine := fmt.Sprintf("show %s", spec)
+	blob := mustGit(t, repoDir, showLine)
 	err := os.WriteFile(tipPath, blob, 0644)
 	require.NoError(t, err)
 	db, err := statedb.Open(t.Context(), tipPath)

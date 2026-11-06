@@ -148,9 +148,9 @@ func Test_SetupLabel_should_leave_the_commit_to_the_user(t *testing.T) {
 	addRepo(t)
 	addStoredLabel(t, "bug", "ededed")
 
-	message := mustGit(t, repoDir, "log", "-1", "--format=%s")
+	message := mustGit(t, repoDir, "log -1 --format=%s")
 	assert.Equal(t, "init", strings.TrimSpace(string(message)))
-	tracked := mustGit(t, repoDir, "ls-files", "repos/octo/app/config.db")
+	tracked := mustGit(t, repoDir, "ls-files repos/octo/app/config.db")
 	assert.Empty(t, strings.TrimSpace(string(tracked)))
 }
 

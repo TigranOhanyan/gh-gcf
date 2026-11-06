@@ -27,9 +27,9 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func mustGit(t *testing.T, dir string, args ...string) (output []byte) {
+func mustGit(t *testing.T, dir string, line string) (output []byte) {
 	t.Helper()
-	output, err := commands.Git(t.Context(), dir, args...)
+	output, err := commands.Git(t.Context(), dir, line)
 	require.NoError(t, err)
 	return
 }

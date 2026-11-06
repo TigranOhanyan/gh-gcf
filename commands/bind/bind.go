@@ -193,6 +193,8 @@ func appKeyLines(indent string, ids []int64) (lines [][]byte) {
 	return
 }
 
+var worktreesGitignore = []byte("*\n!.gitignore\n!internal_use_only\n")
+
 func installWorktrees(factoryDir string) (err error) {
 	worktreesDir := filepath.Join(factoryDir, ".worktrees")
 	err = os.MkdirAll(worktreesDir, 0755)
@@ -248,16 +250,19 @@ func migrateConfigs(ctx context.Context, factoryDir string) (rels []string, err 
 
 func commitCheckout(ctx context.Context, factoryDir string, files []string) (err error) {
 	for _, rel := range files {
-		_, err = git(ctx, factoryDir, "add", "--", rel)
+		addLine := "add -- " + strconv.Quote(rel)
+		_, err = commands.Git(ctx, factoryDir, addLine)
 		if err != nil {
 			log.Error("stage bind file", "path", rel, "err", err)
 			return
 		}
 	}
 
-	args := []string{"commit", "-m", commitMessage, "--"}
-	args = append(args, files...)
-	output, err := git(ctx, factoryDir, args...)
+	line := "commit -m " + strconv.Quote(commitMessage) + " --"
+	for _, rel := range files {
+		line = line + " " + strconv.Quote(rel)
+	}
+	output, err := commands.Git(ctx, factoryDir, line)
 	if err == nil {
 		log.Info("committed bind", "dir", factoryDir)
 		return

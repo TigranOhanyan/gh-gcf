@@ -2,6 +2,7 @@ package bind
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,10 +24,11 @@ func Test_Bind_should_commit_the_workflow_on_main(t *testing.T) {
 	err := runBind(t)
 	require.NoError(t, err)
 
-	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "main")
+	message := mustGit(t, repoDir, "log -1 --format=%s main")
 	assert.Equal(t, commitMessage, strings.TrimSpace(string(message)))
 
-	committed := mustGit(t, repoDir, "show", "main:"+workflowRel)
+	showLine := fmt.Sprintf("show main:%s", workflowRel)
+	committed := mustGit(t, repoDir, showLine)
 	expected := pinnedWorkflow(t)
 	assert.Equal(t, expected, committed)
 }
@@ -43,7 +45,7 @@ func Test_Bind_should_refuse_a_dev_version(t *testing.T) {
 	err := runBind(t)
 	require.Error(t, err)
 
-	message := mustGit(t, repoDir, "log", "-1", "--format=%s", "main")
+	message := mustGit(t, repoDir, "log -1 --format=%s main")
 	assert.Equal(t, "init", strings.TrimSpace(string(message)))
 
 	_, err = os.Stat(filepath.Join(repoDir, filepath.FromSlash(workflowRel)))
@@ -55,14 +57,16 @@ func Test_Bind_should_migrate_config_and_commit_it_on_main(t *testing.T) {
 	repoDir := setupMain(t)
 	configRel := "repos/octo/app/config.db"
 	writeEmptyDatabase(t, filepath.Join(repoDir, filepath.FromSlash(configRel)))
-	_ = mustGit(t, repoDir, "add", configRel)
-	_ = mustGit(t, repoDir, "commit", "-m", "config")
+	addLine := fmt.Sprintf("add %s", configRel)
+	_ = mustGit(t, repoDir, addLine)
+	_ = mustGit(t, repoDir, "commit -m config")
 	t.Chdir(repoDir)
 
 	err := runBind(t)
 	require.NoError(t, err)
 
-	blob := mustGit(t, repoDir, "show", "main:"+configRel)
+	showLine := fmt.Sprintf("show main:%s", configRel)
+	blob := mustGit(t, repoDir, showLine)
 	tipPath := filepath.Join(JunkDir, t.Name()+"-config.db")
 	err = os.WriteFile(tipPath, blob, 0644)
 	require.NoError(t, err)
@@ -82,13 +86,15 @@ func Test_Bind_should_replace_the_previous_workflow(t *testing.T) {
 	workflowPath := filepath.Join(repoDir, filepath.FromSlash(workflowRel))
 	err = os.WriteFile(workflowPath, []byte("previous: true\n"), 0644)
 	require.NoError(t, err)
-	_ = mustGit(t, repoDir, "add", workflowRel)
-	_ = mustGit(t, repoDir, "commit", "-m", "previous workflow")
+	addLine := fmt.Sprintf("add %s", workflowRel)
+	_ = mustGit(t, repoDir, addLine)
+	_ = mustGit(t, repoDir, `commit -m "previous workflow"`)
 
 	err = runBind(t)
 	require.NoError(t, err)
 
-	committed := mustGit(t, repoDir, "show", "main:"+workflowRel)
+	showLine := fmt.Sprintf("show main:%s", workflowRel)
+	committed := mustGit(t, repoDir, showLine)
 	expected := pinnedWorkflow(t)
 	assert.Equal(t, expected, committed)
 }
@@ -100,10 +106,12 @@ func Test_Bind_should_commit_the_worktrees_hint_on_main(t *testing.T) {
 	err := runBind(t)
 	require.NoError(t, err)
 
-	gitignore := mustGit(t, repoDir, "show", "main:"+gitignoreRel)
+	gitignoreLine := fmt.Sprintf("show main:%s", gitignoreRel)
+	gitignore := mustGit(t, repoDir, gitignoreLine)
 	assert.Equal(t, worktreesGitignore, gitignore)
 
-	hint := mustGit(t, repoDir, "show", "main:"+hintRel)
+	hintLine := fmt.Sprintf("show main:%s", hintRel)
+	hint := mustGit(t, repoDir, hintLine)
 	assert.Empty(t, hint)
 }
 
@@ -169,7 +177,8 @@ func Test_Bind_should_name_each_registered_app_key(t *testing.T) {
 	err = runBind(t)
 	require.NoError(t, err)
 
-	committed := mustGit(t, repoDir, "show", "main:"+workflowRel)
+	showLine := fmt.Sprintf("show main:%s", workflowRel)
+	committed := mustGit(t, repoDir, showLine)
 	text := string(committed)
 	indent := indentOf(t, text, "FACTORY_GITHUB_APP_PRIVATE_KEY:")
 	want := indent + "GITHUB_APP_42: ${{ secrets.GITHUB_APP_42 }}\n"
@@ -195,23 +204,24 @@ func indentOf(t *testing.T, text string, key string) (indent string) {
 
 func Test_Bind_should_commit_the_workflow_on_the_open_branch(t *testing.T) {
 	repoDir := setupMain(t)
-	_ = mustGit(t, repoDir, "checkout", "-b", "bind-me")
+	_ = mustGit(t, repoDir, "checkout -b bind-me")
 	t.Chdir(repoDir)
 
 	err := runBind(t)
 	require.NoError(t, err)
 
-	head := mustGit(t, repoDir, "rev-parse", "--abbrev-ref", "HEAD")
+	head := mustGit(t, repoDir, "rev-parse --abbrev-ref HEAD")
 	assert.Equal(t, "bind-me", strings.TrimSpace(string(head)))
 
-	message := mustGit(t, repoDir, "log", "-1", "--format=%s")
+	message := mustGit(t, repoDir, "log -1 --format=%s")
 	assert.Equal(t, commitMessage, strings.TrimSpace(string(message)))
 
-	committed := mustGit(t, repoDir, "show", "HEAD:"+workflowRel)
+	showLine := fmt.Sprintf("show HEAD:%s", workflowRel)
+	committed := mustGit(t, repoDir, showLine)
 	expected := pinnedWorkflow(t)
 	assert.Equal(t, expected, committed)
 
-	mainTip := mustGit(t, repoDir, "log", "-1", "--format=%s", "main")
+	mainTip := mustGit(t, repoDir, "log -1 --format=%s main")
 	assert.Equal(t, "init", strings.TrimSpace(string(mainTip)))
 }
 
@@ -234,10 +244,10 @@ func setupMain(t *testing.T) (repoDir string) {
 	err = os.MkdirAll(repoDir, 0755)
 	require.NoError(t, err)
 
-	_ = mustGit(t, repoDir, "init", "-b", "main")
-	_ = mustGit(t, repoDir, "config", "user.email", "test@example.com")
-	_ = mustGit(t, repoDir, "config", "user.name", "test")
-	_ = mustGit(t, repoDir, "commit", "--allow-empty", "-m", "init")
+	_ = mustGit(t, repoDir, "init -b main")
+	_ = mustGit(t, repoDir, "config user.email test@example.com")
+	_ = mustGit(t, repoDir, "config user.name test")
+	_ = mustGit(t, repoDir, "commit --allow-empty -m init")
 	return
 }
 

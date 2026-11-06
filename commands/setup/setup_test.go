@@ -159,10 +159,10 @@ func Test_Setup_should_leave_the_commit_to_the_user(t *testing.T) {
 	_, err := os.Stat(path)
 	require.NoError(t, err)
 
-	message := mustGit(t, repoDir, "log", "-1", "--format=%s")
+	message := mustGit(t, repoDir, "log -1 --format=%s")
 	assert.Equal(t, "init", strings.TrimSpace(string(message)))
 
-	tracked := mustGit(t, repoDir, "ls-files", "repos/octo/app/config.db")
+	tracked := mustGit(t, repoDir, "ls-files repos/octo/app/config.db")
 	assert.Empty(t, strings.TrimSpace(string(tracked)))
 
 	_, err = os.Stat(filepath.Join(repoDir, "repos", "octo", "app", "state.db"))
@@ -172,17 +172,17 @@ func Test_Setup_should_leave_the_commit_to_the_user(t *testing.T) {
 
 func Test_Setup_should_write_config_on_the_checked_out_branch(t *testing.T) {
 	repoDir := setupCheckout(t)
-	_ = mustGit(t, repoDir, "checkout", "-b", "review")
+	_ = mustGit(t, repoDir, "checkout -b review")
 
 	recordRepo(t, repoDir)
 
-	branch := mustGit(t, repoDir, "branch", "--show-current")
+	branch := mustGit(t, repoDir, "branch --show-current")
 	assert.Equal(t, "review", strings.TrimSpace(string(branch)))
 
 	_, err := os.Stat(filepath.Join(repoDir, "repos", "octo", "app", "config.db"))
 	require.NoError(t, err)
 
-	message := mustGit(t, repoDir, "log", "-1", "--format=%s")
+	message := mustGit(t, repoDir, "log -1 --format=%s")
 	assert.Equal(t, "init", strings.TrimSpace(string(message)))
 }
 
@@ -426,10 +426,10 @@ func setupCheckout(t *testing.T) (repoDir string) {
 	err = os.MkdirAll(repoDir, 0755)
 	require.NoError(t, err)
 
-	_ = mustGit(t, repoDir, "init", "-b", "main")
-	_ = mustGit(t, repoDir, "config", "user.email", "test@example.com")
-	_ = mustGit(t, repoDir, "config", "user.name", "test")
-	_ = mustGit(t, repoDir, "commit", "--allow-empty", "-m", "init")
+	_ = mustGit(t, repoDir, "init -b main")
+	_ = mustGit(t, repoDir, "config user.email test@example.com")
+	_ = mustGit(t, repoDir, "config user.name test")
+	_ = mustGit(t, repoDir, "commit --allow-empty -m init")
 	return
 }
 

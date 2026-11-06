@@ -9,7 +9,7 @@ import (
 
 // RequireCheckout fails unless dir is the top of a git checkout.
 func RequireCheckout(ctx context.Context, dir string) (err error) {
-	top, err := Git(ctx, dir, "rev-parse", "--show-toplevel")
+	top, err := Git(ctx, dir, "rev-parse --show-toplevel")
 	if err != nil {
 		err = fmt.Errorf("factory repo is not a git checkout")
 		return

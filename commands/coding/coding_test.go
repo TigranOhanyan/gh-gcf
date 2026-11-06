@@ -39,7 +39,7 @@ func Test_Builder_should_start_an_agent_for_an_open_issue(t *testing.T) {
 	err = runBuilder(t, repoDir, id)
 	require.NoError(t, err)
 
-	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
 	assert.Contains(t, string(body), "✅ [7] started")
 	db := openStateTip(t, repoDir)
 	defer db.Close()
@@ -107,7 +107,7 @@ func Test_Builder_should_skip_an_issue_that_has_a_pull_request(t *testing.T) {
 	err = runBuilder(t, repoDir, id)
 	require.NoError(t, err)
 
-	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
 	assert.Contains(t, string(body), "✅ [7] pull request exists")
 	db := openStateTip(t, repoDir)
 	defer db.Close()
@@ -127,7 +127,7 @@ func Test_Builder_should_skip_a_member_whose_instruction_changed(t *testing.T) {
 	err = runBuilder(t, repoDir, id)
 	require.NoError(t, err)
 
-	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
 	assert.Contains(t, string(body), "✅ [features] instruction changed")
 	db := openStateTip(t, repoDir)
 	defer db.Close()
@@ -150,7 +150,7 @@ func Test_Builder_should_reject_a_failed_create(t *testing.T) {
 	err = runBuilder(t, repoDir, id)
 	require.NoError(t, err)
 
-	body := mustGit(t, repoDir, "log", "-1", "--format=%b", "state")
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
 	assert.Contains(t, string(body), "✅ [7] rejected")
 	db := openStateTip(t, repoDir)
 	defer db.Close()
@@ -187,9 +187,9 @@ func setupFactory(t *testing.T, text string) (repoDir string) {
 	require.NoError(t, err)
 	err = os.MkdirAll(repoDir, 0755)
 	require.NoError(t, err)
-	_ = mustGit(t, repoDir, "init", "-b", "main")
-	_ = mustGit(t, repoDir, "config", "user.email", "test@example.com")
-	_ = mustGit(t, repoDir, "config", "user.name", "test")
+	_ = mustGit(t, repoDir, "init -b main")
+	_ = mustGit(t, repoDir, "config user.email test@example.com")
+	_ = mustGit(t, repoDir, "config user.name test")
 
 	configPath := filepath.Join(repoDir, "repos", owner, repoName, "config.db")
 	err = os.MkdirAll(filepath.Dir(configPath), 0755)
@@ -216,19 +216,21 @@ func setupFactory(t *testing.T, text string) (repoDir string) {
 	writeInstruction(t, repoDir, "features", text)
 	configRel := filepath.Join("repos", owner, repoName, "config.db")
 	membersRel := filepath.Join("repos", owner, repoName, "members")
-	_ = mustGit(t, repoDir, "add", configRel, membersRel)
-	_ = mustGit(t, repoDir, "commit", "-m", "config")
+	addLine := fmt.Sprintf("add %s %s", configRel, membersRel)
+	_ = mustGit(t, repoDir, addLine)
+	_ = mustGit(t, repoDir, "commit -m config")
 
-	_ = mustGit(t, repoDir, "checkout", "-b", "state")
+	_ = mustGit(t, repoDir, "checkout -b state")
 	statePath := filepath.Join(repoDir, "repos", owner, repoName, "state.db")
 	stateDB, err := statedb.Open(ctx, statePath)
 	require.NoError(t, err)
 	err = stateDB.Close()
 	require.NoError(t, err)
 	stateRel := filepath.Join("repos", owner, repoName, "state.db")
-	_ = mustGit(t, repoDir, "add", stateRel)
-	_ = mustGit(t, repoDir, "commit", "-m", "state")
-	_ = mustGit(t, repoDir, "checkout", "main")
+	stateLine := fmt.Sprintf("add %s", stateRel)
+	_ = mustGit(t, repoDir, stateLine)
+	_ = mustGit(t, repoDir, "commit -m state")
+	_ = mustGit(t, repoDir, "checkout main")
 	return
 }
 
@@ -284,7 +286,8 @@ func openStateTip(t *testing.T, repoDir string) (db *statedb.DB) {
 	t.Helper()
 	tipPath := filepath.Join(JunkDir, t.Name()+"-state-tip.db")
 	spec := "state:repos/" + owner + "/" + repoName + "/state.db"
-	blob := mustGit(t, repoDir, "show", spec)
+	showLine := fmt.Sprintf("show %s", spec)
+	blob := mustGit(t, repoDir, showLine)
 	err := os.WriteFile(tipPath, blob, 0644)
 	require.NoError(t, err)
 	db, err = statedb.Open(t.Context(), tipPath)
