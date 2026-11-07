@@ -8,6 +8,7 @@ import (
 	"github.com/TigranOhanyan/gh-gcf/commands/coding"
 	"github.com/TigranOhanyan/gh-gcf/commands/compile"
 	"github.com/TigranOhanyan/gh-gcf/commands/label"
+	"github.com/TigranOhanyan/gh-gcf/commands/poll"
 	"github.com/TigranOhanyan/gh-gcf/commands/setup"
 	"github.com/TigranOhanyan/gh-gcf/commands/tick"
 )
@@ -31,5 +32,7 @@ func NewRoot() (cmd *cobra.Command) {
 	cmd.AddCommand(setupCmd)
 	codingCmd := coding.NewCoding()
 	cmd.AddCommand(codingCmd)
+	pollCmd := poll.NewPoll()
+	cmd.AddCommand(pollCmd)
 	return
 }

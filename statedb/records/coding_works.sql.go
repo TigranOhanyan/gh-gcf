@@ -69,6 +69,26 @@ func (q *Queries) CreateIssue(ctx context.Context, arg CreateIssueParams) error 
 	return err
 }
 
+const getCodingWork = `-- name: GetCodingWork :one
+SELECT id, issue_number, builder_name, pull_request_number, builder_head_sha, fixer_head_sha, status
+FROM coding_work WHERE id = ?
+`
+
+func (q *Queries) GetCodingWork(ctx context.Context, id string) (CodingWork, error) {
+	row := q.db.QueryRowContext(ctx, getCodingWork, id)
+	var i CodingWork
+	err := row.Scan(
+		&i.ID,
+		&i.IssueNumber,
+		&i.BuilderName,
+		&i.PullRequestNumber,
+		&i.BuilderHeadSha,
+		&i.FixerHeadSha,
+		&i.Status,
+	)
+	return i, err
+}
+
 const getCodingWorkByIssue = `-- name: GetCodingWorkByIssue :one
 SELECT id, issue_number, builder_name, pull_request_number, builder_head_sha, fixer_head_sha, status
 FROM coding_work WHERE issue_number = ?
@@ -185,6 +205,82 @@ func (q *Queries) ListCodingWorks(ctx context.Context) ([]CodingWork, error) {
 	return items, nil
 }
 
+const listPendingAgents = `-- name: ListPendingAgents :many
+SELECT a.id, a.role, a.work_id, a.member_name, a.cursor_run_id
+FROM agent a
+WHERE a.cursor_run_id IS NOT NULL
+AND a.cursor_run_id != ''
+AND EXISTS (
+    SELECT 1 FROM event e
+    WHERE e.agent_id = a.id
+    AND e.kind = 'ack'
+    AND e.id = (SELECT MAX(id) FROM event WHERE agent_id = a.id)
+)
+ORDER BY a.id
+`
+
+func (q *Queries) ListPendingAgents(ctx context.Context) ([]Agent, error) {
+	rows, err := q.db.QueryContext(ctx, listPendingAgents)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Agent
+	for rows.Next() {
+		var i Agent
+		if err := rows.Scan(
+			&i.ID,
+			&i.Role,
+			&i.WorkID,
+			&i.MemberName,
+			&i.CursorRunID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markWorkBuilt = `-- name: MarkWorkBuilt :exec
+UPDATE coding_work
+SET pull_request_number = ?, builder_head_sha = ?, status = 'built'
+WHERE id = ?
+`
+
+type MarkWorkBuiltParams struct {
+	PullRequestNumber sql.NullInt64  `json:"pull_request_number"`
+	BuilderHeadSha    sql.NullString `json:"builder_head_sha"`
+	ID                string         `json:"id"`
+}
+
+func (q *Queries) MarkWorkBuilt(ctx context.Context, arg MarkWorkBuiltParams) error {
+	_, err := q.db.ExecContext(ctx, markWorkBuilt, arg.PullRequestNumber, arg.BuilderHeadSha, arg.ID)
+	return err
+}
+
+const markWorkFixed = `-- name: MarkWorkFixed :exec
+UPDATE coding_work
+SET fixer_head_sha = ?, status = 'fixed'
+WHERE id = ?
+`
+
+type MarkWorkFixedParams struct {
+	FixerHeadSha sql.NullString `json:"fixer_head_sha"`
+	ID           string         `json:"id"`
+}
+
+func (q *Queries) MarkWorkFixed(ctx context.Context, arg MarkWorkFixedParams) error {
+	_, err := q.db.ExecContext(ctx, markWorkFixed, arg.FixerHeadSha, arg.ID)
+	return err
+}
+
 const setAgentRunID = `-- name: SetAgentRunID :exec
 UPDATE agent SET cursor_run_id = ? WHERE id = ?
 `
@@ -196,5 +292,19 @@ type SetAgentRunIDParams struct {
 
 func (q *Queries) SetAgentRunID(ctx context.Context, arg SetAgentRunIDParams) error {
 	_, err := q.db.ExecContext(ctx, setAgentRunID, arg.CursorRunID, arg.ID)
+	return err
+}
+
+const setReviewerVerdict = `-- name: SetReviewerVerdict :exec
+UPDATE reviewer_agent SET verdict = ? WHERE id = ?
+`
+
+type SetReviewerVerdictParams struct {
+	Verdict sql.NullString `json:"verdict"`
+	ID      string         `json:"id"`
+}
+
+func (q *Queries) SetReviewerVerdict(ctx context.Context, arg SetReviewerVerdictParams) error {
+	_, err := q.db.ExecContext(ctx, setReviewerVerdict, arg.Verdict, arg.ID)
 	return err
 }

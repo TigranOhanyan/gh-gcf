@@ -10,10 +10,11 @@ CREATE TABLE issue (
 -- One issue is taken once. The pull request number arrives when the builder opens one.
 -- builder_head_sha is the commit the builder pushed.
 -- fixer_head_sha is the commit the fixer pushed. It stays empty while the fixer is running.
--- status starts as building. reviewing means a reviewer still has no verdict.
--- checking means every reviewer has a verdict and the tick reads the builder's listed checks.
--- fixing means the fixer has started. finished means the factory has stopped.
--- attention means a person has to look.
+-- status starts as building. built means the builder finished and the pull request is stored.
+-- reviewing means a reviewer still has no verdict. reviewed means every verdict is in.
+-- checking means the tick reads the builder's listed checks.
+-- fixing means the fixer has started. fixed means the fixer finished and its commit is stored.
+-- finished means the factory has stopped. attention means a person has to look.
 CREATE TABLE coding_work (
     id                  TEXT    PRIMARY KEY,
     issue_number        INTEGER NOT NULL UNIQUE REFERENCES issue (number),
@@ -22,7 +23,12 @@ CREATE TABLE coding_work (
     builder_head_sha    TEXT,
     fixer_head_sha      TEXT,
     status              TEXT    NOT NULL DEFAULT 'building'
-        CHECK (status IN ('building', 'reviewing', 'checking', 'fixing', 'finished', 'attention'))
+        CHECK (status IN (
+            'building', 'built',
+            'reviewing', 'reviewed',
+            'checking', 'fixing', 'fixed',
+            'finished', 'attention'
+        ))
 );
 
 CREATE INDEX coding_work_status ON coding_work (status);

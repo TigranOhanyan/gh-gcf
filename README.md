@@ -60,7 +60,7 @@ gh gcf setup member add-builder --owner octo --repo app --name features --starti
 gh gcf setup check add --owner octo --repo app --builder features --name "ci / unit"
 ```
 
-The scheduled workflow records a tick, then runs `app`, `label`, `compile coding`, and `coding`, then pushes state. `app` checks each App ID configured for a repo. When that App is installed there, it records the client id and the installation id. A missing or suspended installation stops the step. `label` creates a configured label the app repo does not yet have.
+The scheduled workflow records a tick, then runs `app`, `label`, `compile coding`, `coding`, and `poll agents`, then pushes state. `app` checks each App ID configured for a repo. When that App is installed there, it records the client id and the installation id. A missing or suspended installation stops the step. `label` creates a configured label the app repo does not yet have.
 
 From the factory checkout, after `gh gcf tick` prints an id:
 
@@ -69,6 +69,7 @@ gh gcf app --tick <id>
 gh gcf label --tick <id>
 gh gcf compile coding --tick <id>
 gh gcf coding --tick <id>
+gh gcf poll agents --tick <id>
 ```
 
 ## Coding
@@ -80,3 +81,5 @@ gh gcf coding --tick <id>
 An issue is left alone when a coding work already has that issue number, or when a pull request references the issue. Otherwise coding writes the issue, the coding work, and the agent, then calls Cursor. The prompt is the instruction file, then the issue number, title, and body. Cursor is asked to open the pull request. The agent's id is `bc-` plus a UUID v7, and that id is what Cursor stores.
 
 A successful create records an ack and Cursor's run id. A failed create records the response body and adds the builder's attention label to the issue. The coding work stays. A later tick does not call Cursor again for that agent.
+
+`poll agents` reads each agent whose latest event is an ack. A run that is still going writes nothing. A finished builder stores the pull request number and `builder_head_sha`, and the work status becomes `built`. A finished reviewer stores its verdict and leaves the work alone. A finished fixer stores `fixer_head_sha`, and the work status becomes `fixed`.
