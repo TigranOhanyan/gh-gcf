@@ -1,4 +1,4 @@
-package poll
+package agent
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"github.com/TigranOhanyan/gh-gcf/statedb/records"
 )
 
-const stepName = "poll_agents"
+const stepName = "poll_agent"
 const roleBuilder = "builder"
 const roleReviewer = "reviewer"
 const roleFixer = "fixer"

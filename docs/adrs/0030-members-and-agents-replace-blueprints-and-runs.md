@@ -1,5 +1,7 @@
 # Members and agents replace blueprints and runs
 
+Superseded by `0034-a-development-is-the-flow.md` and `0035-a-development-work-records-two-outcomes.md`. A development is the config row. A development work points at one agent table.
+
 A member is the shared config row: a name, a role, and an attention label. `builder_member`, `reviewer_member`, and `fixer_member` reference that row by name. Each child fixes its own role. The builder member holds the starting label. The reviewer member holds that builder and the App. The fixer member holds that builder, and a builder has at most one. The instruction is the file `repos/<owner>/<name>/members/<name>.md`. The row does not store the path.
 
 A work is one issue taken by one builder. It holds the pull request number and the builder's head SHA once that builder opens them. The work's status and the fixer's head SHA are in `0033-a-coding-work-records-its-status.md`. An agent belongs to one work. Its id is `bc-` plus a UUID v7 sent to Cursor, and the child row uses that same id. The create response's run id is stored on the agent once that response arrives. `builder_agent`, `reviewer_agent`, and `fixer_agent` extend it by that id. The reviewer agent stores the verdict. There is no run table. Every agent points at the work, so a fixer with no reviewers still has a place to hang.

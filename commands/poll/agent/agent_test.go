@@ -1,4 +1,4 @@
-package poll_test
+package agent_test
 
 import (
 	"bytes"
@@ -32,7 +32,7 @@ const builderRun = "run-11111111-1111-7111-8111-111111111111"
 const builderSHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 const fixerSHA = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
-func Test_PollAgents_should_record_a_built_work(t *testing.T) {
+func Test_PollAgent_should_record_a_built_work(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
 	stubTimeline(t, 7, `[]`)
@@ -79,7 +79,7 @@ func Test_PollAgents_should_record_a_built_work(t *testing.T) {
 	assert.WithinRange(t, recorded, startOfTest, startOfCheck)
 }
 
-func Test_PollAgents_should_leave_a_running_agent(t *testing.T) {
+func Test_PollAgent_should_leave_a_running_agent(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
 	stubTimeline(t, 7, `[]`)
@@ -108,7 +108,7 @@ func Test_PollAgents_should_leave_a_running_agent(t *testing.T) {
 	assert.Equal(t, "ack", events[1].Kind)
 }
 
-func Test_PollAgents_should_record_a_reviewer_verdict(t *testing.T) {
+func Test_PollAgent_should_record_a_reviewer_verdict(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
 	stubTimeline(t, 7, `[]`)
@@ -150,7 +150,7 @@ func Test_PollAgents_should_record_a_reviewer_verdict(t *testing.T) {
 	assert.Equal(t, "approve", verdict)
 }
 
-func Test_PollAgents_should_record_a_fixed_work(t *testing.T) {
+func Test_PollAgent_should_record_a_fixed_work(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
 	stubTimeline(t, 7, `[]`)
@@ -188,8 +188,8 @@ func Test_PollAgents_should_record_a_fixed_work(t *testing.T) {
 	assert.Equal(t, int64(8), works[0].PullRequestNumber.Int64)
 }
 
-func Test_PollAgents_should_require_a_tick_id(t *testing.T) {
-	_, err := runRoot(t, "poll agents")
+func Test_PollAgent_should_require_a_tick_id(t *testing.T) {
+	_, err := runRoot(t, "poll agent")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "tick")
 }
@@ -283,7 +283,7 @@ func runPoll(t *testing.T, repoDir string, id string) (err error) {
 	t.Helper()
 	t.Setenv("GH_TOKEN", token)
 	t.Chdir(repoDir)
-	line := fmt.Sprintf("poll agents --tick %s", id)
+	line := fmt.Sprintf("poll agent --tick %s", id)
 	_, err = runRoot(t, line)
 	return
 }

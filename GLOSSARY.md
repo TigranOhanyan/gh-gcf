@@ -39,7 +39,7 @@ The part of the factory that carries one command across every app repo.
 _Avoid_: engine, runner
 
 **Config**:
-What the user wants the factory to do: its labels, Apps, members, and the CI checks that can claim a fixer. Only the user changes it.
+What the user wants the factory to do: its labels, Apps, developments, and the CI checks that can claim a fixer. Only the user changes it.
 _Avoid_: settings, desired state
 
 **Label**:
@@ -63,55 +63,59 @@ What the factory has done and seen. The tick and the steps write it. The user do
 _Avoid_: database, history
 
 **Compilation**:
-One flow's copy of its members from Config into State. The coding flow's compilation is separate from a later flow's.
+A development's copy from Config into State.
 _Avoid_: migration, validation
 
-## Agents
+## Developments
 
-**Member**:
-A builder, a reviewer, or a fixer named in an app repo's config.
-_Avoid_: blueprint, participant
+**Development**:
+The configured flow that takes a ready issue through a builder, a standards reviewer, a specification reviewer, and a fixer.
+_Avoid_: member, blueprint, pipeline, coding flow
 
 **Instruction**:
-The text a member gives its agent, kept in a file named after that member.
+The text one role in a development gives its agent. Each of the four roles has its own.
 _Avoid_: brief, prompt
 
 **Builder**:
-A member tied to a starting label. Its agent implements a ready issue and opens the pull request.
-_Avoid_: implementer, coder
+The role in a development whose agent implements a ready issue and opens the pull request.
+_Avoid_: implementer, coder, member
 
 **Reviewer**:
-A member tied to one builder and to its own App. Its agent posts a verdict on that builder's work.
+A standards reviewer or a specification reviewer. Each has its own App.
 _Avoid_: code reviewer
 
 **Standards reviewer**:
 The reviewer that judges a pull request against the app repo's documented coding standards and a baseline of code smells.
-_Avoid_: code reviewer, linter
+_Avoid_: linter, convention reviewer
 
-**Spec reviewer**:
+**Specification reviewer**:
 The reviewer that judges a pull request against the issue it claims to implement.
-_Avoid_: requirements reviewer, QA
+_Avoid_: spec reviewer, requirements reviewer, QA
 
 **Fixer**:
-The one member a builder has for applying change requests on that builder's pull request, once. A builder may have none.
+The role that applies a changes request or a red check on that pull request, once. It stays idle when both reviewers approved and every listed check passed.
 _Avoid_: builder (second run), repairer, review applier
 
-**Coding work**:
-The factory's handling of one issue by one builder. Its agents point at it.
-_Avoid_: work, team, task, run, cycle
+**Development work**:
+One issue taken by one development. Its agents point at it.
+_Avoid_: coding work, work, task, run, cycle
 
 **Agent**:
-One member acting through Cursor on one coding work. A builder, a reviewer, and a fixer are different kinds.
+One of a development's four roles acting through Cursor on one development work.
 _Avoid_: bot, run
 
 **Verdict**:
-A reviewer's decision on a pull request: approve or request changes. A plain comment is not a verdict.
+A reviewer's decision on a pull request: approve or request changes. A comment is not a verdict.
 _Avoid_: result, outcome
 
 **Check**:
-A named CI result recorded for one builder. It can claim that builder's fixer.
+A named CI result belonging to one development. It can claim that development's fixer.
 _Avoid_: workflow, action, job
 
 **Attention**:
-The mark that the factory has stopped on an issue and a person must look at it.
+The mark that the factory has stopped on an issue and a person must look at it. A development has one attention label.
 _Avoid_: failure, blocked
+
+**Finished**:
+A development work the factory will not pick up again.
+_Avoid_: merged, closed

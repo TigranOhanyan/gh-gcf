@@ -1,4 +1,4 @@
-package poll_test
+package agent_test
 
 import (
 	"os"

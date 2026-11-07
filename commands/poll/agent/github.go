@@ -1,4 +1,4 @@
-package poll
+package agent
 
 import (
 	"context"
