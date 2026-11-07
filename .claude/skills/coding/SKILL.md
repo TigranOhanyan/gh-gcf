@@ -1,17 +1,18 @@
 ---
-name: layout
+name: coding
 description: >-
-  Command package layout for this repo. Main commands are bind, setup, and run.
-  A subcommand is its own package, at most three packages deep; deeper
-  subcommands are files. Helpers stay in the parent package and are exported.
-  Command tests run plain shell lines through the root command with Shell and Git.
-  Breaking changes outside the current subissue of issue 21 are commented out.
-  Schema changes go into the existing migration file. A new table gets a new file.
-  Use when adding or moving a command, package, helper, or command test,
-  when editing a migration, or when a change would break current behavior.
+  Command packages for this repo. Main commands are bind, setup, run, and compile.
+  A command follows commands/coding/coding.go. A subcommand is its own package,
+  at most three packages deep; deeper subcommands are files. Helpers stay in the
+  parent package and are exported. Command tests run plain shell lines through
+  the root command with Shell and Git. Breaking changes outside the current
+  subissue of issue 21 are commented out. Schema changes go into the existing
+  migration file. A new table gets a new file. Use when adding or moving a
+  command, package, helper, or command test, when editing a migration, or when
+  a change would break current behavior.
 ---
 
-# Layout
+# Coding
 
 Existing code does not match this convention. Leave it. Do not reshape a package, a helper, or a test to match unless that code is part of the area you are changing.
 
@@ -23,9 +24,12 @@ The main commands are packages under `commands`:
 commands/bind
 commands/setup
 commands/run
+commands/compile
 ```
 
-A subcommand of a main command is its own package. Three packages is the deepest the tree goes. `commands/setup/development` is that depth: `commands`, `setup`, `development`. A further subcommand is a file in that package, not another package. `setup development add` is `add.go`. `setup development check add` is `add_check.go`.
+Write a command like [commands/coding/coding.go](../../../commands/coding/coding.go). It reads the working directory, requires a checkout, and hands one step to the executor.
+
+A subcommand of a main command is its own package. Three packages is the deepest the tree goes. `commands/setup/development` and `commands/compile/development` are that depth. A further subcommand is a file in that package, not another package. `setup development add` is `add.go`. `setup development check add` is `add_check.go`. `compile development` is the package itself.
 
 ## Helpers
 

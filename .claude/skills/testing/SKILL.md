@@ -49,11 +49,13 @@ When a test has `t`, use `t.Context()`. Do not use `context.TODO` or `context.Ba
 
 Commands and the setup TUI are the entrypoints. Test them as a black box, as close to that entrypoint as possible. One run then covers flag parsing, wiring, and the work.
 
-A command test runs a shell line on the root command, as the [layout skill](../layout/SKILL.md) describes. Do not call an internal function the command wraps, such as `CreateTick`.
+A command test runs a shell line on the root command, as the [coding skill](../coding/SKILL.md) describes. Do not call an internal function the command wraps, such as `CreateTick`.
 
 Setup tests drive the program with [github.com/charmbracelet/x/vttest](https://github.com/charmbracelet/x/vttest). Do not open a PTY with `github.com/creack/pty`. A setup test that exits before the screen still starts through `vttest`.
 
 Root is the exception. It does not run another command. Each command has one small root test that the root command lists it. Running `label`, `tick`, `bind`, `app`, or `setup` through `NewRoot` would import those packages from a `package root` test and cycle, because root already imports them. A `package root_test` file would break the cycle. We do not add that file. The attach test is the check that the command is on root.
+
+Do not write a test that only checks help text for a subcommand. Cobra lists a subcommand once it is added, and a test that runs the subcommand already shows it is attached.
 
 Database packages and the executor are not entrypoints. Their tests call the function under test.
 

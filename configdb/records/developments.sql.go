@@ -137,3 +137,38 @@ func (q *Queries) ListDevelopmentStartingLabels(ctx context.Context) ([]string, 
 	}
 	return items, nil
 }
+
+const listDevelopments = `-- name: ListDevelopments :many
+SELECT name, starting_label, attention_label, standards_reviewer_app, specification_reviewer_app
+FROM development
+ORDER BY name
+`
+
+func (q *Queries) ListDevelopments(ctx context.Context) ([]Development, error) {
+	rows, err := q.db.QueryContext(ctx, listDevelopments)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Development
+	for rows.Next() {
+		var i Development
+		if err := rows.Scan(
+			&i.Name,
+			&i.StartingLabel,
+			&i.AttentionLabel,
+			&i.StandardsReviewerApp,
+			&i.SpecificationReviewerApp,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

@@ -1,3 +1,8 @@
+-- name: ListDevelopments :many
+SELECT name, starting_label, attention_label, standards_reviewer_app, specification_reviewer_app
+FROM development
+ORDER BY name;
+
 -- name: CreateDevelopment :exec
 INSERT INTO development (
     name,

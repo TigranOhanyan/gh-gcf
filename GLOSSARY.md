@@ -101,7 +101,7 @@ One issue taken by one development. It points at the agents it has started.
 _Avoid_: coding work, work, task, run, cycle
 
 **Agent**:
-One of a development's four roles acting through Cursor.
+One of a development's four roles acting through Cursor. The development work points at it.
 _Avoid_: bot, run
 
 **Verdict**:

@@ -37,6 +37,23 @@ type CodingWork struct {
 	Status            string         `json:"status"`
 }
 
+type Development struct {
+	Name                                   string `json:"name"`
+	StartingLabel                          string `json:"starting_label"`
+	AttentionLabel                         string `json:"attention_label"`
+	StandardsReviewerApp                   int64  `json:"standards_reviewer_app"`
+	SpecificationReviewerApp               int64  `json:"specification_reviewer_app"`
+	BuilderInstructionSha256               string `json:"builder_instruction_sha256"`
+	StandardsReviewerInstructionSha256     string `json:"standards_reviewer_instruction_sha256"`
+	SpecificationReviewerInstructionSha256 string `json:"specification_reviewer_instruction_sha256"`
+	FixerInstructionSha256                 string `json:"fixer_instruction_sha256"`
+}
+
+type DevelopmentCheck struct {
+	DevelopmentName string `json:"development_name"`
+	Name            string `json:"name"`
+}
+
 type Event struct {
 	ID        string `json:"id"`
 	StepID    string `json:"step_id"`

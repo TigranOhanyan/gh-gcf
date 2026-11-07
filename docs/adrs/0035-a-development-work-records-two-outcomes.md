@@ -2,7 +2,7 @@
 
 A development work is one issue taken by one development. It holds the issue number and URL. The pull request number and the builder's head SHA arrive when the builder opens them. The fixer's head SHA arrives only when a fixer has pushed. Status is empty while the factory is still at work, `attention` when a person must look, and `finished` when the factory leaves the pull request as it is.
 
-One agent table holds every role: builder, standards reviewer, specification reviewer, and fixer. The work points at each agent it has started. An empty fixer link means that fixer has not run. The agent records when the tick started it and when the tick discovered it had finished. That discovery is written in the same transaction as the agent's completed event. The event series stays the history. Verdicts are not copied onto the work or the agent. GitHub holds them.
+One agent table holds every role: builder, standards reviewer, specification reviewer, and fixer. The work points at each agent it has started. The agent row has no work column. An empty fixer link means that fixer has not run. The agent records when the tick started it and when the tick discovered it had finished. That discovery is written in the same transaction as the agent's completed event. The event series stays the history. Verdicts are not copied onto the work or the agent. GitHub holds them.
 
 This supersedes the per-role agent tables in `0030-members-and-agents-replace-blueprints-and-runs.md` and the phase status in `0033-a-coding-work-records-its-status.md`.
 
