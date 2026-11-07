@@ -1,4 +1,4 @@
-package coding
+package development
 
 import (
 	"os"
@@ -9,16 +9,17 @@ import (
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
 	"github.com/TigranOhanyan/gh-gcf/commands/executor"
+	"github.com/TigranOhanyan/gh-gcf/commands/run"
 )
 
-func NewCoding() (cmd *cobra.Command) {
+func NewRunDevelopment() (cmd *cobra.Command) {
 	var configBranch string
 	var stateBranch string
 	var tickID string
 
 	cmd = &cobra.Command{
-		Use:   "coding",
-		Short: "Start the coding flow for an open issue with its starting label",
+		Use:   "development",
+		Short: "Start the builder for an open issue with a development's starting label",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) (err error) {
 			dir, err := os.Getwd()
@@ -43,7 +44,7 @@ func NewCoding() (cmd *cobra.Command) {
 					return
 				}
 			}
-			cursor, err := newCursorClient()
+			cursor, err := run.NewCursorClient()
 			if err != nil {
 				return
 			}
@@ -53,7 +54,7 @@ func NewCoding() (cmd *cobra.Command) {
 				StateBranch:  stateBranch,
 				TickID:       tickID,
 			}
-			step := codingStep{GitHub: client, app: app, cursor: cursor}
+			step := developmentStep{GitHub: client, app: app, cursor: cursor}
 			err = exec.Execute(cmd.Context(), step)
 			return
 		},

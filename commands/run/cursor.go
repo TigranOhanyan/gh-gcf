@@ -1,4 +1,4 @@
-package coding
+package run
 
 import (
 	"bytes"
@@ -18,17 +18,20 @@ const cursorAPIEnv = "CURSOR_API_URL"
 const cursorKeyEnv = "CURSOR_API_KEY"
 const defaultCursorAPI = "https://api.cursor.com"
 
-type cursorPrompt struct {
+// CursorPrompt is the text sent to one Cursor agent.
+type CursorPrompt struct {
 	Text string `json:"text"`
 }
 
-type cursorRepo struct {
+// CursorRepo is one repo the agent may edit.
+type CursorRepo struct {
 	URL string `json:"url"`
 }
 
-type cursorCreate struct {
-	Prompt       cursorPrompt `json:"prompt"`
-	Repos        []cursorRepo `json:"repos"`
+// CursorCreate is the body that starts one Cursor agent.
+type CursorCreate struct {
+	Prompt       CursorPrompt `json:"prompt"`
+	Repos        []CursorRepo `json:"repos"`
 	AutoCreatePR bool         `json:"autoCreatePR"`
 	AgentID      string       `json:"agentId"`
 }
@@ -41,13 +44,15 @@ type cursorCreateResponse struct {
 	Run cursorRun `json:"run"`
 }
 
-type cursorClient struct {
+// CursorClient posts agent creates to the Cursor API.
+type CursorClient struct {
 	base string
 	key  string
 	http *http.Client
 }
 
-func newCursorClient() (client cursorClient, err error) {
+// NewCursorClient reads the Cursor API key and optional base URL.
+func NewCursorClient() (client CursorClient, err error) {
 	key := os.Getenv(cursorKeyEnv)
 	missing := key == ""
 	if missing {
@@ -66,9 +71,9 @@ func newCursorClient() (client cursorClient, err error) {
 	return
 }
 
-// create posts one agent. A transport failure returns status 0.
+// Create posts one agent. A transport failure returns status 0.
 // 200, 201, and 204 are success. Any other status returns the response body.
-func (client cursorClient) create(ctx context.Context, body cursorCreate) (runID string, responseBody string, status int, err error) {
+func (client CursorClient) Create(ctx context.Context, body CursorCreate) (runID string, responseBody string, status int, err error) {
 	payload, err := json.Marshal(body)
 	if err != nil {
 		log.Error("cursor create", "err", err)

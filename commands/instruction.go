@@ -43,13 +43,13 @@ func fingerprintFile(path string, name string) (sum string, err error) {
 	return
 }
 
-// ReadInstruction returns the text of the member's instruction file.
-func ReadInstruction(dir string, name string) (text string, err error) {
-	path := filepath.Join(dir, "members", name+".md")
+// ReadDevelopmentInstruction returns the text of one role's instruction file.
+func ReadDevelopmentInstruction(dir string, development string, role string) (text string, err error) {
+	path := filepath.Join(dir, "developments", development, role+".md")
 	body, err := os.ReadFile(path)
 	missing := os.IsNotExist(err)
 	if missing {
-		err = fmt.Errorf("instruction %s is missing", name)
+		err = fmt.Errorf("instruction %s is missing", role)
 		log.Error("instruction", "path", path, "err", err)
 		return
 	}

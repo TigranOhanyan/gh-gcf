@@ -1,4 +1,4 @@
-package coding
+package development
 
 import (
 	"context"
@@ -15,33 +15,34 @@ import (
 	"github.com/oklog/ulid/v2"
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
+	"github.com/TigranOhanyan/gh-gcf/commands/run"
 	"github.com/TigranOhanyan/gh-gcf/statedb/records"
 )
 
-const stepName = "coding"
+const stepName = "run_development"
 const roleBuilder = "builder"
 const eventStarting = "starting"
 const eventAck = "ack"
 const eventRejected = "rejected"
 
-type codingStep struct {
+type developmentStep struct {
 	GitHub *github.Client
 	app    commands.FactoryApp
-	cursor cursorClient
+	cursor run.CursorClient
 }
 
-func (codingStep) Name() (name string) {
+func (developmentStep) Name() (name string) {
 	name = stepName
 	return
 }
 
-func (step codingStep) Apply(ctx context.Context, repo commands.Repo, _ records.Tick, stepRow records.Step) (message string, err error) {
-	builders, err := repo.State.Queries.ListBuilderMembers(ctx)
+func (step developmentStep) Apply(ctx context.Context, repo commands.Repo, _ records.Tick, stepRow records.Step) (message string, err error) {
+	developments, err := repo.State.Queries.ListDevelopments(ctx)
 	if err != nil {
-		log.Error("list builders", "owner", repo.Owner, "name", repo.Name, "err", err)
+		log.Error("list developments", "owner", repo.Owner, "name", repo.Name, "err", err)
 		return
 	}
-	none := len(builders) == 0
+	none := len(developments) == 0
 	if none {
 		return
 	}
@@ -52,13 +53,13 @@ func (step codingStep) Apply(ctx context.Context, repo commands.Repo, _ records.
 	}
 
 	var lines []string
-	for _, member := range builders {
-		added, callErr := step.startMember(ctx, repo, stepRow.ID, client, member)
+	for _, item := range developments {
+		added, callErr := step.startDevelopment(ctx, repo, stepRow.ID, client, item)
 		lines = append(lines, added...)
 		failed := callErr != nil
 		if failed {
 			message = strings.Join(lines, "\n")
-			err = fmt.Errorf("[%s] %s", member.Name, callErr.Error())
+			err = fmt.Errorf("[%s] %s", item.Name, callErr.Error())
 			return
 		}
 	}
@@ -66,24 +67,24 @@ func (step codingStep) Apply(ctx context.Context, repo commands.Repo, _ records.
 	return
 }
 
-func (step codingStep) startMember(ctx context.Context, repo commands.Repo, stepID string, client *github.Client, member records.ListBuilderMembersRow) (lines []string, err error) {
-	sum, err := commands.InstructionFingerprint(repo.Dir, member.Name)
+func (step developmentStep) startDevelopment(ctx context.Context, repo commands.Repo, stepID string, client *github.Client, item records.Development) (lines []string, err error) {
+	sum, err := commands.DevelopmentInstructionFingerprint(repo.Dir, item.Name, roleBuilder)
 	if err != nil {
 		return
 	}
-	changed := sum != member.InstructionSha256
+	changed := sum != item.BuilderInstructionSha256
 	if changed {
-		line := fmt.Sprintf("[%s] instruction changed", member.Name)
+		line := fmt.Sprintf("[%s] instruction changed", item.Name)
 		lines = append(lines, line)
-		log.Info("instruction changed", "member", member.Name)
+		log.Info("instruction changed", "development", item.Name)
 		return
 	}
 
-	text, err := commands.ReadInstruction(repo.Dir, member.Name)
+	text, err := commands.ReadDevelopmentInstruction(repo.Dir, item.Name, roleBuilder)
 	if err != nil {
 		return
 	}
-	issues, err := listOpenIssues(ctx, client, repo.Owner, repo.Name, member.StartingLabel)
+	issues, err := run.ListOpenIssues(ctx, client, repo.Owner, repo.Name, item.StartingLabel)
 	if err != nil {
 		return
 	}
@@ -96,7 +97,7 @@ func (step codingStep) startMember(ctx context.Context, repo commands.Repo, step
 			continue
 		}
 		var line string
-		line, err = step.startIssue(ctx, repo, stepID, client, member, text, issue)
+		line, err = step.startIssue(ctx, repo, stepID, client, item, text, issue)
 		if line != "" {
 			lines = append(lines, line)
 		}
@@ -107,26 +108,18 @@ func (step codingStep) startMember(ctx context.Context, repo commands.Repo, step
 	return
 }
 
-func (step codingStep) startIssue(ctx context.Context, repo commands.Repo, stepID string, client *github.Client, member records.ListBuilderMembersRow, instruction string, issue *github.Issue) (line string, err error) {
+func (step developmentStep) startIssue(ctx context.Context, repo commands.Repo, stepID string, client *github.Client, item records.Development, instruction string, issue *github.Issue) (line string, err error) {
 	number := issue.GetNumber()
-	_, err = repo.State.Queries.GetCodingWorkByIssue(ctx, int64(number))
+	_, err = repo.State.Queries.GetDevelopmentWorkByIssue(ctx, int64(number))
 	absent := errors.Is(err, sql.ErrNoRows)
 	lookupFailed := err != nil && !absent
 	if lookupFailed {
-		log.Error("coding work", "issue", number, "err", err)
+		log.Error("development work", "issue", number, "err", err)
 		return
 	}
 	err = nil
-	if !absent {
-		return
-	}
-
-	linked, err := referencedByPullRequest(ctx, client, repo.Owner, repo.Name, number)
-	if err != nil {
-		return
-	}
-	if linked {
-		line = fmt.Sprintf("[%d] pull request exists", number)
+	taken := !absent
+	if taken {
 		return
 	}
 
@@ -138,30 +131,35 @@ func (step codingStep) startIssue(ctx context.Context, repo commands.Repo, stepI
 	if err != nil {
 		return
 	}
-	err = claim(ctx, repo, stepID, member, issue, agentID, workID)
+	err = claim(ctx, repo, stepID, item, issue, agentID, workID)
 	if err != nil {
 		return
 	}
 
-	body := cursorCreate{
-		Prompt:       cursorPrompt{Text: promptText(instruction, issue)},
+	text := promptText(instruction, issue)
+	prompt := run.CursorPrompt{Text: text}
+	repoURL := fmt.Sprintf("https://github.com/%s/%s", repo.Owner, repo.Name)
+	oneRepo := run.CursorRepo{URL: repoURL}
+	repos := []run.CursorRepo{oneRepo}
+	body := run.CursorCreate{
+		Prompt:       prompt,
 		AutoCreatePR: true,
 		AgentID:      agentID,
 	}
-	repoURL := fmt.Sprintf("https://github.com/%s/%s", repo.Owner, repo.Name)
-	body.Repos = []cursorRepo{{URL: repoURL}}
-	runID, raw, status, err := step.cursor.create(ctx, body)
+	body.Repos = repos
+	runID, raw, status, err := step.cursor.Create(ctx, body)
 	lost := err != nil && status == 0
 	if lost {
 		return
 	}
-	if err != nil {
-		rejectErr := reject(ctx, repo, stepID, agentID, raw)
+	refused := err != nil
+	if refused {
+		rejectErr := reject(ctx, repo, stepID, workID, agentID, raw)
 		if rejectErr != nil {
 			err = rejectErr
 			return
 		}
-		labelErr := addAttention(ctx, client, repo.Owner, repo.Name, number, member.AttentionLabel)
+		labelErr := commands.AddAttention(ctx, client, repo.Owner, repo.Name, number, item.AttentionLabel)
 		if labelErr != nil {
 			err = labelErr
 			return
@@ -179,45 +177,32 @@ func (step codingStep) startIssue(ctx context.Context, repo commands.Repo, stepI
 	return
 }
 
-func claim(ctx context.Context, repo commands.Repo, stepID string, member records.ListBuilderMembersRow, issue *github.Issue, agentID string, workID string) (err error) {
+func claim(ctx context.Context, repo commands.Repo, stepID string, item records.Development, issue *github.Issue, agentID string, workID string) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
-		log.Error("begin coding", "err", err)
+		log.Error("begin run", "err", err)
 		return
 	}
 	queries := repo.State.Queries.WithTx(tx)
+	agentParams := records.CreateDevelopmentAgentParams{
+		ID:   agentID,
+		Role: roleBuilder,
+	}
+	err = queries.CreateDevelopmentAgent(ctx, agentParams)
+	if err != nil {
+		err = commands.FinishTx(tx, err)
+		return
+	}
 	number := issue.GetNumber()
-	issueParams := records.CreateIssueParams{
-		Number: int64(number),
-		Url:    issueURL(repo, issue),
+	agentLink := sql.NullString{String: agentID, Valid: true}
+	workParams := records.CreateDevelopmentWorkParams{
+		ID:              workID,
+		DevelopmentName: item.Name,
+		IssueNumber:     int64(number),
+		IssueUrl:        issueURL(repo, issue),
+		BuilderAgent:    agentLink,
 	}
-	err = queries.CreateIssue(ctx, issueParams)
-	if err != nil {
-		err = commands.FinishTx(tx, err)
-		return
-	}
-	workParams := records.CreateCodingWorkParams{
-		ID:          workID,
-		IssueNumber: int64(number),
-		BuilderName: member.Name,
-	}
-	err = queries.CreateCodingWork(ctx, workParams)
-	if err != nil {
-		err = commands.FinishTx(tx, err)
-		return
-	}
-	agentParams := records.CreateAgentParams{
-		ID:         agentID,
-		Role:       roleBuilder,
-		WorkID:     workID,
-		MemberName: member.Name,
-	}
-	err = queries.CreateAgent(ctx, agentParams)
-	if err != nil {
-		err = commands.FinishTx(tx, err)
-		return
-	}
-	err = queries.CreateBuilderAgent(ctx, agentID)
+	err = queries.CreateDevelopmentWork(ctx, workParams)
 	if err != nil {
 		err = commands.FinishTx(tx, err)
 		return
@@ -227,14 +212,14 @@ func claim(ctx context.Context, repo commands.Repo, stepID string, member record
 		err = commands.FinishTx(tx, err)
 		return
 	}
-	eventParams := records.CreateEventParams{
+	eventParams := records.CreateDevelopmentEventParams{
 		ID:      eventID,
 		StepID:  stepID,
 		AgentID: agentID,
 		Kind:    eventStarting,
-		Message: fmt.Sprintf("[%s] [%d] starting", member.Name, number),
+		Message: fmt.Sprintf("[%s] [%d] starting", item.Name, number),
 	}
-	err = queries.CreateEvent(ctx, eventParams)
+	err = queries.CreateDevelopmentEvent(ctx, eventParams)
 	err = commands.FinishTx(tx, err)
 	return
 }
@@ -242,16 +227,16 @@ func claim(ctx context.Context, repo commands.Repo, stepID string, member record
 func ack(ctx context.Context, repo commands.Repo, stepID string, agentID string, runID string) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
-		log.Error("begin coding", "err", err)
+		log.Error("begin run", "err", err)
 		return
 	}
 	queries := repo.State.Queries.WithTx(tx)
 	run := sql.NullString{String: runID, Valid: true}
-	runParams := records.SetAgentRunIDParams{
+	runParams := records.SetDevelopmentAgentRunIDParams{
 		CursorRunID: run,
 		ID:          agentID,
 	}
-	err = queries.SetAgentRunID(ctx, runParams)
+	err = queries.SetDevelopmentAgentRunID(ctx, runParams)
 	if err != nil {
 		err = commands.FinishTx(tx, err)
 		return
@@ -261,22 +246,22 @@ func ack(ctx context.Context, repo commands.Repo, stepID string, agentID string,
 		err = commands.FinishTx(tx, err)
 		return
 	}
-	eventParams := records.CreateEventParams{
+	eventParams := records.CreateDevelopmentEventParams{
 		ID:      eventID,
 		StepID:  stepID,
 		AgentID: agentID,
 		Kind:    eventAck,
 		Message: fmt.Sprintf("[%s] acknowledged", agentID),
 	}
-	err = queries.CreateEvent(ctx, eventParams)
+	err = queries.CreateDevelopmentEvent(ctx, eventParams)
 	err = commands.FinishTx(tx, err)
 	return
 }
 
-func reject(ctx context.Context, repo commands.Repo, stepID string, agentID string, reason string) (err error) {
+func reject(ctx context.Context, repo commands.Repo, stepID string, workID string, agentID string, reason string) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
-		log.Error("begin coding", "err", err)
+		log.Error("begin run", "err", err)
 		return
 	}
 	queries := repo.State.Queries.WithTx(tx)
@@ -285,14 +270,19 @@ func reject(ctx context.Context, repo commands.Repo, stepID string, agentID stri
 		err = commands.FinishTx(tx, err)
 		return
 	}
-	eventParams := records.CreateEventParams{
+	eventParams := records.CreateDevelopmentEventParams{
 		ID:      eventID,
 		StepID:  stepID,
 		AgentID: agentID,
 		Kind:    eventRejected,
 		Message: reason,
 	}
-	err = queries.CreateEvent(ctx, eventParams)
+	err = queries.CreateDevelopmentEvent(ctx, eventParams)
+	if err != nil {
+		err = commands.FinishTx(tx, err)
+		return
+	}
+	err = queries.SetDevelopmentWorkAttention(ctx, workID)
 	err = commands.FinishTx(tx, err)
 	return
 }
@@ -329,7 +319,7 @@ func newWorkID() (id string, err error) {
 	timestamp := ulid.Timestamp(time.Now())
 	value, err := ulid.New(timestamp, rand.Reader)
 	if err != nil {
-		log.Error("new coding work id", "err", err)
+		log.Error("new development work id", "err", err)
 		return
 	}
 	id = value.String()

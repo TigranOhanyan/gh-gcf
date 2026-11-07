@@ -60,7 +60,7 @@ gh gcf setup member add-builder --owner octo --repo app --name features --starti
 gh gcf setup check add --owner octo --repo app --builder features --name "ci / unit"
 ```
 
-The scheduled workflow records a tick, then runs `app`, `label`, `compile coding`, `coding`, and `poll agent`, then pushes state. `app` checks each App ID configured for a repo. When that App is installed there, it records the client id and the installation id. A missing or suspended installation stops the step. `label` creates a configured label the app repo does not yet have.
+The scheduled workflow records a tick, then runs `app`, `label`, `compile coding`, `run development`, and `poll agent`, then pushes state. `app` checks each App ID configured for a repo. When that App is installed there, it records the client id and the installation id. A missing or suspended installation stops the step. `label` creates a configured label the app repo does not yet have.
 
 From the factory checkout, after `gh gcf tick` prints an id:
 
@@ -68,18 +68,10 @@ From the factory checkout, after `gh gcf tick` prints an id:
 gh gcf app --tick <id>
 gh gcf label --tick <id>
 gh gcf compile coding --tick <id>
-gh gcf coding --tick <id>
+gh gcf run development --tick <id>
 gh gcf poll agent --tick <id>
 ```
 
-## Coding
+## Run
 
-`compile coding` copies the coding flow into that repo's state: each builder, its reviewers, its fixer, and its checks. It stores the SHA-256 of each instruction file, including an empty file. A missing instruction file stops the step.
-
-`coding` reads those builders in name order. It hashes each instruction file again. When the hash differs from the one compile stored, that builder waits for the next tick, and the other builders still start. When the hashes match, it looks for open issues that carry the builder's starting label.
-
-An issue is left alone when a coding work already has that issue number, or when a pull request references the issue. Otherwise coding writes the issue, the coding work, and the agent, then calls Cursor. The prompt is the instruction file, then the issue number, title, and body. Cursor is asked to open the pull request. The agent's id is `bc-` plus a UUID v7, and that id is what Cursor stores.
-
-A successful create records an ack and Cursor's run id. A failed create records the response body and adds the builder's attention label to the issue. The coding work stays. A later tick does not call Cursor again for that agent.
-
-`poll agent` reads each agent whose latest event is an ack. A run that is still going writes nothing. A finished builder stores the pull request number and `builder_head_sha`, and the work status becomes `built`. A finished reviewer stores its verdict and leaves the work alone. A finished fixer stores `fixer_head_sha`, and the work status becomes `fixed`.
+`run development` starts the builder for an open issue that carries a development's starting label and has no development work. The work stores the issue number and URL and points at the development and the builder. The agent does not point back at the work. When the builder instruction no longer matches the compiled hash, that development waits and nothing is written. A refused create sets the work to attention and applies the development's attention label. A later run does not start another builder for that issue.

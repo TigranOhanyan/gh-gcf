@@ -104,6 +104,17 @@ func GitHubNotFound(err error) (missing bool) {
 	return
 }
 
+// AddAttention applies label to the issue.
+func AddAttention(ctx context.Context, client *github.Client, owner string, repo string, number int, label string) (err error) {
+	labels := []string{label}
+	_, resp, err := client.Issues.AddLabelsToIssue(ctx, owner, repo, number, labels)
+	CloseGitHub(resp)
+	if err != nil {
+		log.Error("attention label", "owner", owner, "name", repo, "issue", number, "label", label, "err", err)
+	}
+	return
+}
+
 // CloseGitHub closes the body of a GitHub response.
 func CloseGitHub(resp *github.Response) {
 	if resp == nil {

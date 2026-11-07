@@ -1,4 +1,4 @@
-package coding_test
+package development_test
 
 import (
 	"bytes"
@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,45 +22,32 @@ import (
 const owner = "octo"
 const repoName = "app"
 const token = "test-token"
+const developmentName = "features"
 const instruction = "Build the issue."
+const runID = "run-11111111-1111-7111-8111-111111111111"
 
-func Test_Builder_should_start_an_agent_for_an_open_issue(t *testing.T) {
+func Test_CodingDevelopment_should_start_a_builder_for_an_open_issue(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
-	stubTimeline(t, 7, `[]`)
-	stubCursor(t, 200, `{"run":{"id":"run-11111111-1111-7111-8111-111111111111"}}`)
+	stubCursor(t, 200, `{"run":{"id":"`+runID+`"}}`)
 	repoDir := setupFactory(t, instruction)
 	id := runTick(t, repoDir)
 	err := runCompile(t, repoDir, id)
 	require.NoError(t, err)
 
-	err = runBuilder(t, repoDir, id)
+	err = runCoding(t, repoDir, id)
 	require.NoError(t, err)
 
 	body := mustGit(t, repoDir, "log -1 --format=%b state")
 	assert.Contains(t, string(body), "✅ [7] started")
 	db := openStateTip(t, repoDir)
 	defer db.Close()
-	works := listWorks(t, db)
-	require.Len(t, works, 1)
-	assert.Equal(t, int64(7), works[0].IssueNumber)
-	assert.Equal(t, "features", works[0].BuilderName)
 	agents := listAgents(t, db)
 	require.Len(t, agents, 1)
 	assert.True(t, strings.HasPrefix(agents[0].ID, "bc-"))
 	assert.Equal(t, "builder", agents[0].Role)
-	assert.Equal(t, works[0].ID, agents[0].WorkID)
 	assert.True(t, agents[0].CursorRunID.Valid)
-	assert.Equal(t, "run-11111111-1111-7111-8111-111111111111", agents[0].CursorRunID.String)
-	built := listBuilderAgents(t, db)
-	require.Len(t, built, 1)
-	assert.Equal(t, agents[0].ID, built[0].ID)
-	events := listEvents(t, db)
-	require.Len(t, events, 2)
-	assert.Equal(t, "starting", events[0].Kind)
-	assert.Equal(t, agents[0].ID, events[0].AgentID)
-	assert.Equal(t, "ack", events[1].Kind)
-	assert.Equal(t, agents[0].ID, events[1].AgentID)
+	assert.Equal(t, runID, agents[0].CursorRunID.String)
 	requests := cursorRequests(t)
 	require.Len(t, requests, 1)
 	assert.Contains(t, requests[0], instruction)
@@ -68,60 +56,107 @@ func Test_Builder_should_start_an_agent_for_an_open_issue(t *testing.T) {
 	assert.Contains(t, requests[0], agents[0].ID)
 }
 
-func Test_Builder_should_leave_a_taken_issue(t *testing.T) {
+func Test_CodingDevelopment_should_store_the_issue_and_point_at_the_development_and_the_builder(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
-	stubTimeline(t, 7, `[]`)
-	stubCursor(t, 200, `{"run":{"id":"run-11111111-1111-7111-8111-111111111111"}}`)
+	stubCursor(t, 200, `{"run":{"id":"`+runID+`"}}`)
 	repoDir := setupFactory(t, instruction)
 	id := runTick(t, repoDir)
 	err := runCompile(t, repoDir, id)
 	require.NoError(t, err)
-	err = runBuilder(t, repoDir, id)
+
+	err = runCoding(t, repoDir, id)
 	require.NoError(t, err)
 
-	err = runBuilder(t, repoDir, id)
-	require.NoError(t, err)
-
-	requests := cursorRequests(t)
-	assert.Len(t, requests, 1)
 	db := openStateTip(t, repoDir)
 	defer db.Close()
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	work := works[0]
+	agents := listAgents(t, db)
+	require.Len(t, agents, 1)
+	assert.NotEmpty(t, work.ID)
+	assert.Equal(t, developmentName, work.DevelopmentName)
+	assert.Equal(t, int64(7), work.IssueNumber)
+	assert.Equal(t, "https://github.com/octo/app/issues/7", work.IssueUrl)
+	assert.False(t, work.PullRequestNumber.Valid)
+	assert.False(t, work.BuilderHeadSha.Valid)
+	assert.False(t, work.FixerHeadSha.Valid)
+	assert.True(t, work.BuilderAgent.Valid)
+	assert.Equal(t, agents[0].ID, work.BuilderAgent.String)
+	assert.False(t, work.StandardsReviewerAgent.Valid)
+	assert.False(t, work.SpecificationReviewerAgent.Valid)
+	assert.False(t, work.FixerAgent.Valid)
+	assert.Empty(t, work.Status)
+}
+
+func Test_CodingDevelopment_should_record_the_builder_started_time_and_a_starting_event(t *testing.T) {
+	resetWireMock(t)
+	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
+	stubCursor(t, 200, `{"run":{"id":"`+runID+`"}}`)
+	repoDir := setupFactory(t, instruction)
+	id := runTick(t, repoDir)
+	err := runCompile(t, repoDir, id)
+	require.NoError(t, err)
+	startOfTest := time.Now().Add(-time.Second)
+
+	err = runCoding(t, repoDir, id)
+	require.NoError(t, err)
+	startOfCheck := time.Now().Add(time.Second)
+
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	agents := listAgents(t, db)
+	require.Len(t, agents, 1)
+	started, err := time.Parse(time.RFC3339Nano, agents[0].StartedAt)
+	require.NoError(t, err)
+	assert.WithinRange(t, started, startOfTest, startOfCheck)
+	events := listEvents(t, db)
+	require.NotEmpty(t, events)
+	starting := events[0]
+	assert.Len(t, starting.ID, 26)
+	assert.Len(t, starting.StepID, 26)
+	assert.Equal(t, agents[0].ID, starting.AgentID)
+	assert.Equal(t, "starting", starting.Kind)
+	assert.Equal(t, "[features] [7] starting", starting.Message)
+	recorded, err := time.Parse(time.RFC3339Nano, starting.CreatedAt)
+	require.NoError(t, err)
+	assert.WithinRange(t, recorded, startOfTest, startOfCheck)
+}
+
+func Test_CodingDevelopment_should_leave_an_issue_that_already_has_a_development_work(t *testing.T) {
+	resetWireMock(t)
+	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
+	stubCursor(t, 200, `{"run":{"id":"`+runID+`"}}`)
+	repoDir := setupFactory(t, instruction)
+	id := runTick(t, repoDir)
+	err := runCompile(t, repoDir, id)
+	require.NoError(t, err)
+	err = runCoding(t, repoDir, id)
+	require.NoError(t, err)
+
+	later := runTick(t, repoDir)
+	err = runCoding(t, repoDir, later)
+	require.NoError(t, err)
+
+	assert.Len(t, cursorRequests(t), 1)
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	works := listWorks(t, db)
+	assert.Len(t, works, 1)
 	agents := listAgents(t, db)
 	assert.Len(t, agents, 1)
 }
 
-func Test_Builder_should_skip_an_issue_that_has_a_pull_request(t *testing.T) {
-	resetWireMock(t)
-	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
-	timeline := `[{"event":"cross-referenced","source":{"issue":{"number":8,"pull_request":{"url":"https://api.github.com/repos/octo/app/pulls/8"}}}}]`
-	stubTimeline(t, 7, timeline)
-	repoDir := setupFactory(t, instruction)
-	id := runTick(t, repoDir)
-	err := runCompile(t, repoDir, id)
-	require.NoError(t, err)
-
-	err = runBuilder(t, repoDir, id)
-	require.NoError(t, err)
-
-	body := mustGit(t, repoDir, "log -1 --format=%b state")
-	assert.Contains(t, string(body), "✅ [7] pull request exists")
-	db := openStateTip(t, repoDir)
-	defer db.Close()
-	works := listWorks(t, db)
-	assert.Empty(t, works)
-	assert.Empty(t, cursorRequests(t))
-}
-
-func Test_Builder_should_skip_a_member_whose_instruction_changed(t *testing.T) {
+func Test_CodingDevelopment_should_wait_when_the_builder_instruction_hash_differs(t *testing.T) {
 	resetWireMock(t)
 	repoDir := setupFactory(t, instruction)
 	id := runTick(t, repoDir)
 	err := runCompile(t, repoDir, id)
 	require.NoError(t, err)
-	writeInstruction(t, repoDir, "features", "A different instruction.")
+	writeInstruction(t, repoDir, "builder", "A different instruction.")
 
-	err = runBuilder(t, repoDir, id)
+	err = runCoding(t, repoDir, id)
 	require.NoError(t, err)
 
 	body := mustGit(t, repoDir, "log -1 --format=%b state")
@@ -133,10 +168,9 @@ func Test_Builder_should_skip_a_member_whose_instruction_changed(t *testing.T) {
 	assert.Empty(t, cursorRequests(t))
 }
 
-func Test_Builder_should_reject_a_failed_create(t *testing.T) {
+func Test_CodingDevelopment_should_set_attention_when_the_create_is_refused(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
-	stubTimeline(t, 7, `[]`)
 	stubCursor(t, 500, `{"error":"nope"}`)
 	stubLabels(t, 7)
 	repoDir := setupFactory(t, instruction)
@@ -144,43 +178,74 @@ func Test_Builder_should_reject_a_failed_create(t *testing.T) {
 	err := runCompile(t, repoDir, id)
 	require.NoError(t, err)
 
-	err = runBuilder(t, repoDir, id)
+	err = runCoding(t, repoDir, id)
 	require.NoError(t, err)
 
 	body := mustGit(t, repoDir, "log -1 --format=%b state")
 	assert.Contains(t, string(body), "✅ [7] rejected")
 	db := openStateTip(t, repoDir)
-	defer db.Close()
 	works := listWorks(t, db)
 	require.Len(t, works, 1)
+	assert.Equal(t, "attention", works[0].Status)
 	agents := listAgents(t, db)
 	require.Len(t, agents, 1)
 	assert.False(t, agents[0].CursorRunID.Valid)
-	events := listEvents(t, db)
-	require.Len(t, events, 2)
-	assert.Equal(t, "starting", events[0].Kind)
-	assert.Equal(t, "rejected", events[1].Kind)
-	assert.Equal(t, `{"error":"nope"}`, events[1].Message)
-	assert.Len(t, labelRequests(t), 1)
-}
+	assert.False(t, agents[0].FinishedAt.Valid)
+	err = db.Close()
+	require.NoError(t, err)
+	labels := labelPosts(t)
+	require.Len(t, labels, 1)
+	assert.Equal(t, "/repos/octo/app/issues/7/labels", labels[0].url)
+	assert.Contains(t, labels[0].body, "stop")
 
-func Test_Builder_should_require_a_tick_id(t *testing.T) {
-	_, err := runRoot(t, "coding")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "tick")
+	later := runTick(t, repoDir)
+	err = runCoding(t, repoDir, later)
+	require.NoError(t, err)
+
+	assert.Len(t, cursorRequests(t), 1)
+	assert.Len(t, labelPosts(t), 1)
+	db = openStateTip(t, repoDir)
+	defer db.Close()
+	works = listWorks(t, db)
+	assert.Len(t, works, 1)
+	assert.Equal(t, "attention", works[0].Status)
+	agents = listAgents(t, db)
+	assert.Len(t, agents, 1)
 }
 
 func setupFactory(t *testing.T, text string) (repoDir string) {
 	t.Helper()
 	repoDir = initFactory(t)
 	mustRoot(t, "setup repo add --owner octo --name app")
-	mustRoot(t, "setup label add --owner octo --repo app --name todo --color ededed")
-	mustRoot(t, "setup label add --owner octo --repo app --name attention --color ededed")
-	mustRoot(t, "setup member add-builder --owner octo --repo app --name features --starting todo --attention attention")
-	writeInstruction(t, repoDir, "features", text)
+	mustRoot(t, "setup label add --owner octo --repo app --name ready --color ededed")
+	mustRoot(t, "setup label add --owner octo --repo app --name stop --color ff0000")
+	mustRoot(t, "setup apps add --id 42")
+	mustRoot(t, "setup apps attach --owner octo --repo app --id 42")
+	mustRoot(t, "setup apps add --id 43")
+	mustRoot(t, "setup apps attach --owner octo --repo app --id 43")
+	line := fmt.Sprintf("setup development add --owner octo --repo app --name %s --starting %s --attention %s --standards-app %s --specification-app %s", developmentName, "ready", "stop", "42", "43")
+	mustRoot(t, line)
+	writeInstructions(t, repoDir, text)
 	commitConfig(t, repoDir)
 	useStateBranch(t, repoDir)
 	return
+}
+
+func writeInstructions(t *testing.T, repoDir string, builder string) {
+	t.Helper()
+	writeInstruction(t, repoDir, "builder", builder)
+	writeInstruction(t, repoDir, "standards_reviewer", "")
+	writeInstruction(t, repoDir, "specification_reviewer", "")
+	writeInstruction(t, repoDir, "fixer", "")
+}
+
+func writeInstruction(t *testing.T, repoDir string, role string, text string) {
+	t.Helper()
+	path := filepath.Join(repoDir, "repos", owner, repoName, "developments", developmentName, role+".md")
+	err := os.MkdirAll(filepath.Dir(path), 0755)
+	require.NoError(t, err)
+	err = os.WriteFile(path, []byte(text), 0644)
+	require.NoError(t, err)
 }
 
 func initFactory(t *testing.T) (repoDir string) {
@@ -210,15 +275,6 @@ func useStateBranch(t *testing.T, repoDir string) {
 	_ = mustGit(t, repoDir, "checkout main")
 }
 
-func writeInstruction(t *testing.T, repoDir string, name string, text string) {
-	t.Helper()
-	path := filepath.Join(repoDir, "repos", owner, repoName, "members", name+".md")
-	err := os.MkdirAll(filepath.Dir(path), 0755)
-	require.NoError(t, err)
-	err = os.WriteFile(path, []byte(text), 0644)
-	require.NoError(t, err)
-}
-
 func runTick(t *testing.T, repoDir string) (id string) {
 	t.Helper()
 	t.Chdir(repoDir)
@@ -231,16 +287,16 @@ func runTick(t *testing.T, repoDir string) (id string) {
 func runCompile(t *testing.T, repoDir string, id string) (err error) {
 	t.Helper()
 	t.Chdir(repoDir)
-	line := fmt.Sprintf("compile coding --tick %s", id)
+	line := fmt.Sprintf("compile development --tick %s", id)
 	_, err = runRoot(t, line)
 	return
 }
 
-func runBuilder(t *testing.T, repoDir string, id string) (err error) {
+func runCoding(t *testing.T, repoDir string, id string) (err error) {
 	t.Helper()
 	t.Setenv("GH_TOKEN", token)
 	t.Chdir(repoDir)
-	line := fmt.Sprintf("coding --tick %s", id)
+	line := fmt.Sprintf("run development --tick %s", id)
 	_, err = runRoot(t, line)
 	return
 }
@@ -278,30 +334,23 @@ func openStateTip(t *testing.T, repoDir string) (db *statedb.DB) {
 	return
 }
 
-func listWorks(t *testing.T, db *statedb.DB) (rows []records.CodingWork) {
+func listWorks(t *testing.T, db *statedb.DB) (rows []records.DevelopmentWork) {
 	t.Helper()
-	rows, err := db.Queries.ListCodingWorks(t.Context())
+	rows, err := db.Queries.ListDevelopmentWorks(t.Context())
 	require.NoError(t, err)
 	return
 }
 
-func listAgents(t *testing.T, db *statedb.DB) (rows []records.Agent) {
+func listAgents(t *testing.T, db *statedb.DB) (rows []records.DevelopmentAgent) {
 	t.Helper()
-	rows, err := db.Queries.ListAgents(t.Context())
+	rows, err := db.Queries.ListDevelopmentAgents(t.Context())
 	require.NoError(t, err)
 	return
 }
 
-func listBuilderAgents(t *testing.T, db *statedb.DB) (rows []records.BuilderAgent) {
+func listEvents(t *testing.T, db *statedb.DB) (rows []records.DevelopmentEvent) {
 	t.Helper()
-	rows, err := db.Queries.ListBuilderAgents(t.Context())
-	require.NoError(t, err)
-	return
-}
-
-func listEvents(t *testing.T, db *statedb.DB) (rows []records.Event) {
-	t.Helper()
-	rows, err := db.Queries.GetEvents(t.Context())
+	rows, err := db.Queries.ListDevelopmentEvents(t.Context())
 	require.NoError(t, err)
 	return
 }
@@ -320,16 +369,6 @@ func resetWireMock(t *testing.T) {
 func stubIssues(t *testing.T, payload string) {
 	t.Helper()
 	rule := wiremock.Get(wiremock.URLPathEqualTo("/repos/octo/app/issues")).WillReturnResponse(
-		wiremock.NewResponse().WithStatus(200).WithHeader("Content-Type", "application/json").WithBody(payload),
-	)
-	err := wiremockClient.StubFor(rule)
-	require.NoError(t, err)
-}
-
-func stubTimeline(t *testing.T, number int, payload string) {
-	t.Helper()
-	path := fmt.Sprintf("/repos/octo/app/issues/%d/timeline", number)
-	rule := wiremock.Get(wiremock.URLPathEqualTo(path)).WillReturnResponse(
 		wiremock.NewResponse().WithStatus(200).WithHeader("Content-Type", "application/json").WithBody(payload),
 	)
 	err := wiremockClient.StubFor(rule)
@@ -369,7 +408,12 @@ func cursorRequests(t *testing.T) (bodies []string) {
 	return
 }
 
-func labelRequests(t *testing.T) (bodies []string) {
+type labelPost struct {
+	url  string
+	body string
+}
+
+func labelPosts(t *testing.T) (posts []labelPost) {
 	t.Helper()
 	journal, err := wiremockClient.GetAllRequests()
 	require.NoError(t, err)
@@ -377,7 +421,8 @@ func labelRequests(t *testing.T) (bodies []string) {
 		request := entry.Request
 		matched := request.Method == "POST" && strings.HasSuffix(request.URL, "/labels")
 		if matched {
-			bodies = append(bodies, request.Body)
+			post := labelPost{url: request.URL, body: request.Body}
+			posts = append(posts, post)
 		}
 	}
 	return

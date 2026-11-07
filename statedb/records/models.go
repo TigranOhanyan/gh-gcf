@@ -49,9 +49,41 @@ type Development struct {
 	FixerInstructionSha256                 string `json:"fixer_instruction_sha256"`
 }
 
+type DevelopmentAgent struct {
+	ID          string         `json:"id"`
+	Role        string         `json:"role"`
+	CursorRunID sql.NullString `json:"cursor_run_id"`
+	StartedAt   string         `json:"started_at"`
+	FinishedAt  sql.NullString `json:"finished_at"`
+}
+
 type DevelopmentCheck struct {
 	DevelopmentName string `json:"development_name"`
 	Name            string `json:"name"`
+}
+
+type DevelopmentEvent struct {
+	ID        string `json:"id"`
+	StepID    string `json:"step_id"`
+	AgentID   string `json:"agent_id"`
+	Kind      string `json:"kind"`
+	Message   string `json:"message"`
+	CreatedAt string `json:"created_at"`
+}
+
+type DevelopmentWork struct {
+	ID                         string         `json:"id"`
+	DevelopmentName            string         `json:"development_name"`
+	IssueNumber                int64          `json:"issue_number"`
+	IssueUrl                   string         `json:"issue_url"`
+	PullRequestNumber          sql.NullInt64  `json:"pull_request_number"`
+	BuilderHeadSha             sql.NullString `json:"builder_head_sha"`
+	FixerHeadSha               sql.NullString `json:"fixer_head_sha"`
+	BuilderAgent               sql.NullString `json:"builder_agent"`
+	StandardsReviewerAgent     sql.NullString `json:"standards_reviewer_agent"`
+	SpecificationReviewerAgent sql.NullString `json:"specification_reviewer_agent"`
+	FixerAgent                 sql.NullString `json:"fixer_agent"`
+	Status                     string         `json:"status"`
 }
 
 type Event struct {
