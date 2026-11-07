@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
+	"github.com/TigranOhanyan/gh-gcf/commands/setup/shared"
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 )
 
@@ -37,7 +38,7 @@ func newAddApp() (cmd *cobra.Command) {
 	}
 	flags := cmd.Flags()
 	flags.StringVar(&id, "id", "", "app id")
-	requireFlag(cmd, "id")
+	shared.RequireFlag(cmd, "id")
 	return
 }
 
@@ -76,15 +77,15 @@ func newAttachApp() (cmd *cobra.Command) {
 	flags.StringVar(&owner, "owner", "", "owner of the app repo")
 	flags.StringVar(&repo, "repo", "", "name of the app repo")
 	flags.StringVar(&id, "id", "", "app id")
-	requireFlag(cmd, "owner")
-	requireFlag(cmd, "repo")
-	requireFlag(cmd, "id")
+	shared.RequireFlag(cmd, "owner")
+	shared.RequireFlag(cmd, "repo")
+	shared.RequireFlag(cmd, "id")
 	return
 }
 
 func runAddApp(cmd *cobra.Command, rawID string) (err error) {
 	ctx := cmd.Context()
-	dir, err := currentFactory(ctx)
+	dir, err := shared.CurrentFactory(ctx)
 	if err != nil {
 		return
 	}
@@ -94,7 +95,7 @@ func runAddApp(cmd *cobra.Command, rawID string) (err error) {
 
 func runListApps(cmd *cobra.Command, owner string, repo string) (err error) {
 	ctx := cmd.Context()
-	dir, err := currentFactory(ctx)
+	dir, err := shared.CurrentFactory(ctx)
 	if err != nil {
 		return
 	}
@@ -119,7 +120,7 @@ func runListApps(cmd *cobra.Command, owner string, repo string) (err error) {
 func runAttachApp(cmd *cobra.Command, owner string, repo string, rawID string) (err error) {
 	ctx := cmd.Context()
 	use := func(dir string, _ string, _ string, db *configdb.DB) (useErr error) {
-		id, useErr := parseAppID(rawID)
+		id, useErr := shared.ParseAppID(rawID)
 		if useErr != nil {
 			return
 		}
@@ -130,7 +131,7 @@ func runAttachApp(cmd *cobra.Command, owner string, repo string, rawID string) (
 		useErr = attachApp(ctx, db, id)
 		return
 	}
-	err = withRepo(ctx, owner, repo, use)
+	err = shared.WithRepo(ctx, owner, repo, use)
 	return
 }
 
@@ -171,7 +172,7 @@ func printAttachedApps(cmd *cobra.Command, owner string, repo string) (err error
 		}
 		return
 	}
-	err = withRepo(ctx, owner, repo, use)
+	err = shared.WithRepo(ctx, owner, repo, use)
 	if err != nil {
 		return
 	}

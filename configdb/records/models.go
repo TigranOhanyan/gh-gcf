@@ -14,6 +14,19 @@ type BuilderMember struct {
 	StartingLabel string `json:"starting_label"`
 }
 
+type Development struct {
+	Name                     string `json:"name"`
+	StartingLabel            string `json:"starting_label"`
+	AttentionLabel           string `json:"attention_label"`
+	StandardsReviewerApp     int64  `json:"standards_reviewer_app"`
+	SpecificationReviewerApp int64  `json:"specification_reviewer_app"`
+}
+
+type DevelopmentCheck struct {
+	DevelopmentName string `json:"development_name"`
+	Name            string `json:"name"`
+}
+
 type FixerMember struct {
 	Name        string `json:"name"`
 	Role        string `json:"role"`

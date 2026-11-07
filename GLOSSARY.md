@@ -97,11 +97,11 @@ The role that applies a changes request or a red check on that pull request, onc
 _Avoid_: builder (second run), repairer, review applier
 
 **Development work**:
-One issue taken by one development. Its agents point at it.
+One issue taken by one development. It points at the agents it has started.
 _Avoid_: coding work, work, task, run, cycle
 
 **Agent**:
-One of a development's four roles acting through Cursor on one development work.
+One of a development's four roles acting through Cursor.
 _Avoid_: bot, run
 
 **Verdict**:

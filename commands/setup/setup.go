@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
+	"github.com/TigranOhanyan/gh-gcf/commands/setup/development"
 )
 
 func NewSetup() (cmd *cobra.Command) {
@@ -31,6 +32,7 @@ func NewSetup() (cmd *cobra.Command) {
 	cmd.AddCommand(newSetupApps())
 	cmd.AddCommand(newSetupMember())
 	cmd.AddCommand(newSetupCheck())
+	cmd.AddCommand(development.NewSetupDevelopment())
 	return
 }
 

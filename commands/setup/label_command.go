@@ -7,6 +7,7 @@ import (
 	"charm.land/log/v2"
 	"github.com/spf13/cobra"
 
+	"github.com/TigranOhanyan/gh-gcf/commands/setup/shared"
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 	configrecords "github.com/TigranOhanyan/gh-gcf/configdb/records"
 )
@@ -40,10 +41,10 @@ func newAddLabel() (cmd *cobra.Command) {
 	flags.StringVar(&repo, "repo", "", "name of the app repo")
 	flags.StringVar(&name, "name", "", "label name")
 	flags.StringVar(&color, "color", "", "six hex digits")
-	requireFlag(cmd, "owner")
-	requireFlag(cmd, "repo")
-	requireFlag(cmd, "name")
-	requireFlag(cmd, "color")
+	shared.RequireFlag(cmd, "owner")
+	shared.RequireFlag(cmd, "repo")
+	shared.RequireFlag(cmd, "name")
+	shared.RequireFlag(cmd, "color")
 	return
 }
 
@@ -62,8 +63,8 @@ func newListLabels() (cmd *cobra.Command) {
 	flags := cmd.Flags()
 	flags.StringVar(&owner, "owner", "", "owner of the app repo")
 	flags.StringVar(&repo, "repo", "", "name of the app repo")
-	requireFlag(cmd, "owner")
-	requireFlag(cmd, "repo")
+	shared.RequireFlag(cmd, "owner")
+	shared.RequireFlag(cmd, "repo")
 	return
 }
 
@@ -73,7 +74,7 @@ func runAddLabel(cmd *cobra.Command, owner string, repo string, name string, col
 		_, useErr = addLabel(ctx, db, name, color)
 		return
 	}
-	err = withRepo(ctx, owner, repo, use)
+	err = shared.WithRepo(ctx, owner, repo, use)
 	return
 }
 
@@ -87,7 +88,7 @@ func runListLabels(cmd *cobra.Command, owner string, repo string) (err error) {
 		}
 		return
 	}
-	err = withRepo(ctx, owner, repo, use)
+	err = shared.WithRepo(ctx, owner, repo, use)
 	if err != nil {
 		return
 	}

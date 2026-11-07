@@ -7,6 +7,7 @@ import (
 	"charm.land/log/v2"
 	"github.com/spf13/cobra"
 
+	"github.com/TigranOhanyan/gh-gcf/commands/setup/shared"
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 )
 
@@ -39,10 +40,10 @@ func newAddCheck() (cmd *cobra.Command) {
 	flags.StringVar(&repo, "repo", "", "name of the app repo")
 	flags.StringVar(&builder, "builder", "", "builder name")
 	flags.StringVar(&name, "name", "", "check name")
-	requireFlag(cmd, "owner")
-	requireFlag(cmd, "repo")
-	requireFlag(cmd, "builder")
-	requireFlag(cmd, "name")
+	shared.RequireFlag(cmd, "owner")
+	shared.RequireFlag(cmd, "repo")
+	shared.RequireFlag(cmd, "builder")
+	shared.RequireFlag(cmd, "name")
 	return
 }
 
@@ -63,9 +64,9 @@ func newListChecks() (cmd *cobra.Command) {
 	flags.StringVar(&owner, "owner", "", "owner of the app repo")
 	flags.StringVar(&repo, "repo", "", "name of the app repo")
 	flags.StringVar(&builder, "builder", "", "builder name")
-	requireFlag(cmd, "owner")
-	requireFlag(cmd, "repo")
-	requireFlag(cmd, "builder")
+	shared.RequireFlag(cmd, "owner")
+	shared.RequireFlag(cmd, "repo")
+	shared.RequireFlag(cmd, "builder")
 	return
 }
 
@@ -75,7 +76,7 @@ func runAddCheck(cmd *cobra.Command, owner string, repo string, builder string, 
 		_, useErr = addGithubCheck(ctx, db, builder, name)
 		return
 	}
-	err = withRepo(ctx, owner, repo, use)
+	err = shared.WithRepo(ctx, owner, repo, use)
 	return
 }
 
@@ -89,7 +90,7 @@ func runListChecks(cmd *cobra.Command, owner string, repo string, builder string
 		}
 		return
 	}
-	err = withRepo(ctx, owner, repo, use)
+	err = shared.WithRepo(ctx, owner, repo, use)
 	if err != nil {
 		return
 	}

@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"charm.land/log/v2"
 	"context"
 	"fmt"
 	"os"
@@ -9,15 +10,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
-	"charm.land/log/v2"
-
+	"github.com/TigranOhanyan/gh-gcf/commands/setup/shared"
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 	configrecords "github.com/TigranOhanyan/gh-gcf/configdb/records"
 )
-
-const maxLabelName = 50
 
 var colorHex = regexp.MustCompile(`^[0-9a-f]{6}$`)
 
@@ -65,7 +62,7 @@ func listRepos(factoryDir string) (repos []appRepo, err error) {
 				return
 			}
 
-			configFile := configPath(factoryDir, ownerName, nameText)
+			configFile := shared.ConfigPath(factoryDir, ownerName, nameText)
 			_, statErr := os.Stat(configFile)
 			hasConfig := statErr == nil
 			repo := appRepo{
@@ -91,11 +88,11 @@ func repoKey(repo appRepo) (key string) {
 }
 
 func createRepo(ctx context.Context, factoryDir string, owner string, name string) (db *configdb.DB, err error) {
-	owner, err = normalizeSegment(owner)
+	owner, err = shared.NormalizeSegment(owner)
 	if err != nil {
 		return
 	}
-	name, err = normalizeSegment(name)
+	name, err = shared.NormalizeSegment(name)
 	if err != nil {
 		return
 	}
@@ -119,7 +116,7 @@ func createRepo(ctx context.Context, factoryDir string, owner string, name strin
 		return
 	}
 
-	path := configPath(factoryDir, owner, name)
+	path := shared.ConfigPath(factoryDir, owner, name)
 	db, err = configdb.OpenAndMigrate(ctx, path)
 	if err != nil {
 		log.Error("create config", "path", path, "err", err)
@@ -129,27 +126,8 @@ func createRepo(ctx context.Context, factoryDir string, owner string, name strin
 	return
 }
 
-func openConfig(ctx context.Context, path string) (db *configdb.DB, missing bool, err error) {
-	_, err = os.Stat(path)
-	missing = os.IsNotExist(err)
-	if missing {
-		err = nil
-		return
-	}
-	if err != nil {
-		log.Error("stat config", "path", path, "err", err)
-		return
-	}
-
-	db, err = configdb.OpenAndMigrate(ctx, path)
-	if err != nil {
-		log.Error("open config", "path", path, "err", err)
-	}
-	return
-}
-
 func addLabel(ctx context.Context, db *configdb.DB, rawName string, rawColor string) (name string, err error) {
-	name, err = normalizeLabelName(rawName)
+	name, err = shared.NormalizeLabelName(rawName)
 	if err != nil {
 		return
 	}
@@ -185,21 +163,8 @@ func addLabel(ctx context.Context, db *configdb.DB, rawName string, rawColor str
 	return
 }
 
-func parseAppID(raw string) (id int64, err error) {
-	text := strings.TrimSpace(raw)
-	parsed, parseErr := strconv.ParseInt(text, 10, 64)
-	canonical := strconv.FormatInt(parsed, 10)
-	bad := parseErr != nil || parsed <= 0 || canonical != text
-	if bad {
-		err = fmt.Errorf("app id must be a positive integer")
-		return
-	}
-	id = parsed
-	return
-}
-
 func createAppFile(factoryDir string, raw string) (id int64, err error) {
-	id, err = parseAppID(raw)
+	id, err = shared.ParseAppID(raw)
 	if err != nil {
 		return
 	}
@@ -263,48 +228,6 @@ func attachApp(ctx context.Context, db *configdb.DB, id int64) (err error) {
 
 func secretName(id int64) (name string) {
 	name = fmt.Sprintf("GITHUB_APP_%d", id)
-	return
-}
-
-func configPath(factoryDir string, owner string, name string) (path string) {
-	path = filepath.Join(factoryDir, "repos", owner, name, "config.db")
-	return
-}
-
-func normalizeSegment(raw string) (segment string, err error) {
-	segment = strings.TrimSpace(raw)
-	empty := segment == ""
-	if empty {
-		err = fmt.Errorf("name is empty")
-		segment = ""
-		return
-	}
-
-	hasSlash := strings.Contains(segment, "/")
-	hasBackslash := strings.Contains(segment, "\\")
-	hasSep := hasSlash || hasBackslash
-	dot := segment == "." || segment == ".."
-	bad := hasSep || dot
-	if bad {
-		err = fmt.Errorf("name must be a single path segment")
-		segment = ""
-	}
-	return
-}
-
-func normalizeLabelName(raw string) (name string, err error) {
-	name = strings.TrimSpace(raw)
-	empty := name == ""
-	if empty {
-		err = fmt.Errorf("label name is empty")
-		return
-	}
-
-	count := utf8.RuneCountInString(name)
-	tooLong := count > maxLabelName
-	if tooLong {
-		err = fmt.Errorf("label name is longer than 50 characters")
-	}
 	return
 }
 
@@ -442,7 +365,7 @@ func addFixerMember(ctx context.Context, db *configdb.DB, factoryDir string, own
 }
 
 func addGithubCheck(ctx context.Context, db *configdb.DB, builder string, rawName string) (name string, err error) {
-	name, err = normalizeCheckName(rawName)
+	name, err = shared.NormalizeCheckName(rawName)
 	if err != nil {
 		return
 	}
@@ -609,15 +532,6 @@ func writeMemberFile(path string) (err error) {
 }
 
 func normalizeMemberName(raw string) (name string, err error) {
-	name, err = normalizeSegment(raw)
-	return
-}
-
-func normalizeCheckName(raw string) (name string, err error) {
-	name = strings.TrimSpace(raw)
-	empty := name == ""
-	if empty {
-		err = fmt.Errorf("check name is empty")
-	}
+	name, err = shared.NormalizeSegment(raw)
 	return
 }

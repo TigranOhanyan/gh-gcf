@@ -9,6 +9,7 @@ import (
 	"charm.land/log/v2"
 	"github.com/spf13/cobra"
 
+	"github.com/TigranOhanyan/gh-gcf/commands/setup/shared"
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 )
 
@@ -45,11 +46,11 @@ func newAddBuilder() (cmd *cobra.Command) {
 	flags.StringVar(&name, "name", "", "member name")
 	flags.StringVar(&starting, "starting", "", "starting label")
 	flags.StringVar(&attention, "attention", "", "attention label")
-	requireFlag(cmd, "owner")
-	requireFlag(cmd, "repo")
-	requireFlag(cmd, "name")
-	requireFlag(cmd, "starting")
-	requireFlag(cmd, "attention")
+	shared.RequireFlag(cmd, "owner")
+	shared.RequireFlag(cmd, "repo")
+	shared.RequireFlag(cmd, "name")
+	shared.RequireFlag(cmd, "starting")
+	shared.RequireFlag(cmd, "attention")
 	return
 }
 
@@ -76,12 +77,12 @@ func newAddReviewer() (cmd *cobra.Command) {
 	flags.StringVar(&name, "name", "", "member name")
 	flags.StringVar(&app, "app", "", "app id")
 	flags.StringVar(&attention, "attention", "", "attention label")
-	requireFlag(cmd, "owner")
-	requireFlag(cmd, "repo")
-	requireFlag(cmd, "builder")
-	requireFlag(cmd, "name")
-	requireFlag(cmd, "app")
-	requireFlag(cmd, "attention")
+	shared.RequireFlag(cmd, "owner")
+	shared.RequireFlag(cmd, "repo")
+	shared.RequireFlag(cmd, "builder")
+	shared.RequireFlag(cmd, "name")
+	shared.RequireFlag(cmd, "app")
+	shared.RequireFlag(cmd, "attention")
 	return
 }
 
@@ -106,11 +107,11 @@ func newAddFixer() (cmd *cobra.Command) {
 	flags.StringVar(&builder, "builder", "", "builder name")
 	flags.StringVar(&name, "name", "", "member name")
 	flags.StringVar(&attention, "attention", "", "attention label")
-	requireFlag(cmd, "owner")
-	requireFlag(cmd, "repo")
-	requireFlag(cmd, "builder")
-	requireFlag(cmd, "name")
-	requireFlag(cmd, "attention")
+	shared.RequireFlag(cmd, "owner")
+	shared.RequireFlag(cmd, "repo")
+	shared.RequireFlag(cmd, "builder")
+	shared.RequireFlag(cmd, "name")
+	shared.RequireFlag(cmd, "attention")
 	return
 }
 
@@ -129,26 +130,26 @@ func newListMembers() (cmd *cobra.Command) {
 	flags := cmd.Flags()
 	flags.StringVar(&owner, "owner", "", "owner of the app repo")
 	flags.StringVar(&repo, "repo", "", "name of the app repo")
-	requireFlag(cmd, "owner")
-	requireFlag(cmd, "repo")
+	shared.RequireFlag(cmd, "owner")
+	shared.RequireFlag(cmd, "repo")
 	return
 }
 
 func runAddBuilder(cmd *cobra.Command, rawOwner string, rawRepo string, rawName string, rawStarting string, rawAttention string) (err error) {
 	ctx := cmd.Context()
 	use := func(dir string, owner string, repo string, db *configdb.DB) (useErr error) {
-		starting, useErr := normalizeLabelName(rawStarting)
+		starting, useErr := shared.NormalizeLabelName(rawStarting)
 		if useErr != nil {
 			return
 		}
-		attention, useErr := normalizeLabelName(rawAttention)
+		attention, useErr := shared.NormalizeLabelName(rawAttention)
 		if useErr != nil {
 			return
 		}
 		_, useErr = addBuilderMember(ctx, db, dir, owner, repo, rawName, starting, attention)
 		return
 	}
-	err = withRepo(ctx, rawOwner, rawRepo, use)
+	err = shared.WithRepo(ctx, rawOwner, rawRepo, use)
 	return
 }
 
@@ -159,18 +160,18 @@ func runAddReviewer(cmd *cobra.Command, rawOwner string, rawRepo string, rawBuil
 		if useErr != nil {
 			return
 		}
-		attention, useErr := normalizeLabelName(rawAttention)
+		attention, useErr := shared.NormalizeLabelName(rawAttention)
 		if useErr != nil {
 			return
 		}
-		appID, useErr := parseAppID(rawApp)
+		appID, useErr := shared.ParseAppID(rawApp)
 		if useErr != nil {
 			return
 		}
 		_, useErr = addReviewerMember(ctx, db, dir, owner, repo, builder, rawName, appID, attention)
 		return
 	}
-	err = withRepo(ctx, rawOwner, rawRepo, use)
+	err = shared.WithRepo(ctx, rawOwner, rawRepo, use)
 	return
 }
 
@@ -181,14 +182,14 @@ func runAddFixer(cmd *cobra.Command, rawOwner string, rawRepo string, rawBuilder
 		if useErr != nil {
 			return
 		}
-		attention, useErr := normalizeLabelName(rawAttention)
+		attention, useErr := shared.NormalizeLabelName(rawAttention)
 		if useErr != nil {
 			return
 		}
 		_, useErr = addFixerMember(ctx, db, dir, owner, repo, builder, rawName, attention)
 		return
 	}
-	err = withRepo(ctx, rawOwner, rawRepo, use)
+	err = shared.WithRepo(ctx, rawOwner, rawRepo, use)
 	return
 }
 
@@ -199,7 +200,7 @@ func runListMembers(cmd *cobra.Command, owner string, repo string) (err error) {
 		useErr = printMembers(ctx, writer, db)
 		return
 	}
-	err = withRepo(ctx, owner, repo, use)
+	err = shared.WithRepo(ctx, owner, repo, use)
 	return
 }
 

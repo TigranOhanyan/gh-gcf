@@ -4,7 +4,7 @@ description: >-
   Go test style: one behavior per test, assert stored state,
   accumulative setup, WireMock for HTTP, real local Postgres, and a
   per-test git repo for the factory's main and state branches.
-  Command tests call ExecuteContext. Setup tests drive the terminal with vttest.
+  Command tests run a shell line on the root command. Setup tests drive the terminal with vttest.
   Use when writing, editing, or reviewing tests, *_test.go files, or
   when the user mentions accumulative testing, WireMock, or test setup.
 ---
@@ -49,7 +49,7 @@ When a test has `t`, use `t.Context()`. Do not use `context.TODO` or `context.Ba
 
 Commands and the setup TUI are the entrypoints. Test them as a black box, as close to that entrypoint as possible. One run then covers flag parsing, wiring, and the work.
 
-A command test calls `ExecuteContext` on that command. Do not call an internal function the command wraps, such as `CreateTick`.
+A command test runs a shell line on the root command, as the [layout skill](../layout/SKILL.md) describes. Do not call an internal function the command wraps, such as `CreateTick`.
 
 Setup tests drive the program with [github.com/charmbracelet/x/vttest](https://github.com/charmbracelet/x/vttest). Do not open a PTY with `github.com/creack/pty`. A setup test that exits before the screen still starts through `vttest`.
 
