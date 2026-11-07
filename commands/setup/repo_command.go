@@ -5,8 +5,6 @@ import (
 	"io"
 
 	"github.com/spf13/cobra"
-
-	"github.com/TigranOhanyan/gh-gcf/commands/setup/shared"
 )
 
 func newSetupRepo() (cmd *cobra.Command) {
@@ -34,8 +32,8 @@ func newAddRepo() (cmd *cobra.Command) {
 	flags := cmd.Flags()
 	flags.StringVar(&owner, "owner", "", "owner of the app repo")
 	flags.StringVar(&name, "name", "", "name of the app repo")
-	shared.RequireFlag(cmd, "owner")
-	shared.RequireFlag(cmd, "name")
+	RequireFlag(cmd, "owner")
+	RequireFlag(cmd, "name")
 	return
 }
 
@@ -54,7 +52,7 @@ func newListRepos() (cmd *cobra.Command) {
 
 func runAddRepo(cmd *cobra.Command, owner string, name string) (err error) {
 	ctx := cmd.Context()
-	dir, err := shared.CurrentFactory(ctx)
+	dir, err := CurrentFactory(ctx)
 	if err != nil {
 		return
 	}
@@ -62,13 +60,13 @@ func runAddRepo(cmd *cobra.Command, owner string, name string) (err error) {
 	if err != nil {
 		return
 	}
-	shared.CloseConfig(db)
+	CloseConfig(db)
 	return
 }
 
 func runListRepos(cmd *cobra.Command) (err error) {
 	ctx := cmd.Context()
-	dir, err := shared.CurrentFactory(ctx)
+	dir, err := CurrentFactory(ctx)
 	if err != nil {
 		return
 	}

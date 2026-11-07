@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/TigranOhanyan/gh-gcf/commands/setup/shared"
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 	configrecords "github.com/TigranOhanyan/gh-gcf/configdb/records"
 )
@@ -62,7 +61,7 @@ func listRepos(factoryDir string) (repos []appRepo, err error) {
 				return
 			}
 
-			configFile := shared.ConfigPath(factoryDir, ownerName, nameText)
+			configFile := ConfigPath(factoryDir, ownerName, nameText)
 			_, statErr := os.Stat(configFile)
 			hasConfig := statErr == nil
 			repo := appRepo{
@@ -88,11 +87,11 @@ func repoKey(repo appRepo) (key string) {
 }
 
 func createRepo(ctx context.Context, factoryDir string, owner string, name string) (db *configdb.DB, err error) {
-	owner, err = shared.NormalizeSegment(owner)
+	owner, err = NormalizeSegment(owner)
 	if err != nil {
 		return
 	}
-	name, err = shared.NormalizeSegment(name)
+	name, err = NormalizeSegment(name)
 	if err != nil {
 		return
 	}
@@ -116,7 +115,7 @@ func createRepo(ctx context.Context, factoryDir string, owner string, name strin
 		return
 	}
 
-	path := shared.ConfigPath(factoryDir, owner, name)
+	path := ConfigPath(factoryDir, owner, name)
 	db, err = configdb.OpenAndMigrate(ctx, path)
 	if err != nil {
 		log.Error("create config", "path", path, "err", err)
@@ -127,7 +126,7 @@ func createRepo(ctx context.Context, factoryDir string, owner string, name strin
 }
 
 func addLabel(ctx context.Context, db *configdb.DB, rawName string, rawColor string) (name string, err error) {
-	name, err = shared.NormalizeLabelName(rawName)
+	name, err = NormalizeLabelName(rawName)
 	if err != nil {
 		return
 	}
@@ -164,7 +163,7 @@ func addLabel(ctx context.Context, db *configdb.DB, rawName string, rawColor str
 }
 
 func createAppFile(factoryDir string, raw string) (id int64, err error) {
-	id, err = shared.ParseAppID(raw)
+	id, err = ParseAppID(raw)
 	if err != nil {
 		return
 	}
@@ -365,7 +364,7 @@ func addFixerMember(ctx context.Context, db *configdb.DB, factoryDir string, own
 }
 
 func addGithubCheck(ctx context.Context, db *configdb.DB, builder string, rawName string) (name string, err error) {
-	name, err = shared.NormalizeCheckName(rawName)
+	name, err = NormalizeCheckName(rawName)
 	if err != nil {
 		return
 	}
@@ -532,6 +531,6 @@ func writeMemberFile(path string) (err error) {
 }
 
 func normalizeMemberName(raw string) (name string, err error) {
-	name, err = shared.NormalizeSegment(raw)
+	name, err = NormalizeSegment(raw)
 	return
 }

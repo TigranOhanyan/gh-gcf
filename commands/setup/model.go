@@ -11,7 +11,6 @@ import (
 	"charm.land/log/v2"
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
-	"github.com/TigranOhanyan/gh-gcf/commands/setup/shared"
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 	configrecords "github.com/TigranOhanyan/gh-gcf/configdb/records"
 )
@@ -21,7 +20,7 @@ const listHelp = "a add   enter open   esc back   q quit"
 const backHelp = "esc back   q quit"
 const formContinueHelp = "tab next   enter next   esc back"
 const formSaveHelp = "tab saves   enter saves   esc back"
-const missingConfig = shared.MissingConfig
+const missingConfig = MissingConfig
 const noRepos = "No app repos yet."
 const noLabels = "No labels yet."
 const noApps = "No apps yet."
@@ -608,8 +607,8 @@ func (m model) enterRepo(repo appRepo) (updated model) {
 	updated.checks = nil
 	updated.place.builder = ""
 
-	path := shared.ConfigPath(updated.factoryDir, repo.owner, repo.name)
-	db, missing, err := shared.OpenConfig(updated.ctx, path)
+	path := ConfigPath(updated.factoryDir, repo.owner, repo.name)
+	db, missing, err := OpenConfig(updated.ctx, path)
 	if err != nil {
 		updated.notice = err.Error()
 		updated = updated.showSections()

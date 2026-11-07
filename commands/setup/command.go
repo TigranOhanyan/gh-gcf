@@ -1,4 +1,4 @@
-package shared
+package setup
 
 import (
 	"context"
