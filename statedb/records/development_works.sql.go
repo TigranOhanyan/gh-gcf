@@ -504,6 +504,15 @@ func (q *Queries) SetDevelopmentWorkAttention(ctx context.Context, id string) er
 	return err
 }
 
+const setDevelopmentWorkFinished = `-- name: SetDevelopmentWorkFinished :exec
+UPDATE development_work SET status = 'finished' WHERE id = ?
+`
+
+func (q *Queries) SetDevelopmentWorkFinished(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, setDevelopmentWorkFinished, id)
+	return err
+}
+
 const setDevelopmentWorkPull = `-- name: SetDevelopmentWorkPull :exec
 UPDATE development_work
 SET pull_request_number = ?, builder_head_sha = ?

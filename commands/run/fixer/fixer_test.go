@@ -133,7 +133,7 @@ func Test_RunFixer_should_ignore_an_older_passed_run_of_a_listed_name_when_a_new
 	assert.Empty(t, requests[0].checkName)
 }
 
-func Test_RunFixer_should_ignore_a_check_run_whose_name_is_not_listed_and_write_nothing_because_of_it(t *testing.T) {
+func Test_RunFixer_should_finish_the_work_when_an_unlisted_check_is_still_running_and_every_listed_check_passed(t *testing.T) {
 	repoDir := readyReviewers(t)
 	recordApps(t, repoDir)
 	listed := oneRun(checkName, "completed", "success", olderStart)
@@ -143,13 +143,17 @@ func Test_RunFixer_should_ignore_a_check_run_whose_name_is_not_listed_and_write_
 	standards := reviewJSON(1, standardsBotID, "APPROVED", newerStart)
 	specification := reviewJSON(2, specificationBotID, "APPROVED", newerStart)
 	stubReviews(t, reviewsPayload(standards, specification))
-	before := stateCounts(t, repoDir)
 	id := runTick(t, repoDir)
 
 	err := runFixer(t, repoDir, id)
 	require.NoError(t, err)
 
-	assertWroteNothing(t, repoDir, before)
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	assert.Equal(t, "finished", works[0].Status)
+	assert.False(t, works[0].FixerAgent.Valid)
 	requests := checkRunRequests(t)
 	require.Len(t, requests, 1)
 	assert.Equal(t, "/repos/octo/app/commits/"+headSHA+"/check-runs", requests[0].path)
@@ -240,7 +244,7 @@ func Test_RunFixer_should_set_attention_when_a_listed_check_is_red_and_a_verdict
 	assert.Equal(t, 2, reviewRequestCount(t))
 }
 
-func Test_RunFixer_should_read_verdicts_when_the_development_lists_no_checks_and_both_reviewers_have_finished(t *testing.T) {
+func Test_RunFixer_should_finish_the_work_when_both_verdicts_approve_and_the_development_lists_no_checks(t *testing.T) {
 	repoDir := prepareReviewers(t, false)
 	recordApps(t, repoDir)
 	stubReviewerAccess(t)
@@ -253,10 +257,82 @@ func Test_RunFixer_should_read_verdicts_when_the_development_lists_no_checks_and
 	err := runFixer(t, repoDir, id)
 	require.NoError(t, err)
 
-	assertWroteNothing(t, repoDir, before)
+	assertFinishedWork(t, repoDir, before)
 	assert.Empty(t, checkRunRequests(t))
 	assert.Equal(t, 2, reviewRequestCount(t))
 	assert.Empty(t, labelPosts(t))
+}
+
+func Test_RunFixer_should_set_the_development_work_to_finished_when_both_verdicts_approve_and_every_listed_check_passed(t *testing.T) {
+	repoDir := readyReviewers(t)
+	recordApps(t, repoDir)
+	run := oneRun(checkName, "completed", "success", newerStart)
+	stubCheckRuns(t, headSHA, checkRunsPayload(run))
+	stubReviewerAccess(t)
+	standards := reviewJSON(1, standardsBotID, "APPROVED", olderStart)
+	specification := reviewJSON(2, specificationBotID, "APPROVED", newerStart)
+	stubReviews(t, reviewsPayload(standards, specification))
+	before := stateCounts(t, repoDir)
+	id := runTick(t, repoDir)
+
+	err := runFixer(t, repoDir, id)
+	require.NoError(t, err)
+
+	assertFinishedWork(t, repoDir, before)
+	requests := checkRunRequests(t)
+	require.Len(t, requests, 1)
+	assert.Equal(t, "/repos/octo/app/commits/"+headSHA+"/check-runs", requests[0].path)
+	assert.Equal(t, 2, reviewRequestCount(t))
+}
+
+func Test_RunFixer_should_leave_the_fixer_unset_when_the_development_work_is_finished_that_way(t *testing.T) {
+	repoDir := readyReviewers(t)
+	recordApps(t, repoDir)
+	run := oneRun(checkName, "completed", "success", newerStart)
+	stubCheckRuns(t, headSHA, checkRunsPayload(run))
+	stubReviewerAccess(t)
+	standards := reviewJSON(1, standardsBotID, "APPROVED", olderStart)
+	specification := reviewJSON(2, specificationBotID, "APPROVED", newerStart)
+	stubReviews(t, reviewsPayload(standards, specification))
+	creates := len(cursorRequests(t))
+	id := runTick(t, repoDir)
+
+	err := runFixer(t, repoDir, id)
+	require.NoError(t, err)
+
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	assert.Equal(t, "finished", works[0].Status)
+	assert.False(t, works[0].FixerAgent.Valid)
+	assert.False(t, works[0].FixerHeadSha.Valid)
+	agents := listAgents(t, db)
+	_, fixerFound := agentByRole(agents, "fixer")
+	assert.False(t, fixerFound)
+	assert.Len(t, cursorRequests(t), creates)
+}
+
+func Test_RunFixer_should_not_merge_ready_or_close_the_pull_request_when_the_development_work_is_finished_that_way(t *testing.T) {
+	repoDir := readyReviewers(t)
+	recordApps(t, repoDir)
+	run := oneRun(checkName, "completed", "success", newerStart)
+	stubCheckRuns(t, headSHA, checkRunsPayload(run))
+	stubReviewerAccess(t)
+	standards := reviewJSON(1, standardsBotID, "APPROVED", olderStart)
+	specification := reviewJSON(2, specificationBotID, "APPROVED", newerStart)
+	stubReviews(t, reviewsPayload(standards, specification))
+	id := runTick(t, repoDir)
+
+	err := runFixer(t, repoDir, id)
+	require.NoError(t, err)
+
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	assert.Equal(t, "finished", works[0].Status)
+	assert.Empty(t, pullMutations(t))
 }
 
 func Test_RunFixer_should_start_the_fixer_when_one_verdict_requests_changes(t *testing.T) {
@@ -466,6 +542,46 @@ func stateCounts(t *testing.T, repoDir string) (counted counts) {
 	err := db.Close()
 	require.NoError(t, err)
 	return
+}
+
+func assertFinishedWork(t *testing.T, repoDir string, before counts) {
+	t.Helper()
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
+	assert.Contains(t, string(body), "✅ [7] finished")
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	work := works[0]
+	agents := listAgents(t, db)
+	require.Len(t, agents, before.agents)
+	builderAgent, builderFound := agentByRole(agents, "builder")
+	require.True(t, builderFound)
+	standardsAgent, standardsFound := agentByRole(agents, "standards_reviewer")
+	require.True(t, standardsFound)
+	specificationAgent, specificationFound := agentByRole(agents, "specification_reviewer")
+	require.True(t, specificationFound)
+	_, fixerFound := agentByRole(agents, "fixer")
+	assert.False(t, fixerFound)
+	assert.NotEmpty(t, work.ID)
+	assert.Equal(t, developmentName, work.DevelopmentName)
+	assert.Equal(t, int64(7), work.IssueNumber)
+	assert.Equal(t, "https://github.com/octo/app/issues/7", work.IssueUrl)
+	assert.True(t, work.PullRequestNumber.Valid)
+	assert.Equal(t, int64(9), work.PullRequestNumber.Int64)
+	assert.True(t, work.BuilderHeadSha.Valid)
+	assert.Equal(t, headSHA, work.BuilderHeadSha.String)
+	assert.False(t, work.FixerHeadSha.Valid)
+	assert.True(t, work.BuilderAgent.Valid)
+	assert.Equal(t, builderAgent.ID, work.BuilderAgent.String)
+	assert.True(t, work.StandardsReviewerAgent.Valid)
+	assert.Equal(t, standardsAgent.ID, work.StandardsReviewerAgent.String)
+	assert.True(t, work.SpecificationReviewerAgent.Valid)
+	assert.Equal(t, specificationAgent.ID, work.SpecificationReviewerAgent.String)
+	assert.False(t, work.FixerAgent.Valid)
+	assert.Equal(t, "finished", work.Status)
+	events := listEvents(t, db)
+	assert.Len(t, events, before.events)
 }
 
 func assertWroteNothing(t *testing.T, repoDir string, before counts) {
@@ -1105,6 +1221,24 @@ func testAppKey(t *testing.T) (pemText string) {
 		Bytes: x509.MarshalPKCS1PrivateKey(key),
 	}
 	pemText = string(pem.EncodeToMemory(block))
+	return
+}
+
+func pullMutations(t *testing.T) (urls []string) {
+	t.Helper()
+	journal, err := wiremockClient.GetAllRequests()
+	require.NoError(t, err)
+	for _, entry := range journal.Requests {
+		request := entry.Request
+		merge := strings.Contains(request.URL, "/merge")
+		write := request.Method == "PATCH" || request.Method == "PUT" || request.Method == "POST"
+		pull := strings.Contains(request.URL, "/pulls/")
+		issueWrite := (request.Method == "PATCH" || request.Method == "PUT") && strings.Contains(request.URL, "/issues/")
+		matched := merge || (write && pull) || issueWrite
+		if matched {
+			urls = append(urls, request.Method+" "+request.URL)
+		}
+	}
 	return
 }
 

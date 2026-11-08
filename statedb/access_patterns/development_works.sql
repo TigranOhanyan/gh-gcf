@@ -44,6 +44,9 @@ INSERT INTO development_work (
 -- name: SetDevelopmentWorkAttention :exec
 UPDATE development_work SET status = 'attention' WHERE id = ?;
 
+-- name: SetDevelopmentWorkFinished :exec
+UPDATE development_work SET status = 'finished' WHERE id = ?;
+
 -- name: SetDevelopmentWorkPull :exec
 UPDATE development_work
 SET pull_request_number = ?, builder_head_sha = ?

@@ -142,7 +142,7 @@ func (step checkStep) readVerdicts(ctx context.Context, repo commands.Repo, step
 	changes := standardsChanges || specificationChanges
 	needsFix := changes || red
 	if !needsFix {
-		// Issue 32 sets the work to finished when both verdicts approve and every listed check passed.
+		line, err = step.finishWork(ctx, repo, work)
 		return
 	}
 	line, err = step.startFixer(ctx, repo, stepID, client, development, work, noted)
@@ -380,6 +380,15 @@ func (step checkStep) missingVerdict(ctx context.Context, repo commands.Repo, cl
 	return
 }
 
+func (step checkStep) finishWork(ctx context.Context, repo commands.Repo, work records.ListWorksReadyForChecksRow) (line string, err error) {
+	err = markFinished(ctx, repo, work.WorkID)
+	if err != nil {
+		return
+	}
+	line = fmt.Sprintf("[%d] finished", work.IssueNumber)
+	return
+}
+
 func markAttention(ctx context.Context, repo commands.Repo, workID string) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -388,6 +397,18 @@ func markAttention(ctx context.Context, repo commands.Repo, workID string) (err 
 	}
 	queries := repo.State.Queries.WithTx(tx)
 	err = queries.SetDevelopmentWorkAttention(ctx, workID)
+	err = commands.FinishTx(tx, err)
+	return
+}
+
+func markFinished(ctx context.Context, repo commands.Repo, workID string) (err error) {
+	tx, err := repo.State.DB.BeginTx(ctx, nil)
+	if err != nil {
+		log.Error("begin run", "err", err)
+		return
+	}
+	queries := repo.State.Queries.WithTx(tx)
+	err = queries.SetDevelopmentWorkFinished(ctx, workID)
 	err = commands.FinishTx(tx, err)
 	return
 }
