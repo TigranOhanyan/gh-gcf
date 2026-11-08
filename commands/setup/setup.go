@@ -26,9 +26,6 @@ func NewSetup() (cmd *cobra.Command) {
 			return
 		},
 	}
-	cmd.AddCommand(newSetupRepo())
-	cmd.AddCommand(newSetupLabel())
-	cmd.AddCommand(newSetupApps())
 	return
 }
 

@@ -56,7 +56,7 @@ jobs:
           echo "Installing gh-gcf ${GH_GCF_VERSION}."
           gh extension install TigranOhanyan/gh-gcf --pin "${GH_GCF_VERSION}"
 
-          tick_id="$(gh gcf tick)"
+          tick_id="$(gh gcf run tick)"
           echo "Tick ${tick_id}."
 
           gh gcf app --tick "${tick_id}"

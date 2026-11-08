@@ -17,13 +17,13 @@ import (
 
 var colorHex = regexp.MustCompile(`^[0-9a-f]{6}$`)
 
-type appRepo struct {
+type AppRepo struct {
 	owner     string
 	name      string
 	hasConfig bool
 }
 
-func listRepos(factoryDir string) (repos []appRepo, err error) {
+func ListRepos(factoryDir string) (repos []AppRepo, err error) {
 	reposDir := filepath.Join(factoryDir, "repos")
 	owners, err := os.ReadDir(reposDir)
 	missing := os.IsNotExist(err)
@@ -64,7 +64,7 @@ func listRepos(factoryDir string) (repos []appRepo, err error) {
 			configFile := ConfigPath(factoryDir, ownerName, nameText)
 			_, statErr := os.Stat(configFile)
 			hasConfig := statErr == nil
-			repo := appRepo{
+			repo := AppRepo{
 				owner:     ownerName,
 				name:      nameText,
 				hasConfig: hasConfig,
@@ -74,19 +74,19 @@ func listRepos(factoryDir string) (repos []appRepo, err error) {
 	}
 
 	sort.Slice(repos, func(i int, j int) bool {
-		left := repoKey(repos[i])
-		right := repoKey(repos[j])
+		left := RepoKey(repos[i])
+		right := RepoKey(repos[j])
 		return left < right
 	})
 	return
 }
 
-func repoKey(repo appRepo) (key string) {
+func RepoKey(repo AppRepo) (key string) {
 	key = repo.owner + "/" + repo.name
 	return
 }
 
-func createRepo(ctx context.Context, factoryDir string, owner string, name string) (db *configdb.DB, err error) {
+func CreateRepo(ctx context.Context, factoryDir string, owner string, name string) (db *configdb.DB, err error) {
 	owner, err = NormalizeSegment(owner)
 	if err != nil {
 		return
@@ -125,7 +125,7 @@ func createRepo(ctx context.Context, factoryDir string, owner string, name strin
 	return
 }
 
-func addLabel(ctx context.Context, db *configdb.DB, rawName string, rawColor string) (name string, err error) {
+func AddLabel(ctx context.Context, db *configdb.DB, rawName string, rawColor string) (name string, err error) {
 	name, err = NormalizeLabelName(rawName)
 	if err != nil {
 		return
@@ -162,7 +162,7 @@ func addLabel(ctx context.Context, db *configdb.DB, rawName string, rawColor str
 	return
 }
 
-func createAppFile(factoryDir string, raw string) (id int64, err error) {
+func CreateAppFile(factoryDir string, raw string) (id int64, err error) {
 	id, err = ParseAppID(raw)
 	if err != nil {
 		return
@@ -201,7 +201,7 @@ func createAppFile(factoryDir string, raw string) (id int64, err error) {
 	return
 }
 
-func attachApp(ctx context.Context, db *configdb.DB, id int64) (err error) {
+func AttachApp(ctx context.Context, db *configdb.DB, id int64) (err error) {
 	ids, err := db.Queries.ListGithubApps(ctx)
 	if err != nil {
 		log.Error("list apps", "err", err)

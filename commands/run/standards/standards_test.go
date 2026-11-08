@@ -250,7 +250,7 @@ func useStateBranch(t *testing.T, repoDir string) {
 func runTick(t *testing.T, repoDir string) (id string) {
 	t.Helper()
 	t.Chdir(repoDir)
-	stdout := mustRoot(t, "tick")
+	stdout := mustRoot(t, "run tick")
 	id = strings.TrimSpace(stdout)
 	require.NotEmpty(t, id)
 	return

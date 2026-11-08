@@ -1,13 +1,18 @@
-package setup_test
+package development_test
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/TigranOhanyan/gh-gcf/commands"
+	"github.com/TigranOhanyan/gh-gcf/commands/root"
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 )
 
@@ -162,5 +167,100 @@ func countRows(t *testing.T, db *configdb.DB, table string) (count int) {
 	query := fmt.Sprintf("SELECT COUNT(*) FROM %s", table)
 	err := db.DB.QueryRowContext(t.Context(), query).Scan(&count)
 	require.NoError(t, err)
+	return
+}
+
+func setupHelp(t *testing.T, line string) (text string) {
+	t.Helper()
+	full := "setup " + line
+	text, err := runSetup(t, full)
+	require.NoError(t, err)
+	return
+}
+
+func enterCheckout(t *testing.T) (repoDir string) {
+	t.Helper()
+	repoDir = setupCheckout(t)
+	t.Chdir(repoDir)
+	return
+}
+
+func runSetup(t *testing.T, line string) (stdout string, err error) {
+	t.Helper()
+	command := root.NewRoot()
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	command.SetOut(&out)
+	command.SetErr(&errOut)
+	wrapped := commands.NewCmd(command)
+	err = wrapped.Shell(t.Context(), line)
+	stdout = out.String()
+	return
+}
+
+func addRepo(t *testing.T) {
+	t.Helper()
+	_, err := runSetup(t, "setup repo add --owner octo --name app")
+	require.NoError(t, err)
+}
+
+func addStoredLabel(t *testing.T, name string, color string) {
+	t.Helper()
+	line := fmt.Sprintf("setup label add --owner octo --repo app --name %q --color %q", name, color)
+	_, err := runSetup(t, line)
+	require.NoError(t, err)
+}
+
+func addStoredApp(t *testing.T, id string) {
+	t.Helper()
+	line := fmt.Sprintf("setup apps add --id %q", id)
+	_, err := runSetup(t, line)
+	require.NoError(t, err)
+}
+
+func attachStoredApp(t *testing.T, id string) {
+	t.Helper()
+	line := fmt.Sprintf("setup apps attach --owner octo --repo app --id %q", id)
+	_, err := runSetup(t, line)
+	require.NoError(t, err)
+}
+
+func readyRepo(t *testing.T) (repoDir string) {
+	t.Helper()
+	repoDir = enterCheckout(t)
+	addRepo(t)
+	addStoredLabel(t, "ready", "ededed")
+	addStoredLabel(t, "stop", "ff0000")
+	return
+}
+
+func openStored(t *testing.T, repoDir string) (db *configdb.DB) {
+	t.Helper()
+	path := filepath.Join(repoDir, "repos", "octo", "app", "config.db")
+	var err error
+	db, err = configdb.OpenIfMigrated(t.Context(), path)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		closeErr := db.Close()
+		failed := closeErr != nil
+		if failed {
+			t.Errorf("close config: %v", closeErr)
+		}
+	})
+	return
+}
+
+func setupCheckout(t *testing.T) (repoDir string) {
+	t.Helper()
+	repoDir = filepath.Join(JunkDir, t.Name())
+	err := os.RemoveAll(repoDir)
+	require.NoError(t, err)
+	err = os.MkdirAll(repoDir, 0755)
+	require.NoError(t, err)
+
+	_ = mustGit(t, repoDir, "init -b main")
+	_ = mustGit(t, repoDir, "config user.email test@example.com")
+	_ = mustGit(t, repoDir, "config user.name test")
+	_ = mustGit(t, repoDir, "commit --allow-empty -m init")
 	return
 }

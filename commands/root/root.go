@@ -16,9 +16,12 @@ import (
 	"github.com/TigranOhanyan/gh-gcf/commands/run/fixer"
 	"github.com/TigranOhanyan/gh-gcf/commands/run/specification"
 	"github.com/TigranOhanyan/gh-gcf/commands/run/standards"
+	"github.com/TigranOhanyan/gh-gcf/commands/run/tick"
 	"github.com/TigranOhanyan/gh-gcf/commands/setup"
+	"github.com/TigranOhanyan/gh-gcf/commands/setup/apps"
 	"github.com/TigranOhanyan/gh-gcf/commands/setup/development"
-	"github.com/TigranOhanyan/gh-gcf/commands/tick"
+	setuplabel "github.com/TigranOhanyan/gh-gcf/commands/setup/label"
+	"github.com/TigranOhanyan/gh-gcf/commands/setup/repo"
 )
 
 func NewRoot() (cmd *cobra.Command) {
@@ -28,8 +31,6 @@ func NewRoot() (cmd *cobra.Command) {
 	}
 	bindCmd := bind.NewBind()
 	cmd.AddCommand(bindCmd)
-	tickCmd := tick.NewTick()
-	cmd.AddCommand(tickCmd)
 	compileCmd := compile.NewCompile()
 	compileDevelopmentCmd := compiledevelopment.NewCompileDevelopment()
 	compileCmd.AddCommand(compileDevelopmentCmd)
@@ -41,8 +42,16 @@ func NewRoot() (cmd *cobra.Command) {
 	setupCmd := setup.NewSetup()
 	developmentCmd := development.NewSetupDevelopment()
 	setupCmd.AddCommand(developmentCmd)
+	repoCmd := repo.NewSetupRepo()
+	setupCmd.AddCommand(repoCmd)
+	setupLabelCmd := setuplabel.NewSetupLabel()
+	setupCmd.AddCommand(setupLabelCmd)
+	appsCmd := apps.NewSetupApps()
+	setupCmd.AddCommand(appsCmd)
 	cmd.AddCommand(setupCmd)
 	runCmd := run.NewRun()
+	tickCmd := tick.NewRunTick()
+	runCmd.AddCommand(tickCmd)
 	runBuilderCmd := builder.NewRunBuilder()
 	runCmd.AddCommand(runBuilderCmd)
 	runStandardsCmd := standards.NewRunStandards()

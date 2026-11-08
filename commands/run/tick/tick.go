@@ -10,7 +10,7 @@ import (
 	"github.com/TigranOhanyan/gh-gcf/commands"
 )
 
-func NewTick() (cmd *cobra.Command) {
+func NewRunTick() (cmd *cobra.Command) {
 	var configBranch string
 	var stateBranch string
 

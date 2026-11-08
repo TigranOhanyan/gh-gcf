@@ -75,7 +75,7 @@ type model struct {
 	ctx        context.Context
 	factoryDir string
 	place      place
-	repos      []appRepo
+	repos      []AppRepo
 	labels     []configrecords.Label
 	appIDs     []int64
 	attached   []int64
@@ -450,7 +450,7 @@ func (m model) openRepo() (updated model) {
 	return
 }
 
-func (m model) enterRepo(repo appRepo) (updated model) {
+func (m model) enterRepo(repo AppRepo) (updated model) {
 	updated = m.closeDB()
 	updated.place.owner = repo.owner
 	updated.place.name = repo.name
@@ -552,7 +552,7 @@ func (m model) submitRepo() (updated model) {
 	updated = m
 	owner := updated.first.Value()
 	name := updated.second.Value()
-	db, err := createRepo(updated.ctx, updated.factoryDir, owner, name)
+	db, err := CreateRepo(updated.ctx, updated.factoryDir, owner, name)
 	if err != nil {
 		updated.notice = err.Error()
 		return
@@ -581,7 +581,7 @@ func (m model) submitLabel() (updated model) {
 	}
 	nameText := updated.first.Value()
 	colorText := updated.second.Value()
-	name, err := addLabel(updated.ctx, updated.db, nameText, colorText)
+	name, err := AddLabel(updated.ctx, updated.db, nameText, colorText)
 	if err != nil {
 		updated.notice = err.Error()
 		return
@@ -605,7 +605,7 @@ func (m model) submitLabel() (updated model) {
 func (m model) submitApp() (updated model) {
 	updated = m
 	raw := updated.first.Value()
-	id, err := createAppFile(updated.factoryDir, raw)
+	id, err := CreateAppFile(updated.factoryDir, raw)
 	if err != nil {
 		updated.notice = err.Error()
 		return
@@ -643,7 +643,7 @@ func (m model) pickApp() (updated model) {
 		updated.notice = err.Error()
 		return
 	}
-	err = attachApp(updated.ctx, updated.db, id)
+	err = AttachApp(updated.ctx, updated.db, id)
 	if err != nil {
 		updated.notice = err.Error()
 		return
@@ -841,7 +841,7 @@ func (m model) closeDB() (updated model) {
 
 func (m model) reloadRepos() (updated model, err error) {
 	updated = m
-	repos, err := listRepos(updated.factoryDir)
+	repos, err := ListRepos(updated.factoryDir)
 	if err != nil {
 		return
 	}
@@ -907,7 +907,7 @@ func idLines(ids []int64) (lines []string) {
 	return
 }
 
-func indexOfRepo(repos []appRepo, key string) (index int) {
+func indexOfRepo(repos []AppRepo, key string) (index int) {
 	index = -1
 	for i, repo := range repos {
 		same := repo.owner+"/"+repo.name == key

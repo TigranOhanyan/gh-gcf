@@ -103,7 +103,7 @@ func Test_Tick_should_store_the_same_tick_in_each_repo(t *testing.T) {
 func runTick(t *testing.T, repoDir string) (id string) {
 	t.Helper()
 	t.Chdir(repoDir)
-	stdout := mustRoot(t, "tick")
+	stdout := mustRoot(t, "run tick")
 	id = strings.TrimSpace(stdout)
 	require.NotEmpty(t, id)
 	return
