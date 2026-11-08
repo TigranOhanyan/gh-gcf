@@ -126,6 +126,7 @@ SELECT
     w.id AS work_id,
     w.development_name,
     w.issue_number,
+    w.pull_request_number,
     w.builder_head_sha
 FROM development_work w
 JOIN development_agent standards ON standards.id = w.standards_reviewer_agent

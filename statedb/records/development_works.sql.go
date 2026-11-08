@@ -414,6 +414,7 @@ SELECT
     w.id AS work_id,
     w.development_name,
     w.issue_number,
+    w.pull_request_number,
     w.builder_head_sha
 FROM development_work w
 JOIN development_agent standards ON standards.id = w.standards_reviewer_agent
@@ -430,10 +431,11 @@ ORDER BY w.issue_number
 `
 
 type ListWorksReadyForChecksRow struct {
-	WorkID          string         `json:"work_id"`
-	DevelopmentName string         `json:"development_name"`
-	IssueNumber     int64          `json:"issue_number"`
-	BuilderHeadSha  sql.NullString `json:"builder_head_sha"`
+	WorkID            string         `json:"work_id"`
+	DevelopmentName   string         `json:"development_name"`
+	IssueNumber       int64          `json:"issue_number"`
+	PullRequestNumber sql.NullInt64  `json:"pull_request_number"`
+	BuilderHeadSha    sql.NullString `json:"builder_head_sha"`
 }
 
 func (q *Queries) ListWorksReadyForChecks(ctx context.Context) ([]ListWorksReadyForChecksRow, error) {
@@ -449,6 +451,7 @@ func (q *Queries) ListWorksReadyForChecks(ctx context.Context) ([]ListWorksReady
 			&i.WorkID,
 			&i.DevelopmentName,
 			&i.IssueNumber,
+			&i.PullRequestNumber,
 			&i.BuilderHeadSha,
 		); err != nil {
 			return nil, err

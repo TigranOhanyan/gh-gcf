@@ -18,7 +18,7 @@ func NewRunFixer() (cmd *cobra.Command) {
 
 	cmd = &cobra.Command{
 		Use:   "fixer",
-		Short: "Wait while a listed check has not finished",
+		Short: "Read verdicts once every listed check has finished",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) (err error) {
 			dir, err := os.Getwd()
