@@ -18,7 +18,7 @@ func NewCheckFixer() (cmd *cobra.Command) {
 
 	cmd = &cobra.Command{
 		Use:   "fixer",
-		Short: "Record a finished fixer",
+		Short: "Record a finished fixer and judge its checks",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) (err error) {
 			dir, err := os.Getwd()

@@ -182,6 +182,21 @@ AND w.builder_head_sha IS NOT NULL
 AND w.builder_head_sha != ''
 ORDER BY w.issue_number;
 
+-- name: ListWorksReadyForFixerChecks :many
+SELECT
+    w.id AS work_id,
+    w.development_name,
+    w.issue_number,
+    w.fixer_head_sha
+FROM development_work w
+JOIN development_agent a ON a.id = w.fixer_agent
+WHERE w.status = ''
+AND a.role = 'fixer'
+AND a.finished_at IS NOT NULL
+AND w.fixer_head_sha IS NOT NULL
+AND w.fixer_head_sha != ''
+ORDER BY w.issue_number;
+
 -- name: SetDevelopmentAgentFinished :exec
 UPDATE development_agent
 SET finished_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
