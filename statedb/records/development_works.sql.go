@@ -303,6 +303,73 @@ func (q *Queries) ListPendingDevelopmentBuilders(ctx context.Context) ([]ListPen
 	return items, nil
 }
 
+const listPendingDevelopmentFixers = `-- name: ListPendingDevelopmentFixers :many
+SELECT
+    w.id AS work_id,
+    w.development_name,
+    w.issue_number,
+    w.pull_request_number,
+    a.id AS agent_id,
+    a.cursor_run_id
+FROM development_work w
+JOIN development_agent a ON a.id = w.fixer_agent
+WHERE w.status = ''
+AND a.role = 'fixer'
+AND a.cursor_run_id IS NOT NULL
+AND a.cursor_run_id != ''
+AND a.finished_at IS NULL
+AND EXISTS (
+    SELECT 1 FROM development_event e
+    WHERE e.agent_id = a.id
+    AND e.kind = 'ack'
+)
+AND NOT EXISTS (
+    SELECT 1 FROM development_event e
+    WHERE e.agent_id = a.id
+    AND e.kind IN ('completed', 'failed', 'rejected')
+)
+ORDER BY w.issue_number
+`
+
+type ListPendingDevelopmentFixersRow struct {
+	WorkID            string         `json:"work_id"`
+	DevelopmentName   string         `json:"development_name"`
+	IssueNumber       int64          `json:"issue_number"`
+	PullRequestNumber sql.NullInt64  `json:"pull_request_number"`
+	AgentID           string         `json:"agent_id"`
+	CursorRunID       sql.NullString `json:"cursor_run_id"`
+}
+
+func (q *Queries) ListPendingDevelopmentFixers(ctx context.Context) ([]ListPendingDevelopmentFixersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPendingDevelopmentFixers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPendingDevelopmentFixersRow
+	for rows.Next() {
+		var i ListPendingDevelopmentFixersRow
+		if err := rows.Scan(
+			&i.WorkID,
+			&i.DevelopmentName,
+			&i.IssueNumber,
+			&i.PullRequestNumber,
+			&i.AgentID,
+			&i.CursorRunID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listReadySpecificationWorks = `-- name: ListReadySpecificationWorks :many
 SELECT
     w.id AS work_id,
@@ -510,6 +577,22 @@ UPDATE development_work SET status = 'finished' WHERE id = ?
 
 func (q *Queries) SetDevelopmentWorkFinished(ctx context.Context, id string) error {
 	_, err := q.db.ExecContext(ctx, setDevelopmentWorkFinished, id)
+	return err
+}
+
+const setDevelopmentWorkFixerHead = `-- name: SetDevelopmentWorkFixerHead :exec
+UPDATE development_work
+SET fixer_head_sha = ?
+WHERE id = ?
+`
+
+type SetDevelopmentWorkFixerHeadParams struct {
+	FixerHeadSha sql.NullString `json:"fixer_head_sha"`
+	ID           string         `json:"id"`
+}
+
+func (q *Queries) SetDevelopmentWorkFixerHead(ctx context.Context, arg SetDevelopmentWorkFixerHeadParams) error {
+	_, err := q.db.ExecContext(ctx, setDevelopmentWorkFixerHead, arg.FixerHeadSha, arg.ID)
 	return err
 }
 

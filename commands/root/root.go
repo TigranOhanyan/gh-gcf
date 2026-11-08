@@ -7,6 +7,7 @@ import (
 	"github.com/TigranOhanyan/gh-gcf/commands/bind"
 	"github.com/TigranOhanyan/gh-gcf/commands/check"
 	checkbuilder "github.com/TigranOhanyan/gh-gcf/commands/check/builder"
+	checkfixer "github.com/TigranOhanyan/gh-gcf/commands/check/fixer"
 	"github.com/TigranOhanyan/gh-gcf/commands/compile"
 	compiledevelopment "github.com/TigranOhanyan/gh-gcf/commands/compile/development"
 	"github.com/TigranOhanyan/gh-gcf/commands/label"
@@ -55,6 +56,8 @@ func NewRoot() (cmd *cobra.Command) {
 	checkCmd := check.NewCheck()
 	checkBuilderCmd := checkbuilder.NewCheckBuilder()
 	checkCmd.AddCommand(checkBuilderCmd)
+	checkFixerCmd := checkfixer.NewCheckFixer()
+	checkCmd.AddCommand(checkFixerCmd)
 	cmd.AddCommand(checkCmd)
 	pollCmd := poll.NewPoll()
 	cmd.AddCommand(pollCmd)

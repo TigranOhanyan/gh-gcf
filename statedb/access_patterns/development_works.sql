@@ -52,6 +52,11 @@ UPDATE development_work
 SET pull_request_number = ?, builder_head_sha = ?
 WHERE id = ?;
 
+-- name: SetDevelopmentWorkFixerHead :exec
+UPDATE development_work
+SET fixer_head_sha = ?
+WHERE id = ?;
+
 -- name: ListPendingDevelopmentBuilders :many
 SELECT
     w.id AS work_id,
@@ -63,6 +68,33 @@ FROM development_work w
 JOIN development_agent a ON a.id = w.builder_agent
 WHERE w.status = ''
 AND a.role = 'builder'
+AND a.cursor_run_id IS NOT NULL
+AND a.cursor_run_id != ''
+AND a.finished_at IS NULL
+AND EXISTS (
+    SELECT 1 FROM development_event e
+    WHERE e.agent_id = a.id
+    AND e.kind = 'ack'
+)
+AND NOT EXISTS (
+    SELECT 1 FROM development_event e
+    WHERE e.agent_id = a.id
+    AND e.kind IN ('completed', 'failed', 'rejected')
+)
+ORDER BY w.issue_number;
+
+-- name: ListPendingDevelopmentFixers :many
+SELECT
+    w.id AS work_id,
+    w.development_name,
+    w.issue_number,
+    w.pull_request_number,
+    a.id AS agent_id,
+    a.cursor_run_id
+FROM development_work w
+JOIN development_agent a ON a.id = w.fixer_agent
+WHERE w.status = ''
+AND a.role = 'fixer'
 AND a.cursor_run_id IS NOT NULL
 AND a.cursor_run_id != ''
 AND a.finished_at IS NULL
