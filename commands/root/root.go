@@ -13,6 +13,7 @@ import (
 	"github.com/TigranOhanyan/gh-gcf/commands/poll"
 	"github.com/TigranOhanyan/gh-gcf/commands/run"
 	"github.com/TigranOhanyan/gh-gcf/commands/run/builder"
+	"github.com/TigranOhanyan/gh-gcf/commands/run/specification"
 	"github.com/TigranOhanyan/gh-gcf/commands/run/standards"
 	"github.com/TigranOhanyan/gh-gcf/commands/setup"
 	"github.com/TigranOhanyan/gh-gcf/commands/setup/development"
@@ -45,6 +46,8 @@ func NewRoot() (cmd *cobra.Command) {
 	runCmd.AddCommand(runBuilderCmd)
 	runStandardsCmd := standards.NewRunStandards()
 	runCmd.AddCommand(runStandardsCmd)
+	runSpecificationCmd := specification.NewRunSpecification()
+	runCmd.AddCommand(runSpecificationCmd)
 	cmd.AddCommand(runCmd)
 	checkCmd := check.NewCheck()
 	checkBuilderCmd := checkbuilder.NewCheckBuilder()

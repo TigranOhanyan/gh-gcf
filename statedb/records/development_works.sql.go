@@ -303,6 +303,59 @@ func (q *Queries) ListPendingDevelopmentBuilders(ctx context.Context) ([]ListPen
 	return items, nil
 }
 
+const listReadySpecificationWorks = `-- name: ListReadySpecificationWorks :many
+SELECT
+    w.id AS work_id,
+    w.development_name,
+    w.issue_number,
+    w.issue_url,
+    w.pull_request_number
+FROM development_work w
+JOIN development_agent a ON a.id = w.standards_reviewer_agent
+WHERE w.status = ''
+AND w.specification_reviewer_agent IS NULL
+AND a.role = 'standards_reviewer'
+AND a.finished_at IS NOT NULL
+ORDER BY w.issue_number
+`
+
+type ListReadySpecificationWorksRow struct {
+	WorkID            string        `json:"work_id"`
+	DevelopmentName   string        `json:"development_name"`
+	IssueNumber       int64         `json:"issue_number"`
+	IssueUrl          string        `json:"issue_url"`
+	PullRequestNumber sql.NullInt64 `json:"pull_request_number"`
+}
+
+func (q *Queries) ListReadySpecificationWorks(ctx context.Context) ([]ListReadySpecificationWorksRow, error) {
+	rows, err := q.db.QueryContext(ctx, listReadySpecificationWorks)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListReadySpecificationWorksRow
+	for rows.Next() {
+		var i ListReadySpecificationWorksRow
+		if err := rows.Scan(
+			&i.WorkID,
+			&i.DevelopmentName,
+			&i.IssueNumber,
+			&i.IssueUrl,
+			&i.PullRequestNumber,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listReadyStandardsWorks = `-- name: ListReadyStandardsWorks :many
 SELECT
     w.id AS work_id,
@@ -404,6 +457,22 @@ type SetDevelopmentWorkPullParams struct {
 
 func (q *Queries) SetDevelopmentWorkPull(ctx context.Context, arg SetDevelopmentWorkPullParams) error {
 	_, err := q.db.ExecContext(ctx, setDevelopmentWorkPull, arg.PullRequestNumber, arg.BuilderHeadSha, arg.ID)
+	return err
+}
+
+const setSpecificationReviewerAgent = `-- name: SetSpecificationReviewerAgent :exec
+UPDATE development_work
+SET specification_reviewer_agent = ?
+WHERE id = ?
+`
+
+type SetSpecificationReviewerAgentParams struct {
+	SpecificationReviewerAgent sql.NullString `json:"specification_reviewer_agent"`
+	ID                         string         `json:"id"`
+}
+
+func (q *Queries) SetSpecificationReviewerAgent(ctx context.Context, arg SetSpecificationReviewerAgentParams) error {
+	_, err := q.db.ExecContext(ctx, setSpecificationReviewerAgent, arg.SpecificationReviewerAgent, arg.ID)
 	return err
 }
 
