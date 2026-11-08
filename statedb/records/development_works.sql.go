@@ -239,6 +239,81 @@ func (q *Queries) ListDevelopmentWorks(ctx context.Context) ([]DevelopmentWork, 
 	return items, nil
 }
 
+const listPendingDevelopmentBuilders = `-- name: ListPendingDevelopmentBuilders :many
+SELECT
+    w.id AS work_id,
+    w.development_name,
+    w.issue_number,
+    a.id AS agent_id,
+    a.cursor_run_id
+FROM development_work w
+JOIN development_agent a ON a.id = w.builder_agent
+WHERE w.status = ''
+AND a.role = 'builder'
+AND a.cursor_run_id IS NOT NULL
+AND a.cursor_run_id != ''
+AND a.finished_at IS NULL
+AND EXISTS (
+    SELECT 1 FROM development_event e
+    WHERE e.agent_id = a.id
+    AND e.kind = 'ack'
+)
+AND NOT EXISTS (
+    SELECT 1 FROM development_event e
+    WHERE e.agent_id = a.id
+    AND e.kind IN ('completed', 'failed', 'rejected')
+)
+ORDER BY w.issue_number
+`
+
+type ListPendingDevelopmentBuildersRow struct {
+	WorkID          string         `json:"work_id"`
+	DevelopmentName string         `json:"development_name"`
+	IssueNumber     int64          `json:"issue_number"`
+	AgentID         string         `json:"agent_id"`
+	CursorRunID     sql.NullString `json:"cursor_run_id"`
+}
+
+func (q *Queries) ListPendingDevelopmentBuilders(ctx context.Context) ([]ListPendingDevelopmentBuildersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPendingDevelopmentBuilders)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPendingDevelopmentBuildersRow
+	for rows.Next() {
+		var i ListPendingDevelopmentBuildersRow
+		if err := rows.Scan(
+			&i.WorkID,
+			&i.DevelopmentName,
+			&i.IssueNumber,
+			&i.AgentID,
+			&i.CursorRunID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setDevelopmentAgentFinished = `-- name: SetDevelopmentAgentFinished :exec
+UPDATE development_agent
+SET finished_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE id = ?
+`
+
+func (q *Queries) SetDevelopmentAgentFinished(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, setDevelopmentAgentFinished, id)
+	return err
+}
+
 const setDevelopmentAgentRunID = `-- name: SetDevelopmentAgentRunID :exec
 UPDATE development_agent SET cursor_run_id = ? WHERE id = ?
 `
@@ -259,5 +334,22 @@ UPDATE development_work SET status = 'attention' WHERE id = ?
 
 func (q *Queries) SetDevelopmentWorkAttention(ctx context.Context, id string) error {
 	_, err := q.db.ExecContext(ctx, setDevelopmentWorkAttention, id)
+	return err
+}
+
+const setDevelopmentWorkPull = `-- name: SetDevelopmentWorkPull :exec
+UPDATE development_work
+SET pull_request_number = ?, builder_head_sha = ?
+WHERE id = ?
+`
+
+type SetDevelopmentWorkPullParams struct {
+	PullRequestNumber sql.NullInt64  `json:"pull_request_number"`
+	BuilderHeadSha    sql.NullString `json:"builder_head_sha"`
+	ID                string         `json:"id"`
+}
+
+func (q *Queries) SetDevelopmentWorkPull(ctx context.Context, arg SetDevelopmentWorkPullParams) error {
+	_, err := q.db.ExecContext(ctx, setDevelopmentWorkPull, arg.PullRequestNumber, arg.BuilderHeadSha, arg.ID)
 	return err
 }

@@ -31,7 +31,7 @@ One named piece of a tick, recorded in each app repo's state.
 _Avoid_: phase, stage, job, action
 
 **Event**:
-A moment of one agent call: starting, ack, rejected, completed, or failed. A poll that finds the agent still running writes none.
+A moment of one agent call: starting, ack, rejected, completed, or failed. Finding the agent still running writes none.
 _Avoid_: log, status
 
 **Executor**:

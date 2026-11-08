@@ -1,7 +1,7 @@
 ---
 name: coding
 description: >-
-  Command packages for this repo. Main commands are bind, setup, run, and compile.
+  Command packages for this repo. Main commands are bind, setup, run, compile, and check.
   A command follows commands/run/builder/builder.go. A subcommand is its own package,
   at most three packages deep; deeper subcommands are files. Helpers stay in the
   parent package and are exported. Command tests run plain shell lines through
@@ -25,6 +25,7 @@ commands/bind
 commands/setup
 commands/run
 commands/compile
+commands/check
 ```
 
 Write a command like [commands/run/builder/builder.go](../../../commands/run/builder/builder.go). It reads the working directory, requires a checkout, and hands one step to the executor.
