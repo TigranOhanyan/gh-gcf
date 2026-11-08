@@ -1,6 +1,7 @@
 package setup_test
 
 import (
+	"database/sql"
 	"fmt"
 	"testing"
 
@@ -34,6 +35,18 @@ func Test_SetupDevelopment_should_store_a_development(t *testing.T) {
 	assert.Equal(t, "stop", attention)
 	assert.Equal(t, int64(42), standardsApp)
 	assert.Equal(t, int64(43), specificationApp)
+}
+
+func Test_SetupDevelopment_should_record_a_development_without_writing_a_member(t *testing.T) {
+	repoDir := readyDevelopmentRepo(t)
+
+	line := "setup development add --owner octo --repo app --name features --starting ready --attention stop --standards-app 42 --specification-app 43"
+	_, err := runSetup(t, line)
+	require.NoError(t, err)
+
+	db := openStored(t, repoDir)
+	assert.Equal(t, 1, countRows(t, db, "development"))
+	assertAbsentTable(t, db.DB, "member")
 }
 
 func Test_SetupDevelopment_should_store_a_check_name(t *testing.T) {
@@ -134,6 +147,14 @@ func developmentNames(t *testing.T, db *configdb.DB) (names []string) {
 	err = rows.Err()
 	require.NoError(t, err)
 	return
+}
+
+func assertAbsentTable(t *testing.T, db *sql.DB, name string) {
+	t.Helper()
+	var found string
+	query := `SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`
+	err := db.QueryRowContext(t.Context(), query, name).Scan(&found)
+	require.ErrorIs(t, err, sql.ErrNoRows)
 }
 
 func countRows(t *testing.T, db *configdb.DB, table string) (count int) {

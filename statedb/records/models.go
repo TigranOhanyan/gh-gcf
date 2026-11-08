@@ -8,35 +8,6 @@ import (
 	"database/sql"
 )
 
-type Agent struct {
-	ID          string         `json:"id"`
-	Role        string         `json:"role"`
-	WorkID      string         `json:"work_id"`
-	MemberName  string         `json:"member_name"`
-	CursorRunID sql.NullString `json:"cursor_run_id"`
-}
-
-type BuilderAgent struct {
-	ID   string `json:"id"`
-	Role string `json:"role"`
-}
-
-type BuilderMember struct {
-	Name          string `json:"name"`
-	Role          string `json:"role"`
-	StartingLabel string `json:"starting_label"`
-}
-
-type CodingWork struct {
-	ID                string         `json:"id"`
-	IssueNumber       int64          `json:"issue_number"`
-	BuilderName       string         `json:"builder_name"`
-	PullRequestNumber sql.NullInt64  `json:"pull_request_number"`
-	BuilderHeadSha    sql.NullString `json:"builder_head_sha"`
-	FixerHeadSha      sql.NullString `json:"fixer_head_sha"`
-	Status            string         `json:"status"`
-}
-
 type Development struct {
 	Name                                   string `json:"name"`
 	StartingLabel                          string `json:"starting_label"`
@@ -89,21 +60,9 @@ type DevelopmentWork struct {
 type Event struct {
 	ID        string `json:"id"`
 	StepID    string `json:"step_id"`
-	AgentID   string `json:"agent_id"`
 	Kind      string `json:"kind"`
 	Message   string `json:"message"`
 	CreatedAt string `json:"created_at"`
-}
-
-type FixerAgent struct {
-	ID   string `json:"id"`
-	Role string `json:"role"`
-}
-
-type FixerMember struct {
-	Name        string `json:"name"`
-	Role        string `json:"role"`
-	BuilderName string `json:"builder_name"`
 }
 
 type GithubApp struct {
@@ -112,41 +71,11 @@ type GithubApp struct {
 	InstallationID int64  `json:"installation_id"`
 }
 
-type GithubCheck struct {
-	BuilderName string `json:"builder_name"`
-	Name        string `json:"name"`
-}
-
-type Issue struct {
-	Number int64  `json:"number"`
-	Url    string `json:"url"`
-}
-
 type Label struct {
 	Name         string         `json:"name"`
 	Color        string         `json:"color"`
 	RegisteredAt string         `json:"registered_at"`
 	CreatedAt    sql.NullString `json:"created_at"`
-}
-
-type Member struct {
-	Name              string `json:"name"`
-	Role              string `json:"role"`
-	AttentionLabel    string `json:"attention_label"`
-	InstructionSha256 string `json:"instruction_sha256"`
-}
-
-type ReviewerAgent struct {
-	ID      string         `json:"id"`
-	Role    string         `json:"role"`
-	Verdict sql.NullString `json:"verdict"`
-}
-
-type ReviewerMember struct {
-	Name        string `json:"name"`
-	Role        string `json:"role"`
-	BuilderName string `json:"builder_name"`
-	GithubApp   int64  `json:"github_app"`
 }
 
 type Step struct {

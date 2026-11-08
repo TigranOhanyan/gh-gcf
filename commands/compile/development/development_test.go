@@ -3,6 +3,7 @@ package development_test
 import (
 	"bytes"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -50,6 +51,21 @@ func Test_CompileDevelopment_should_copy_a_development(t *testing.T) {
 	assert.Equal(t, emptyInstructionHash, rows[0].StandardsReviewerInstructionSha256)
 	assert.Equal(t, emptyInstructionHash, rows[0].SpecificationReviewerInstructionSha256)
 	assert.Equal(t, emptyInstructionHash, rows[0].FixerInstructionSha256)
+}
+
+func Test_CompileDevelopment_should_copy_a_development_without_writing_a_member(t *testing.T) {
+	repoDir := setupFactory(t)
+	id := runTick(t, repoDir)
+
+	err := runCompile(t, repoDir, id)
+	require.NoError(t, err)
+
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	rows := listDevelopments(t, db)
+	require.Len(t, rows, 1)
+	assert.Equal(t, developmentName, rows[0].Name)
+	assertAbsentTable(t, db.DB, "member")
 }
 
 func Test_CompileDevelopment_should_copy_a_check(t *testing.T) {
@@ -275,6 +291,14 @@ func mustRoot(t *testing.T, line string) (stdout string) {
 	stdout, err := runRoot(t, line)
 	require.NoError(t, err)
 	return
+}
+
+func assertAbsentTable(t *testing.T, db *sql.DB, name string) {
+	t.Helper()
+	var found string
+	query := `SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`
+	err := db.QueryRowContext(t.Context(), query, name).Scan(&found)
+	require.ErrorIs(t, err, sql.ErrNoRows)
 }
 
 func openStateTip(t *testing.T, repoDir string) (db *statedb.DB) {

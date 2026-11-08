@@ -1,6 +1,6 @@
 # gh gcf
 
-`gh gcf` is a GitHub CLI extension. A factory takes ready issues in app repos and turns them into reviewed pull requests. Cursor agents do the judgment work. The coding flow claims a ready issue and starts the agent that opens the pull request.
+`gh gcf` is a GitHub CLI extension. A factory takes ready issues in app repos and turns them into reviewed pull requests. Cursor agents do the judgment work. A development claims a ready issue and starts the agent that opens the pull request.
 
 ## Repos
 
@@ -42,9 +42,9 @@ gh gcf setup
 
 Enter opens Repos or Apps. `a` adds a repo, a label, or an App ID. An App is the number GitHub shows as the App ID. Setup writes that id as `apps/<app id>`, and a repo can then use it. The private key is the Actions secret `GITHUB_APP_<app id>`. Bind writes that secret into the tick workflow.
 
-Inside a repo, setup records labels, the Apps that repo uses, and builders. A label is a name you choose for one app repo. The starting label marks an issue as ready. The attention label marks an issue the factory stopped on, so a person has to look. The factory creates a missing label on that app repo. A label recorded for one app repo is not a label on another.
+Inside a repo, setup records labels, the Apps that repo uses, and developments. A label is a name you choose for one app repo. The starting label marks an issue as ready. The attention label marks an issue the factory stopped on, so a person has to look. The factory creates a missing label on that app repo. A label recorded for one app repo is not a label on another.
 
-A builder has a name, a starting label, and a different attention label. One starting label belongs to one builder. Its instruction is the file `repos/<owner>/<name>/members/<name>.md`. You edit that file in your editor. A reviewer belongs to one builder and needs its own App. Two reviewers do not share an App. A builder has at most one fixer. Each of those members has its own instruction file, named the same way.
+A development has a name, a starting label, one attention label, and two reviewer App IDs. The two reviewers do not share an App. Its instructions are `repos/<owner>/<name>/developments/<name>/builder.md`, `standards_reviewer.md`, `specification_reviewer.md`, and `fixer.md`. You edit those files in your editor. A GitHub check name on the development can claim the fixer.
 
 Setup writes the config in the checkout you have open. Commit and push that change the same way as bind.
 
@@ -56,20 +56,24 @@ gh gcf setup label add --owner octo --repo app --name ready --color ededed
 gh gcf setup label list --owner octo --repo app
 gh gcf setup apps add --id 42
 gh gcf setup apps attach --owner octo --repo app --id 42
-gh gcf setup member add-builder --owner octo --repo app --name features --starting ready --attention stop
-gh gcf setup check add --owner octo --repo app --builder features --name "ci / unit"
+gh gcf setup development add --owner octo --repo app --name features --starting ready --attention stop --standards-app 42 --specification-app 43
+gh gcf setup development check add --owner octo --repo app --development features --name "ci / unit"
 ```
 
-The scheduled workflow records a tick, then runs `app`, `label`, `compile coding`, `run builder`, and `poll agent`, then pushes state. `app` checks each App ID configured for a repo. When that App is installed there, it records the client id and the installation id. A missing or suspended installation stops the step. `label` creates a configured label the app repo does not yet have.
+The scheduled workflow records a tick, then runs `app`, `label`, `compile development`, the `run` commands that start agents, and the `check` commands that record a finished agent, then pushes state. `app` checks each App ID configured for a repo. When that App is installed there, it records the client id and the installation id. A missing or suspended installation stops the step. `label` creates a configured label the app repo does not yet have.
 
 From the factory checkout, after `gh gcf tick` prints an id:
 
 ```shell
 gh gcf app --tick <id>
 gh gcf label --tick <id>
-gh gcf compile coding --tick <id>
+gh gcf compile development --tick <id>
 gh gcf run builder --tick <id>
-gh gcf poll agent --tick <id>
+gh gcf check builder --tick <id>
+gh gcf run standards-reviewer --tick <id>
+gh gcf run specification-reviewer --tick <id>
+gh gcf run fixer --tick <id>
+gh gcf check fixer --tick <id>
 ```
 
 ## Run

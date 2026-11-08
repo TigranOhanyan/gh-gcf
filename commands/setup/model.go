@@ -24,13 +24,6 @@ const missingConfig = MissingConfig
 const noRepos = "No app repos yet."
 const noLabels = "No labels yet."
 const noApps = "No apps yet."
-const noBuilders = "No builders yet."
-const noReviewers = "No reviewers yet."
-const noFixer = "No fixer yet."
-const noChecks = "No checks yet."
-const noStartingLabel = "No starting label left."
-const noOtherLabel = "No other label."
-const menuHelp = "enter open   esc back   q quit"
 const pickHelp = "enter select   esc back   q quit"
 
 const pathPastFg = "#E8EEF4"
@@ -51,27 +44,12 @@ const (
 	screenAddApp
 	screenRepoApps
 	screenPickApp
-	screenBuilders
-	screenAddBuilder
-	screenPickStart
-	screenPickAttention
-	screenBuilder
-	screenReviewers
-	screenAddReviewer
-	screenPickReviewerApp
-	screenPickReviewerLabel
-	screenFixer
-	screenAddFixer
-	screenPickFixerLabel
-	screenChecks
-	screenAddCheck
 )
 
 type place struct {
-	screen  screen
-	owner   string
-	name    string
-	builder string
+	screen screen
+	owner  string
+	name   string
 }
 
 type row struct {
@@ -101,13 +79,6 @@ type model struct {
 	labels     []configrecords.Label
 	appIDs     []int64
 	attached   []int64
-	builders   []configrecords.ListBuilderMembersRow
-	reviewers  []configrecords.ListReviewerMembersRow
-	fixers     []configrecords.ListFixerMembersRow
-	checks     []string
-	draftName  string
-	draftStart string
-	draftApp   int64
 	db         *configdb.DB
 	list       list.Model
 	field      int
@@ -271,30 +242,8 @@ func (m model) emptyList() (text string) {
 		text = noRepos
 	case screenLabels:
 		text = noLabels
-	case screenApps, screenRepoApps, screenPickApp, screenPickReviewerApp:
+	case screenApps, screenRepoApps, screenPickApp:
 		text = noApps
-	case screenBuilders:
-		text = noBuilders
-	case screenReviewers:
-		text = noReviewers
-	case screenFixer:
-		text = noFixer
-	case screenChecks:
-		text = noChecks
-	case screenPickStart:
-		text = noStartingLabel
-		none := len(m.labels) == 0
-		if none {
-			text = noLabels
-		}
-	case screenPickAttention:
-		text = noOtherLabel
-		none := len(m.labels) == 0
-		if none {
-			text = noLabels
-		}
-	case screenPickReviewerLabel, screenPickFixerLabel:
-		text = noLabels
 	default:
 		text = ""
 	}
@@ -368,7 +317,6 @@ func paintPath(parts []string) (path string) {
 }
 
 func (m model) navTail() (parts []string) {
-	builder := m.place.builder
 	switch m.place.screen {
 	case screenLabels:
 		parts = []string{"labels"}
@@ -378,34 +326,6 @@ func (m model) navTail() (parts []string) {
 		parts = []string{"apps"}
 	case screenPickApp:
 		parts = []string{"apps", "add"}
-	case screenBuilders:
-		parts = []string{"builders"}
-	case screenAddBuilder:
-		parts = []string{"builders", "add"}
-	case screenPickStart:
-		parts = []string{"builders", "add", "starting"}
-	case screenPickAttention:
-		parts = []string{"builders", "add", "attention"}
-	case screenBuilder:
-		parts = []string{"builders", builder}
-	case screenReviewers:
-		parts = []string{"builders", builder, "reviewers"}
-	case screenAddReviewer:
-		parts = []string{"builders", builder, "reviewers", "add"}
-	case screenPickReviewerApp:
-		parts = []string{"builders", builder, "reviewers", "add", "app"}
-	case screenPickReviewerLabel:
-		parts = []string{"builders", builder, "reviewers", "add", "attention"}
-	case screenFixer:
-		parts = []string{"builders", builder, "fixer"}
-	case screenAddFixer:
-		parts = []string{"builders", builder, "fixer", "add"}
-	case screenPickFixerLabel:
-		parts = []string{"builders", builder, "fixer", "add", "attention"}
-	case screenChecks:
-		parts = []string{"builders", builder, "checks"}
-	case screenAddCheck:
-		parts = []string{"builders", builder, "checks", "add"}
 	default:
 		parts = []string{}
 	}
@@ -413,7 +333,7 @@ func (m model) navTail() (parts []string) {
 }
 
 func (m model) formHelp() (help string) {
-	one := m.place.screen == screenAddApp || m.place.screen == screenAddCheck
+	one := m.place.screen == screenAddApp
 	last := m.field == 1
 	saving := one || last
 	if saving {
@@ -426,7 +346,7 @@ func (m model) formHelp() (help string) {
 
 func (m model) onForm() (form bool) {
 	switch m.place.screen {
-	case screenAddRepo, screenAddLabel, screenAddApp, screenAddBuilder, screenAddReviewer, screenAddFixer, screenAddCheck:
+	case screenAddRepo, screenAddLabel, screenAddApp:
 		form = true
 	}
 	return
@@ -478,55 +398,6 @@ func (m model) startAdd() (updated model, cmd tea.Cmd) {
 			return
 		}
 		updated = updated.showPick()
-	case screenBuilders:
-		missing := updated.db == nil
-		if missing {
-			updated.notice = missingConfig
-			return
-		}
-		updated.place.screen = screenAddBuilder
-		updated.field = 0
-		updated.first = newField("name: ")
-		updated.notice = ""
-		updated, cmd = updated.focusActive()
-	case screenReviewers:
-		missing := updated.db == nil
-		if missing {
-			updated.notice = missingConfig
-			return
-		}
-		updated.place.screen = screenAddReviewer
-		updated.field = 0
-		updated.first = newField("name: ")
-		updated.notice = ""
-		updated, cmd = updated.focusActive()
-	case screenFixer:
-		hasFixer := len(updated.fixers) > 0
-		if hasFixer {
-			updated.notice = "fixer already exists"
-			return
-		}
-		missing := updated.db == nil
-		if missing {
-			updated.notice = missingConfig
-			return
-		}
-		updated.place.screen = screenAddFixer
-		updated.field = 0
-		updated.first = newField("name: ")
-		updated.notice = ""
-		updated, cmd = updated.focusActive()
-	case screenChecks:
-		missing := updated.db == nil
-		if missing {
-			updated.notice = missingConfig
-			return
-		}
-		updated.place.screen = screenAddCheck
-		updated.field = 0
-		updated.first = newField("name: ")
-		updated.notice = ""
-		updated, cmd = updated.focusActive()
 	default:
 	}
 	return
@@ -543,20 +414,6 @@ func (m model) openSelected() (updated model) {
 		updated = updated.openSection()
 	case screenPickApp:
 		updated = updated.pickApp()
-	case screenBuilders:
-		updated = updated.openBuilder()
-	case screenBuilder:
-		updated = updated.openBuilderSection()
-	case screenPickStart:
-		updated = updated.chooseStart()
-	case screenPickAttention:
-		updated = updated.chooseAttention()
-	case screenPickReviewerApp:
-		updated = updated.chooseReviewerApp()
-	case screenPickReviewerLabel:
-		updated = updated.chooseReviewerLabel()
-	case screenPickFixerLabel:
-		updated = updated.chooseFixerLabel()
 	default:
 	}
 	return
@@ -601,11 +458,6 @@ func (m model) enterRepo(repo appRepo) (updated model) {
 	updated.notice = ""
 	updated.labels = nil
 	updated.attached = nil
-	updated.builders = nil
-	updated.reviewers = nil
-	updated.fixers = nil
-	updated.checks = nil
-	updated.place.builder = ""
 
 	path := ConfigPath(updated.factoryDir, repo.owner, repo.name)
 	db, missing, err := OpenConfig(updated.ctx, path)
@@ -633,8 +485,6 @@ func (m model) openSection() (updated model) {
 	switch item.value {
 	case "apps":
 		updated = updated.showRepoApps()
-	case "builders":
-		updated = updated.showBuilders()
 	default:
 		updated = updated.showLabels()
 	}
@@ -656,30 +506,6 @@ func (m model) back() (updated model) {
 	case screenPickApp:
 		updated.notice = ""
 		updated = updated.showRepoApps()
-	case screenBuilders:
-		updated.notice = ""
-		updated = updated.showSections()
-	case screenBuilder:
-		updated.notice = ""
-		updated = updated.showBuilders()
-	case screenReviewers, screenFixer, screenChecks:
-		updated.notice = ""
-		updated = updated.showBuilder()
-	case screenPickStart:
-		updated.notice = ""
-		updated = updated.showBuilders()
-	case screenPickAttention:
-		updated.notice = ""
-		updated = updated.showPickStart()
-	case screenPickReviewerApp:
-		updated.notice = ""
-		updated = updated.showReviewers()
-	case screenPickReviewerLabel:
-		updated.notice = ""
-		updated = updated.showPickReviewerApp()
-	case screenPickFixerLabel:
-		updated.notice = ""
-		updated = updated.showFixer()
 	default:
 	}
 	return
@@ -693,14 +519,6 @@ func (m model) cancelForm() (updated model) {
 		updated = updated.showRepos()
 	case screenAddLabel:
 		updated = updated.showLabels()
-	case screenAddBuilder:
-		updated = updated.showBuilders()
-	case screenAddReviewer:
-		updated = updated.showReviewers()
-	case screenAddFixer:
-		updated = updated.showFixer()
-	case screenAddCheck:
-		updated = updated.showChecks()
 	default:
 		updated = updated.showApps()
 	}
@@ -708,20 +526,6 @@ func (m model) cancelForm() (updated model) {
 }
 
 func (m model) advanceForm() (updated model, cmd tea.Cmd) {
-	switch m.place.screen {
-	case screenAddBuilder:
-		updated = m.draftBuilder()
-		return
-	case screenAddReviewer:
-		updated = m.draftReviewer()
-		return
-	case screenAddFixer:
-		updated = m.draftFixer()
-		return
-	case screenAddCheck:
-		updated = m.saveCheck()
-		return
-	}
 	one := m.place.screen == screenAddApp
 	if one {
 		updated = m.submitApp()
@@ -886,8 +690,8 @@ func (m model) showSections() (updated model) {
 	updated = m
 	updated.place.screen = screenSections
 	heading := updated.place.owner + "/" + updated.place.name
-	items := []string{"labels", "apps", "builders"}
-	values := []string{"labels", "apps", "builders"}
+	items := []string{"labels", "apps"}
+	values := []string{"labels", "apps"}
 	updated = updated.setList(heading, items, values, 0, listHelp)
 	return
 }

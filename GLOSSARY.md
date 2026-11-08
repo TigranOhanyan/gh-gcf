@@ -39,7 +39,7 @@ The part of the factory that carries one command across every app repo.
 _Avoid_: engine, runner
 
 **Config**:
-What the user wants the factory to do: its labels, Apps, developments, and the CI checks that can claim a fixer. Only the user changes it.
+What the user wants the factory to do: its labels, Apps, developments, and the GitHub checks that can claim a fixer. Only the user changes it.
 _Avoid_: settings, desired state
 
 **Label**:
@@ -93,7 +93,7 @@ The reviewer that judges a pull request against the issue it claims to implement
 _Avoid_: spec reviewer, requirements reviewer, QA
 
 **Fixer**:
-The role that applies a changes request or a red check on that pull request, once. It stays idle when both reviewers approved and every listed check passed.
+The role that applies a changes request or a red GitHub check on that pull request, once. It stays idle when both reviewers approved and every listed GitHub check passed.
 _Avoid_: builder (second run), repairer, review applier
 
 **Development work**:
@@ -108,9 +108,9 @@ _Avoid_: bot, run
 A reviewer's decision on a pull request: approve or request changes. A comment is not a verdict.
 _Avoid_: result, outcome
 
-**Check**:
-A named CI result belonging to one development. It can claim that development's fixer.
-_Avoid_: workflow, action, job
+**GitHub check**:
+A named result GitHub attaches to a pull request. It belongs to one development and can claim that development's fixer.
+_Avoid_: check, CI check, workflow, action, job
 
 **Attention**:
 The mark that the factory has stopped on an issue and a person must look at it. A development has one attention label.

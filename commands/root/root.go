@@ -11,7 +11,6 @@ import (
 	"github.com/TigranOhanyan/gh-gcf/commands/compile"
 	compiledevelopment "github.com/TigranOhanyan/gh-gcf/commands/compile/development"
 	"github.com/TigranOhanyan/gh-gcf/commands/label"
-	"github.com/TigranOhanyan/gh-gcf/commands/poll"
 	"github.com/TigranOhanyan/gh-gcf/commands/run"
 	"github.com/TigranOhanyan/gh-gcf/commands/run/builder"
 	"github.com/TigranOhanyan/gh-gcf/commands/run/fixer"
@@ -59,7 +58,5 @@ func NewRoot() (cmd *cobra.Command) {
 	checkFixerCmd := checkfixer.NewCheckFixer()
 	checkCmd.AddCommand(checkFixerCmd)
 	cmd.AddCommand(checkCmd)
-	pollCmd := poll.NewPoll()
-	cmd.AddCommand(pollCmd)
 	return
 }

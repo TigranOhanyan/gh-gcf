@@ -2,6 +2,7 @@ package builder_test
 
 import (
 	"bytes"
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -54,6 +55,26 @@ func Test_RunBuilder_should_start_a_builder_for_an_open_issue(t *testing.T) {
 	assert.Contains(t, requests[0], "Issue #7: Add a thing")
 	assert.Contains(t, requests[0], "Do it")
 	assert.Contains(t, requests[0], agents[0].ID)
+}
+
+func Test_RunBuilder_should_start_a_builder_without_writing_a_coding_work(t *testing.T) {
+	resetWireMock(t)
+	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
+	stubCursor(t, 200, `{"run":{"id":"`+runID+`"}}`)
+	repoDir := setupFactory(t, instruction)
+	id := runTick(t, repoDir)
+	err := runCompile(t, repoDir, id)
+	require.NoError(t, err)
+
+	err = runBuilder(t, repoDir, id)
+	require.NoError(t, err)
+
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	assert.Equal(t, int64(7), works[0].IssueNumber)
+	assertAbsentTable(t, db.DB, "coding_work")
 }
 
 func Test_RunBuilder_should_store_the_issue_and_point_at_the_development_and_the_builder(t *testing.T) {
@@ -319,6 +340,14 @@ func mustRoot(t *testing.T, line string) (stdout string) {
 	stdout, err := runRoot(t, line)
 	require.NoError(t, err)
 	return
+}
+
+func assertAbsentTable(t *testing.T, db *sql.DB, name string) {
+	t.Helper()
+	var found string
+	query := `SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`
+	err := db.QueryRowContext(t.Context(), query, name).Scan(&found)
+	require.ErrorIs(t, err, sql.ErrNoRows)
 }
 
 func openStateTip(t *testing.T, repoDir string) (db *statedb.DB) {

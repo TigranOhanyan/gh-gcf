@@ -113,21 +113,6 @@ func Test_NewRoot_should_list_check(t *testing.T) {
 	assert.Contains(t, text, "Record a finished builder")
 }
 
-func Test_NewRoot_should_list_poll(t *testing.T) {
-	cmd := NewRoot()
-	var output bytes.Buffer
-	cmd.SetOut(&output)
-	cmd.SetErr(&output)
-	cmd.SetArgs([]string{"--help"})
-
-	err := cmd.ExecuteContext(t.Context())
-	require.NoError(t, err)
-
-	text := output.String()
-	assert.Contains(t, text, "poll")
-	assert.Contains(t, text, "Check agents and works")
-}
-
 func Test_NewRoot_should_list_run(t *testing.T) {
 	cmd := NewRoot()
 	var output bytes.Buffer

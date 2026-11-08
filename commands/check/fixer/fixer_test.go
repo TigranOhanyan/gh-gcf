@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"database/sql"
 	"encoding/pem"
 	"fmt"
 	"os"
@@ -278,6 +279,23 @@ func Test_CheckFixer_should_set_the_development_work_to_finished_when_every_list
 	assert.Equal(t, "/repos/octo/app/commits/"+fixerHeadSHA+"/check-runs", requests[0].path)
 	assert.Equal(t, reviews, reviewRequestCount(t))
 	assert.Empty(t, labelPosts(t))
+}
+
+func Test_CheckFixer_should_finish_the_development_work_without_reading_a_member(t *testing.T) {
+	repoDir := recordedFixer(t)
+	run := oneRun(checkName, "completed", "success", newerStart)
+	stubCheckRuns(t, fixerHeadSHA, checkRunsPayload(run))
+	id := runTick(t, repoDir)
+
+	err := runCheckFixer(t, repoDir, id)
+	require.NoError(t, err)
+
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	assert.Equal(t, "finished", works[0].Status)
+	assertAbsentTable(t, db.DB, "member")
 }
 
 func Test_CheckFixer_should_not_merge_ready_or_close_the_pull_request_when_those_checks_passed(t *testing.T) {
@@ -588,6 +606,14 @@ func fixerAgentID(t *testing.T, repoDir string) (id string) {
 	require.True(t, found)
 	id = fixer.ID
 	return
+}
+
+func assertAbsentTable(t *testing.T, db *sql.DB, name string) {
+	t.Helper()
+	var found string
+	query := `SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`
+	err := db.QueryRowContext(t.Context(), query, name).Scan(&found)
+	require.ErrorIs(t, err, sql.ErrNoRows)
 }
 
 func openStateTip(t *testing.T, repoDir string) (db *statedb.DB) {

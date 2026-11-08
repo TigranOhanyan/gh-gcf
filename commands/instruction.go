@@ -10,14 +10,6 @@ import (
 	"charm.land/log/v2"
 )
 
-// InstructionFingerprint is the SHA-256 of the member's instruction file.
-// An empty file has a fingerprint. A missing file is an error.
-func InstructionFingerprint(dir string, name string) (sum string, err error) {
-	path := filepath.Join(dir, "members", name+".md")
-	sum, err = fingerprintFile(path, name)
-	return
-}
-
 // DevelopmentInstructionFingerprint is the SHA-256 of one role's instruction file.
 // An empty file has a fingerprint. A missing file is an error.
 func DevelopmentInstructionFingerprint(dir string, development string, role string) (sum string, err error) {
