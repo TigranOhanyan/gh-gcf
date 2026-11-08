@@ -7,7 +7,7 @@ import (
 func NewRun() (cmd *cobra.Command) {
 	cmd = &cobra.Command{
 		Use:   "run",
-		Short: "Start a builder for a development",
+		Short: "Start an agent for a development",
 	}
 	return
 }

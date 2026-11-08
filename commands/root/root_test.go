@@ -140,7 +140,7 @@ func Test_NewRoot_should_list_run(t *testing.T) {
 
 	text := output.String()
 	assert.Contains(t, text, "run")
-	assert.Contains(t, text, "Start a builder for a development")
+	assert.Contains(t, text, "Start an agent for a development")
 }
 
 func Test_NewRoot_should_not_list_copy(t *testing.T) {

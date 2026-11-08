@@ -81,6 +81,26 @@ INSERT INTO development_agent (id, role) VALUES (?, ?);
 -- name: SetDevelopmentAgentRunID :exec
 UPDATE development_agent SET cursor_run_id = ? WHERE id = ?;
 
+-- name: ListReadyStandardsWorks :many
+SELECT
+    w.id AS work_id,
+    w.development_name,
+    w.issue_number,
+    w.issue_url,
+    w.pull_request_number
+FROM development_work w
+JOIN development_agent a ON a.id = w.builder_agent
+WHERE w.status = ''
+AND w.standards_reviewer_agent IS NULL
+AND a.role = 'builder'
+AND a.finished_at IS NOT NULL
+ORDER BY w.issue_number;
+
+-- name: SetStandardsReviewerAgent :exec
+UPDATE development_work
+SET standards_reviewer_agent = ?
+WHERE id = ?;
+
 -- name: SetDevelopmentAgentFinished :exec
 UPDATE development_agent
 SET finished_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
