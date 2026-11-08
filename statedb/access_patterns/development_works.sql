@@ -121,11 +121,17 @@ UPDATE development_work
 SET specification_reviewer_agent = ?
 WHERE id = ?;
 
+-- name: SetFixerAgent :exec
+UPDATE development_work
+SET fixer_agent = ?
+WHERE id = ?;
+
 -- name: ListWorksReadyForChecks :many
 SELECT
     w.id AS work_id,
     w.development_name,
     w.issue_number,
+    w.issue_url,
     w.pull_request_number,
     w.builder_head_sha
 FROM development_work w

@@ -414,6 +414,7 @@ SELECT
     w.id AS work_id,
     w.development_name,
     w.issue_number,
+    w.issue_url,
     w.pull_request_number,
     w.builder_head_sha
 FROM development_work w
@@ -434,6 +435,7 @@ type ListWorksReadyForChecksRow struct {
 	WorkID            string         `json:"work_id"`
 	DevelopmentName   string         `json:"development_name"`
 	IssueNumber       int64          `json:"issue_number"`
+	IssueUrl          string         `json:"issue_url"`
 	PullRequestNumber sql.NullInt64  `json:"pull_request_number"`
 	BuilderHeadSha    sql.NullString `json:"builder_head_sha"`
 }
@@ -451,6 +453,7 @@ func (q *Queries) ListWorksReadyForChecks(ctx context.Context) ([]ListWorksReady
 			&i.WorkID,
 			&i.DevelopmentName,
 			&i.IssueNumber,
+			&i.IssueUrl,
 			&i.PullRequestNumber,
 			&i.BuilderHeadSha,
 		); err != nil {
@@ -515,6 +518,22 @@ type SetDevelopmentWorkPullParams struct {
 
 func (q *Queries) SetDevelopmentWorkPull(ctx context.Context, arg SetDevelopmentWorkPullParams) error {
 	_, err := q.db.ExecContext(ctx, setDevelopmentWorkPull, arg.PullRequestNumber, arg.BuilderHeadSha, arg.ID)
+	return err
+}
+
+const setFixerAgent = `-- name: SetFixerAgent :exec
+UPDATE development_work
+SET fixer_agent = ?
+WHERE id = ?
+`
+
+type SetFixerAgentParams struct {
+	FixerAgent sql.NullString `json:"fixer_agent"`
+	ID         string         `json:"id"`
+}
+
+func (q *Queries) SetFixerAgent(ctx context.Context, arg SetFixerAgentParams) error {
+	_, err := q.db.ExecContext(ctx, setFixerAgent, arg.FixerAgent, arg.ID)
 	return err
 }
 

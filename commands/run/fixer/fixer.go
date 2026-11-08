@@ -9,6 +9,7 @@ import (
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
 	"github.com/TigranOhanyan/gh-gcf/commands/executor"
+	"github.com/TigranOhanyan/gh-gcf/commands/run"
 )
 
 func NewRunFixer() (cmd *cobra.Command) {
@@ -18,7 +19,7 @@ func NewRunFixer() (cmd *cobra.Command) {
 
 	cmd = &cobra.Command{
 		Use:   "fixer",
-		Short: "Read verdicts once every listed check has finished",
+		Short: "Start the fixer when a verdict or a listed check requires it",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) (err error) {
 			dir, err := os.Getwd()
@@ -43,13 +44,17 @@ func NewRunFixer() (cmd *cobra.Command) {
 					return
 				}
 			}
+			cursor, err := run.NewCursorClient()
+			if err != nil {
+				return
+			}
 			exec := executor.StepExecutor{
 				FactoryDir:   dir,
 				ConfigBranch: configBranch,
 				StateBranch:  stateBranch,
 				TickID:       tickID,
 			}
-			step := checkStep{GitHub: client, app: app}
+			step := checkStep{GitHub: client, app: app, cursor: cursor}
 			err = exec.Execute(cmd.Context(), step)
 			return
 		},

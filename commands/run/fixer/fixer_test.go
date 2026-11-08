@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,6 +33,7 @@ const otherCheckName = "ci / lint"
 const builderInstruction = "Build the issue."
 const standardsInstruction = "Review the standards."
 const specificationInstruction = "Review the specification."
+const fixerInstruction = "Apply the requested changes."
 const runID = "run-11111111-1111-7111-8111-111111111111"
 const headSHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 const olderStart = "2026-11-08T09:00:00Z"
@@ -156,7 +158,7 @@ func Test_RunFixer_should_ignore_a_check_run_whose_name_is_not_listed_and_write_
 	assert.Empty(t, labelPosts(t))
 }
 
-func Test_RunFixer_should_read_both_verdicts_when_every_listed_check_has_finished_including_a_red_check(t *testing.T) {
+func Test_RunFixer_should_start_the_fixer_when_both_verdicts_approve_and_a_listed_check_is_red(t *testing.T) {
 	repoDir := readyReviewers(t)
 	recordApps(t, repoDir)
 	run := oneRun(checkName, "completed", "failure", newerStart)
@@ -165,13 +167,12 @@ func Test_RunFixer_should_read_both_verdicts_when_every_listed_check_has_finishe
 	standards := reviewJSON(1, standardsBotID, "APPROVED", olderStart)
 	specification := reviewJSON(2, specificationBotID, "APPROVED", newerStart)
 	stubReviews(t, reviewsPayload(standards, specification))
-	before := stateCounts(t, repoDir)
 	id := runTick(t, repoDir)
 
 	err := runFixer(t, repoDir, id)
 	require.NoError(t, err)
 
-	assertWroteNothing(t, repoDir, before)
+	assertFixerStarted(t, repoDir)
 	requests := checkRunRequests(t)
 	require.Len(t, requests, 1)
 	assert.Equal(t, "/repos/octo/app/commits/"+headSHA+"/check-runs", requests[0].path)
@@ -244,7 +245,7 @@ func Test_RunFixer_should_read_verdicts_when_the_development_lists_no_checks_and
 	recordApps(t, repoDir)
 	stubReviewerAccess(t)
 	standards := reviewJSON(1, standardsBotID, "APPROVED", olderStart)
-	specification := reviewJSON(2, specificationBotID, "CHANGES_REQUESTED", newerStart)
+	specification := reviewJSON(2, specificationBotID, "APPROVED", newerStart)
 	stubReviews(t, reviewsPayload(standards, specification))
 	before := stateCounts(t, repoDir)
 	id := runTick(t, repoDir)
@@ -256,6 +257,200 @@ func Test_RunFixer_should_read_verdicts_when_the_development_lists_no_checks_and
 	assert.Empty(t, checkRunRequests(t))
 	assert.Equal(t, 2, reviewRequestCount(t))
 	assert.Empty(t, labelPosts(t))
+}
+
+func Test_RunFixer_should_start_the_fixer_when_one_verdict_requests_changes(t *testing.T) {
+	repoDir := readyReviewers(t)
+	recordApps(t, repoDir)
+	run := oneRun(checkName, "completed", "success", newerStart)
+	stubCheckRuns(t, headSHA, checkRunsPayload(run))
+	stubReviewerAccess(t)
+	standards := reviewJSON(1, standardsBotID, "CHANGES_REQUESTED", olderStart)
+	specification := reviewJSON(2, specificationBotID, "APPROVED", newerStart)
+	stubReviews(t, reviewsPayload(standards, specification))
+	id := runTick(t, repoDir)
+
+	err := runFixer(t, repoDir, id)
+	require.NoError(t, err)
+
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
+	assert.Contains(t, string(body), "✅ [7] started")
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	work := works[0]
+	agents := listAgents(t, db)
+	require.Len(t, agents, 4)
+	builderAgent, builderFound := agentByRole(agents, "builder")
+	require.True(t, builderFound)
+	standardsAgent, standardsFound := agentByRole(agents, "standards_reviewer")
+	require.True(t, standardsFound)
+	specificationAgent, specificationFound := agentByRole(agents, "specification_reviewer")
+	require.True(t, specificationFound)
+	fixerAgent, fixerFound := agentByRole(agents, "fixer")
+	require.True(t, fixerFound)
+	assert.NotEmpty(t, work.ID)
+	assert.Equal(t, developmentName, work.DevelopmentName)
+	assert.Equal(t, int64(7), work.IssueNumber)
+	assert.Equal(t, "https://github.com/octo/app/issues/7", work.IssueUrl)
+	assert.True(t, work.PullRequestNumber.Valid)
+	assert.Equal(t, int64(9), work.PullRequestNumber.Int64)
+	assert.True(t, work.BuilderHeadSha.Valid)
+	assert.Equal(t, headSHA, work.BuilderHeadSha.String)
+	assert.False(t, work.FixerHeadSha.Valid)
+	assert.True(t, work.BuilderAgent.Valid)
+	assert.Equal(t, builderAgent.ID, work.BuilderAgent.String)
+	assert.True(t, work.StandardsReviewerAgent.Valid)
+	assert.Equal(t, standardsAgent.ID, work.StandardsReviewerAgent.String)
+	assert.True(t, work.SpecificationReviewerAgent.Valid)
+	assert.Equal(t, specificationAgent.ID, work.SpecificationReviewerAgent.String)
+	assert.True(t, work.FixerAgent.Valid)
+	assert.Equal(t, fixerAgent.ID, work.FixerAgent.String)
+	assert.Empty(t, work.Status)
+	assert.True(t, strings.HasPrefix(fixerAgent.ID, "bc-"))
+	assert.Equal(t, "fixer", fixerAgent.Role)
+	assert.True(t, fixerAgent.CursorRunID.Valid)
+	assert.Equal(t, runID, fixerAgent.CursorRunID.String)
+	assert.NotEmpty(t, fixerAgent.StartedAt)
+	assert.False(t, fixerAgent.FinishedAt.Valid)
+	requests := cursorRequests(t)
+	require.Len(t, requests, 4)
+	request, found := requestFor(requests, fixerAgent.ID)
+	require.True(t, found)
+	assert.Contains(t, request, fixerInstruction)
+	assert.Contains(t, request, "Pull request #9")
+	assert.Contains(t, request, "Issue #7: https://github.com/octo/app/issues/7")
+	assert.Contains(t, request, `"autoCreatePR":false`)
+	assert.Empty(t, labelPosts(t))
+}
+
+func Test_RunFixer_should_start_the_fixer_when_a_listed_check_is_red(t *testing.T) {
+	repoDir := readyReviewers(t)
+	recordApps(t, repoDir)
+	run := oneRun(checkName, "completed", "failure", newerStart)
+	stubCheckRuns(t, headSHA, checkRunsPayload(run))
+	stubReviewerAccess(t)
+	standards := reviewJSON(1, standardsBotID, "CHANGES_REQUESTED", olderStart)
+	specification := reviewJSON(2, specificationBotID, "APPROVED", newerStart)
+	stubReviews(t, reviewsPayload(standards, specification))
+	id := runTick(t, repoDir)
+
+	err := runFixer(t, repoDir, id)
+	require.NoError(t, err)
+
+	assertFixerStarted(t, repoDir)
+	assert.Equal(t, 2, reviewRequestCount(t))
+	assert.Empty(t, labelPosts(t))
+}
+
+func Test_RunFixer_should_record_the_fixers_started_time_and_a_starting_event(t *testing.T) {
+	repoDir := readyReviewers(t)
+	recordApps(t, repoDir)
+	run := oneRun(checkName, "completed", "success", newerStart)
+	stubCheckRuns(t, headSHA, checkRunsPayload(run))
+	stubReviewerAccess(t)
+	standards := reviewJSON(1, standardsBotID, "CHANGES_REQUESTED", olderStart)
+	specification := reviewJSON(2, specificationBotID, "APPROVED", newerStart)
+	stubReviews(t, reviewsPayload(standards, specification))
+	id := runTick(t, repoDir)
+	startOfTest := time.Now().Add(-time.Second)
+
+	err := runFixer(t, repoDir, id)
+	require.NoError(t, err)
+	startOfCheck := time.Now().Add(time.Second)
+
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	agents := listAgents(t, db)
+	fixerAgent, found := agentByRole(agents, "fixer")
+	require.True(t, found)
+	started, err := time.Parse(time.RFC3339Nano, fixerAgent.StartedAt)
+	require.NoError(t, err)
+	assert.WithinRange(t, started, startOfTest, startOfCheck)
+	events := listEvents(t, db)
+	starting, found := eventFor(events, fixerAgent.ID, "starting")
+	require.True(t, found)
+	assert.Len(t, starting.ID, 26)
+	assert.Len(t, starting.StepID, 26)
+	assert.Equal(t, fixerAgent.ID, starting.AgentID)
+	assert.Equal(t, "starting", starting.Kind)
+	assert.Equal(t, "[features] [7] starting", starting.Message)
+	recorded, err := time.Parse(time.RFC3339Nano, starting.CreatedAt)
+	require.NoError(t, err)
+	assert.WithinRange(t, recorded, startOfTest, startOfCheck)
+}
+
+func Test_RunFixer_should_not_start_a_second_fixer_when_one_has_already_started(t *testing.T) {
+	repoDir := readyReviewers(t)
+	recordApps(t, repoDir)
+	run := oneRun(checkName, "completed", "success", newerStart)
+	stubCheckRuns(t, headSHA, checkRunsPayload(run))
+	stubReviewerAccess(t)
+	standards := reviewJSON(1, standardsBotID, "CHANGES_REQUESTED", olderStart)
+	specification := reviewJSON(2, specificationBotID, "APPROVED", newerStart)
+	stubReviews(t, reviewsPayload(standards, specification))
+	id := runTick(t, repoDir)
+	err := runFixer(t, repoDir, id)
+	require.NoError(t, err)
+	started := stateCounts(t, repoDir)
+	posts := len(cursorRequests(t))
+	later := runTick(t, repoDir)
+
+	err = runFixer(t, repoDir, later)
+	require.NoError(t, err)
+
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
+	assert.Empty(t, strings.TrimSpace(string(body)))
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	agents := listAgents(t, db)
+	assert.Len(t, agents, started.agents)
+	fixers := 0
+	for _, agent := range agents {
+		matched := agent.Role == "fixer"
+		if matched {
+			fixers++
+		}
+	}
+	assert.Equal(t, 1, fixers)
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	assert.Empty(t, works[0].Status)
+	assert.True(t, works[0].FixerAgent.Valid)
+	assert.Len(t, cursorRequests(t), posts)
+}
+
+func Test_RunFixer_should_wait_when_the_fixer_instruction_hash_differs(t *testing.T) {
+	repoDir := readyReviewers(t)
+	writeInstruction(t, repoDir, "fixer", "A different instruction.")
+	recordApps(t, repoDir)
+	run := oneRun(checkName, "completed", "success", newerStart)
+	stubCheckRuns(t, headSHA, checkRunsPayload(run))
+	stubReviewerAccess(t)
+	standards := reviewJSON(1, standardsBotID, "CHANGES_REQUESTED", olderStart)
+	specification := reviewJSON(2, specificationBotID, "APPROVED", newerStart)
+	stubReviews(t, reviewsPayload(standards, specification))
+	before := stateCounts(t, repoDir)
+	posts := len(cursorRequests(t))
+	id := runTick(t, repoDir)
+
+	err := runFixer(t, repoDir, id)
+	require.NoError(t, err)
+
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
+	assert.Contains(t, string(body), "✅ [features] instruction changed")
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	assert.Empty(t, works[0].Status)
+	assert.False(t, works[0].FixerAgent.Valid)
+	agents := listAgents(t, db)
+	assert.Len(t, agents, before.agents)
+	_, fixerFound := agentByRole(agents, "fixer")
+	assert.False(t, fixerFound)
+	assert.Len(t, cursorRequests(t), posts)
 }
 
 type counts struct {
@@ -345,7 +540,7 @@ func setupFactory(t *testing.T, listed bool) (repoDir string) {
 	writeInstruction(t, repoDir, "builder", builderInstruction)
 	writeInstruction(t, repoDir, "standards_reviewer", standardsInstruction)
 	writeInstruction(t, repoDir, "specification_reviewer", specificationInstruction)
-	writeInstruction(t, repoDir, "fixer", "")
+	writeInstruction(t, repoDir, "fixer", fixerInstruction)
 	commitConfig(t, repoDir)
 	useStateBranch(t, repoDir)
 	return
@@ -536,6 +731,31 @@ func listEvents(t *testing.T, db *statedb.DB) (rows []records.DevelopmentEvent) 
 	return
 }
 
+func assertFixerStarted(t *testing.T, repoDir string) {
+	t.Helper()
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
+	assert.Contains(t, string(body), "✅ [7] started")
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	work := works[0]
+	assert.Empty(t, work.Status)
+	assert.False(t, work.FixerHeadSha.Valid)
+	assert.True(t, work.FixerAgent.Valid)
+	agents := listAgents(t, db)
+	fixerAgent, fixerFound := agentByRole(agents, "fixer")
+	require.True(t, fixerFound)
+	assert.Equal(t, fixerAgent.ID, work.FixerAgent.String)
+	assert.Equal(t, "fixer", fixerAgent.Role)
+	assert.True(t, fixerAgent.CursorRunID.Valid)
+	assert.Equal(t, runID, fixerAgent.CursorRunID.String)
+	assert.False(t, fixerAgent.FinishedAt.Valid)
+	requests := cursorRequests(t)
+	_, found := requestFor(requests, fixerAgent.ID)
+	assert.True(t, found)
+}
+
 func agentByRole(agents []records.DevelopmentAgent, role string) (agent records.DevelopmentAgent, found bool) {
 	for _, item := range agents {
 		matched := item.Role == role
@@ -543,6 +763,44 @@ func agentByRole(agents []records.DevelopmentAgent, role string) (agent records.
 			agent = item
 			found = true
 			return
+		}
+	}
+	return
+}
+
+func eventFor(events []records.DevelopmentEvent, agentID string, kind string) (event records.DevelopmentEvent, found bool) {
+	for _, item := range events {
+		matched := item.AgentID == agentID && item.Kind == kind
+		if matched {
+			event = item
+			found = true
+			return
+		}
+	}
+	return
+}
+
+func requestFor(bodies []string, agentID string) (body string, found bool) {
+	for _, item := range bodies {
+		matched := strings.Contains(item, agentID)
+		if matched {
+			body = item
+			found = true
+			return
+		}
+	}
+	return
+}
+
+func cursorRequests(t *testing.T) (bodies []string) {
+	t.Helper()
+	journal, err := wiremockClient.GetAllRequests()
+	require.NoError(t, err)
+	for _, entry := range journal.Requests {
+		request := entry.Request
+		matched := request.Method == "POST" && request.URL == "/v1/agents"
+		if matched {
+			bodies = append(bodies, request.Body)
 		}
 	}
 	return
