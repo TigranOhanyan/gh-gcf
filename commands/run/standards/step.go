@@ -14,7 +14,7 @@ import (
 	"github.com/oklog/ulid/v2"
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
-	"github.com/TigranOhanyan/gh-gcf/commands/run"
+	"github.com/TigranOhanyan/gh-gcf/commands/run/agent"
 	"github.com/TigranOhanyan/gh-gcf/statedb/records"
 )
 
@@ -27,7 +27,7 @@ const eventRejected = "rejected"
 type standardsStep struct {
 	GitHub *github.Client
 	app    commands.FactoryApp
-	cursor run.CursorClient
+	cursor agent.CursorClient
 }
 
 func (standardsStep) Name() (name string) {
@@ -119,11 +119,11 @@ func (step standardsStep) startWork(ctx context.Context, repo commands.Repo, ste
 
 	pullNumber := work.PullRequestNumber.Int64
 	text := promptText(instruction, work.IssueNumber, work.IssueUrl, pullNumber)
-	prompt := run.CursorPrompt{Text: text}
+	prompt := agent.CursorPrompt{Text: text}
 	repoURL := fmt.Sprintf("https://github.com/%s/%s", repo.Owner, repo.Name)
-	oneRepo := run.CursorRepo{URL: repoURL}
-	repos := []run.CursorRepo{oneRepo}
-	body := run.CursorCreate{
+	oneRepo := agent.CursorRepo{URL: repoURL}
+	repos := []agent.CursorRepo{oneRepo}
+	body := agent.CursorCreate{
 		Prompt:       prompt,
 		AutoCreatePR: false,
 		AgentID:      agentID,

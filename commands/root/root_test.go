@@ -38,36 +38,6 @@ func Test_NewRoot_should_list_compile(t *testing.T) {
 	assert.Contains(t, text, "Copy a flow from config into state")
 }
 
-func Test_NewRoot_should_list_label(t *testing.T) {
-	cmd := NewRoot()
-	var output bytes.Buffer
-	cmd.SetOut(&output)
-	cmd.SetErr(&output)
-	cmd.SetArgs([]string{"--help"})
-
-	err := cmd.ExecuteContext(t.Context())
-	require.NoError(t, err)
-
-	text := output.String()
-	assert.Contains(t, text, "label")
-	assert.Contains(t, text, "Ensure configured labels exist")
-}
-
-func Test_NewRoot_should_list_app(t *testing.T) {
-	cmd := NewRoot()
-	var output bytes.Buffer
-	cmd.SetOut(&output)
-	cmd.SetErr(&output)
-	cmd.SetArgs([]string{"--help"})
-
-	err := cmd.ExecuteContext(t.Context())
-	require.NoError(t, err)
-
-	text := output.String()
-	assert.Contains(t, text, "app")
-	assert.Contains(t, text, "Record configured apps that are installed")
-}
-
 func Test_NewRoot_should_list_setup(t *testing.T) {
 	cmd := NewRoot()
 	var output bytes.Buffer

@@ -828,7 +828,7 @@ func recordApps(t *testing.T, repoDir string) {
 func runApp(t *testing.T, repoDir string, id string) (err error) {
 	t.Helper()
 	t.Chdir(repoDir)
-	line := fmt.Sprintf("app --tick %s", id)
+	line := fmt.Sprintf("compile app --tick %s", id)
 	_, err = runRoot(t, line)
 	return
 }

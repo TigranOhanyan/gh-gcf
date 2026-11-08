@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
-	"github.com/TigranOhanyan/gh-gcf/commands/setup"
+	"github.com/TigranOhanyan/gh-gcf/commands/setup/config"
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 )
 
@@ -29,16 +29,16 @@ func newAttach() (cmd *cobra.Command) {
 	flags.StringVar(&owner, "owner", "", "owner of the app repo")
 	flags.StringVar(&repo, "repo", "", "name of the app repo")
 	flags.StringVar(&id, "id", "", "app id")
-	setup.RequireFlag(cmd, "owner")
-	setup.RequireFlag(cmd, "repo")
-	setup.RequireFlag(cmd, "id")
+	config.RequireFlag(cmd, "owner")
+	config.RequireFlag(cmd, "repo")
+	config.RequireFlag(cmd, "id")
 	return
 }
 
 func runAttach(cmd *cobra.Command, owner string, repo string, rawID string) (err error) {
 	ctx := cmd.Context()
 	use := func(dir string, _ string, _ string, db *configdb.DB) (useErr error) {
-		id, useErr := setup.ParseAppID(rawID)
+		id, useErr := config.ParseAppID(rawID)
 		if useErr != nil {
 			return
 		}
@@ -46,10 +46,10 @@ func runAttach(cmd *cobra.Command, owner string, repo string, rawID string) (err
 		if useErr != nil {
 			return
 		}
-		useErr = setup.AttachApp(ctx, db, id)
+		useErr = config.AttachApp(ctx, db, id)
 		return
 	}
-	err = setup.WithRepo(ctx, owner, repo, use)
+	err = config.WithRepo(ctx, owner, repo, use)
 	return
 }
 

@@ -7,7 +7,7 @@ import (
 	"charm.land/log/v2"
 	"github.com/spf13/cobra"
 
-	"github.com/TigranOhanyan/gh-gcf/commands/setup"
+	"github.com/TigranOhanyan/gh-gcf/commands/setup/config"
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 	configrecords "github.com/TigranOhanyan/gh-gcf/configdb/records"
 )
@@ -37,44 +37,44 @@ func newAdd() (cmd *cobra.Command) {
 	flags.StringVar(&attention, "attention", "", "attention label")
 	flags.StringVar(&standardsApp, "standards-app", "", "standards reviewer app id")
 	flags.StringVar(&specificationApp, "specification-app", "", "specification reviewer app id")
-	setup.RequireFlag(cmd, "owner")
-	setup.RequireFlag(cmd, "repo")
-	setup.RequireFlag(cmd, "name")
-	setup.RequireFlag(cmd, "starting")
-	setup.RequireFlag(cmd, "attention")
-	setup.RequireFlag(cmd, "standards-app")
-	setup.RequireFlag(cmd, "specification-app")
+	config.RequireFlag(cmd, "owner")
+	config.RequireFlag(cmd, "repo")
+	config.RequireFlag(cmd, "name")
+	config.RequireFlag(cmd, "starting")
+	config.RequireFlag(cmd, "attention")
+	config.RequireFlag(cmd, "standards-app")
+	config.RequireFlag(cmd, "specification-app")
 	return
 }
 
 func runAdd(cmd *cobra.Command, rawOwner string, rawRepo string, rawName string, rawStarting string, rawAttention string, rawStandardsApp string, rawSpecificationApp string) (err error) {
 	ctx := cmd.Context()
 	use := func(_ string, _ string, _ string, db *configdb.DB) (useErr error) {
-		starting, useErr := setup.NormalizeLabelName(rawStarting)
+		starting, useErr := config.NormalizeLabelName(rawStarting)
 		if useErr != nil {
 			return
 		}
-		attention, useErr := setup.NormalizeLabelName(rawAttention)
+		attention, useErr := config.NormalizeLabelName(rawAttention)
 		if useErr != nil {
 			return
 		}
-		standardsApp, useErr := setup.ParseAppID(rawStandardsApp)
+		standardsApp, useErr := config.ParseAppID(rawStandardsApp)
 		if useErr != nil {
 			return
 		}
-		specificationApp, useErr := setup.ParseAppID(rawSpecificationApp)
+		specificationApp, useErr := config.ParseAppID(rawSpecificationApp)
 		if useErr != nil {
 			return
 		}
 		_, useErr = add(ctx, db, rawName, starting, attention, standardsApp, specificationApp)
 		return
 	}
-	err = setup.WithRepo(ctx, rawOwner, rawRepo, use)
+	err = config.WithRepo(ctx, rawOwner, rawRepo, use)
 	return
 }
 
 func add(ctx context.Context, db *configdb.DB, rawName string, starting string, attention string, standardsApp int64, specificationApp int64) (name string, err error) {
-	name, err = setup.NormalizeSegment(rawName)
+	name, err = config.NormalizeSegment(rawName)
 	if err != nil {
 		return
 	}

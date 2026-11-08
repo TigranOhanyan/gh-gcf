@@ -326,7 +326,7 @@ func Test_Label_should_refuse_an_app_id_without_a_private_key(t *testing.T) {
 }
 
 func Test_Label_should_require_a_tick_id(t *testing.T) {
-	_, err := runRoot(t, "label")
+	_, err := runRoot(t, "compile label")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "tick")
 }
@@ -391,7 +391,7 @@ func runLabel(t *testing.T, repoDir string, id string, authToken string) (err er
 		t.Setenv("GH_TOKEN", authToken)
 	}
 	t.Chdir(repoDir)
-	line := fmt.Sprintf("label --tick %s", id)
+	line := fmt.Sprintf("compile label --tick %s", id)
 	stdout, err := runRoot(t, line)
 	if err == nil {
 		assert.Empty(t, stdout)

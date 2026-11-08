@@ -59,8 +59,8 @@ jobs:
           tick_id="$(gh gcf run tick)"
           echo "Tick ${tick_id}."
 
-          gh gcf app --tick "${tick_id}"
-          gh gcf label --tick "${tick_id}"
+          gh gcf compile app --tick "${tick_id}"
+          gh gcf compile label --tick "${tick_id}"
           gh gcf compile development --tick "${tick_id}"
           gh gcf run builder --tick "${tick_id}"
           gh gcf check builder --tick "${tick_id}"

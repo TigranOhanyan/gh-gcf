@@ -3,7 +3,7 @@ package apps
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/TigranOhanyan/gh-gcf/commands/setup"
+	"github.com/TigranOhanyan/gh-gcf/commands/setup/config"
 )
 
 func newAdd() (cmd *cobra.Command) {
@@ -19,16 +19,16 @@ func newAdd() (cmd *cobra.Command) {
 	}
 	flags := cmd.Flags()
 	flags.StringVar(&id, "id", "", "app id")
-	setup.RequireFlag(cmd, "id")
+	config.RequireFlag(cmd, "id")
 	return
 }
 
 func runAdd(cmd *cobra.Command, rawID string) (err error) {
 	ctx := cmd.Context()
-	dir, err := setup.CurrentFactory(ctx)
+	dir, err := config.CurrentFactory(ctx)
 	if err != nil {
 		return
 	}
-	_, err = setup.CreateAppFile(dir, rawID)
+	_, err = config.CreateAppFile(dir, rawID)
 	return
 }

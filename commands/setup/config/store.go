@@ -1,4 +1,4 @@
-package setup
+package config
 
 import (
 	"charm.land/log/v2"

@@ -7,7 +7,7 @@ import (
 	"charm.land/log/v2"
 	"github.com/spf13/cobra"
 
-	"github.com/TigranOhanyan/gh-gcf/commands/setup"
+	"github.com/TigranOhanyan/gh-gcf/commands/setup/config"
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 	configrecords "github.com/TigranOhanyan/gh-gcf/configdb/records"
 )
@@ -40,10 +40,10 @@ func newAddCheck() (cmd *cobra.Command) {
 	flags.StringVar(&repo, "repo", "", "name of the app repo")
 	flags.StringVar(&development, "development", "", "development name")
 	flags.StringVar(&name, "name", "", "check name")
-	setup.RequireFlag(cmd, "owner")
-	setup.RequireFlag(cmd, "repo")
-	setup.RequireFlag(cmd, "development")
-	setup.RequireFlag(cmd, "name")
+	config.RequireFlag(cmd, "owner")
+	config.RequireFlag(cmd, "repo")
+	config.RequireFlag(cmd, "development")
+	config.RequireFlag(cmd, "name")
 	return
 }
 
@@ -53,16 +53,16 @@ func runAddCheck(cmd *cobra.Command, rawOwner string, rawRepo string, rawDevelop
 		_, useErr = addCheck(ctx, db, rawDevelopment, rawName)
 		return
 	}
-	err = setup.WithRepo(ctx, rawOwner, rawRepo, use)
+	err = config.WithRepo(ctx, rawOwner, rawRepo, use)
 	return
 }
 
 func addCheck(ctx context.Context, db *configdb.DB, rawDevelopment string, rawName string) (name string, err error) {
-	development, err := setup.NormalizeSegment(rawDevelopment)
+	development, err := config.NormalizeSegment(rawDevelopment)
 	if err != nil {
 		return
 	}
-	name, err = setup.NormalizeCheckName(rawName)
+	name, err = config.NormalizeCheckName(rawName)
 	if err != nil {
 		return
 	}

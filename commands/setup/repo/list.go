@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/TigranOhanyan/gh-gcf/commands/setup"
+	"github.com/TigranOhanyan/gh-gcf/commands/setup/config"
 )
 
 func newList() (cmd *cobra.Command) {
@@ -24,11 +24,11 @@ func newList() (cmd *cobra.Command) {
 
 func runList(cmd *cobra.Command) (err error) {
 	ctx := cmd.Context()
-	dir, err := setup.CurrentFactory(ctx)
+	dir, err := config.CurrentFactory(ctx)
 	if err != nil {
 		return
 	}
-	repos, err := setup.ListRepos(dir)
+	repos, err := config.ListRepos(dir)
 	if err != nil {
 		return
 	}
@@ -37,9 +37,9 @@ func runList(cmd *cobra.Command) (err error) {
 	return
 }
 
-func printRepos(writer io.Writer, repos []setup.AppRepo) (err error) {
+func printRepos(writer io.Writer, repos []config.AppRepo) (err error) {
 	for _, repo := range repos {
-		line := setup.RepoKey(repo)
+		line := config.RepoKey(repo)
 		_, err = fmt.Fprintln(writer, line)
 		if err != nil {
 			return

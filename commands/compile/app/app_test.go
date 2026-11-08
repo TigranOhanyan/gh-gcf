@@ -186,7 +186,7 @@ func Test_App_should_leave_an_app_that_config_lacks(t *testing.T) {
 }
 
 func Test_App_should_refuse_a_missing_tick(t *testing.T) {
-	_, err := runRoot(t, "app")
+	_, err := runRoot(t, "compile app")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "tick")
 }
@@ -261,7 +261,7 @@ func runTick(t *testing.T, repoDir string) (id string) {
 func runApp(t *testing.T, repoDir string, id string) (err error) {
 	t.Helper()
 	t.Chdir(repoDir)
-	line := fmt.Sprintf("app --tick %s", id)
+	line := fmt.Sprintf("compile app --tick %s", id)
 	_, err = runRoot(t, line)
 	return
 }

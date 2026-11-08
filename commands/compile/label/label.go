@@ -1,23 +1,24 @@
-package app
+package label
 
 import (
 	"os"
 
 	"charm.land/log/v2"
+	"github.com/google/go-github/v93/github"
 	"github.com/spf13/cobra"
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
 	"github.com/TigranOhanyan/gh-gcf/commands/executor"
 )
 
-func NewApp() (cmd *cobra.Command) {
+func NewCompileLabel() (cmd *cobra.Command) {
 	var configBranch string
 	var stateBranch string
 	var tickID string
 
 	cmd = &cobra.Command{
-		Use:   "app",
-		Short: "Record configured apps that are installed",
+		Use:   "label",
+		Short: "Ensure configured labels exist",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) (err error) {
 			dir, err := os.Getwd()
@@ -30,13 +31,25 @@ func NewApp() (cmd *cobra.Command) {
 				log.Error("factory repo", "path", dir, "err", err)
 				return
 			}
+			app, err := commands.LoadFactoryApp()
+			if err != nil {
+				return
+			}
+			var client *github.Client
+			needsUserToken := !app.Configured()
+			if needsUserToken {
+				client, err = commands.UserGitHubClient(cmd.Context())
+				if err != nil {
+					return
+				}
+			}
 			exec := executor.StepExecutor{
 				FactoryDir:   dir,
 				ConfigBranch: configBranch,
 				StateBranch:  stateBranch,
 				TickID:       tickID,
 			}
-			step := appStep{}
+			step := labelStep{GitHub: client, app: app}
 			err = exec.Execute(cmd.Context(), step)
 			return
 		},

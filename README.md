@@ -60,13 +60,13 @@ gh gcf setup development add --owner octo --repo app --name features --starting 
 gh gcf setup development check add --owner octo --repo app --development features --name "ci / unit"
 ```
 
-The scheduled workflow records a tick, then runs `app`, `label`, `compile development`, the `run` commands that start agents, and the `check` commands that record a finished agent, then pushes state. `app` checks each App ID configured for a repo. When that App is installed there, it records the client id and the installation id. A missing or suspended installation stops the step. `label` creates a configured label the app repo does not yet have.
+The scheduled workflow records a tick, then runs `compile app`, `compile label`, `compile development`, the `run` commands that start agents, and the `check` commands that record a finished agent, then pushes state. `app` checks each App ID configured for a repo. When that App is installed there, it records the client id and the installation id. A missing or suspended installation stops the step. `label` creates a configured label the app repo does not yet have.
 
 From the factory checkout, after `gh gcf run tick` prints an id:
 
 ```shell
-gh gcf app --tick <id>
-gh gcf label --tick <id>
+gh gcf compile app --tick <id>
+gh gcf compile label --tick <id>
 gh gcf compile development --tick <id>
 gh gcf run builder --tick <id>
 gh gcf check builder --tick <id>
