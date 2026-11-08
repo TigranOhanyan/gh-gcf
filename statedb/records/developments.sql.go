@@ -112,6 +112,33 @@ func (q *Queries) GetDevelopmentCheck(ctx context.Context, arg GetDevelopmentChe
 	return i, err
 }
 
+const listDevelopmentCheckNames = `-- name: ListDevelopmentCheckNames :many
+SELECT name FROM development_check WHERE development_name = ? ORDER BY name
+`
+
+func (q *Queries) ListDevelopmentCheckNames(ctx context.Context, developmentName string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listDevelopmentCheckNames, developmentName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		items = append(items, name)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDevelopmentChecks = `-- name: ListDevelopmentChecks :many
 SELECT development_name, name FROM development_check ORDER BY development_name, name
 `

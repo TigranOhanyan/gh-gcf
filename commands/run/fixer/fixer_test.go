@@ -1,0 +1,587 @@
+package fixer_test
+
+import (
+	"bytes"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/wiremock/go-wiremock"
+	"github.com/wiremock/go-wiremock/journal"
+
+	"github.com/TigranOhanyan/gh-gcf/commands"
+	"github.com/TigranOhanyan/gh-gcf/commands/root"
+	"github.com/TigranOhanyan/gh-gcf/statedb"
+	"github.com/TigranOhanyan/gh-gcf/statedb/records"
+)
+
+const owner = "octo"
+const repoName = "app"
+const token = "test-token"
+const developmentName = "features"
+const checkName = "ci / unit"
+const otherCheckName = "ci / lint"
+const builderInstruction = "Build the issue."
+const standardsInstruction = "Review the standards."
+const specificationInstruction = "Review the specification."
+const runID = "run-11111111-1111-7111-8111-111111111111"
+const headSHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+const olderStart = "2026-11-08T09:00:00Z"
+const newerStart = "2026-11-08T10:00:00Z"
+
+func Test_RunFixer_should_wait_when_a_listed_checks_newest_run_has_not_finished_and_write_nothing(t *testing.T) {
+	repoDir := readyReviewers(t)
+	run := oneRun(checkName, "in_progress", "", newerStart)
+	stubCheckRuns(t, headSHA, checkRunsPayload(run))
+	before := stateCounts(t, repoDir)
+	id := runTick(t, repoDir)
+
+	err := runFixer(t, repoDir, id)
+	require.NoError(t, err)
+
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
+	assert.Empty(t, strings.TrimSpace(string(body)))
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	work := works[0]
+	agents := listAgents(t, db)
+	require.Len(t, agents, before.agents)
+	builderAgent, builderFound := agentByRole(agents, "builder")
+	require.True(t, builderFound)
+	standardsAgent, standardsFound := agentByRole(agents, "standards_reviewer")
+	require.True(t, standardsFound)
+	specificationAgent, specificationFound := agentByRole(agents, "specification_reviewer")
+	require.True(t, specificationFound)
+	_, fixerFound := agentByRole(agents, "fixer")
+	assert.False(t, fixerFound)
+	assert.NotEmpty(t, work.ID)
+	assert.Equal(t, developmentName, work.DevelopmentName)
+	assert.Equal(t, int64(7), work.IssueNumber)
+	assert.Equal(t, "https://github.com/octo/app/issues/7", work.IssueUrl)
+	assert.True(t, work.PullRequestNumber.Valid)
+	assert.Equal(t, int64(9), work.PullRequestNumber.Int64)
+	assert.True(t, work.BuilderHeadSha.Valid)
+	assert.Equal(t, headSHA, work.BuilderHeadSha.String)
+	assert.False(t, work.FixerHeadSha.Valid)
+	assert.True(t, work.BuilderAgent.Valid)
+	assert.Equal(t, builderAgent.ID, work.BuilderAgent.String)
+	assert.True(t, work.StandardsReviewerAgent.Valid)
+	assert.Equal(t, standardsAgent.ID, work.StandardsReviewerAgent.String)
+	assert.True(t, work.SpecificationReviewerAgent.Valid)
+	assert.Equal(t, specificationAgent.ID, work.SpecificationReviewerAgent.String)
+	assert.False(t, work.FixerAgent.Valid)
+	assert.Empty(t, work.Status)
+	events := listEvents(t, db)
+	assert.Len(t, events, before.events)
+	requests := checkRunRequests(t)
+	require.Len(t, requests, 1)
+	assert.Equal(t, "/repos/octo/app/commits/"+headSHA+"/check-runs", requests[0].path)
+	assert.Equal(t, "all", requests[0].filter)
+	assert.Empty(t, requests[0].checkName)
+	assert.Zero(t, reviewRequestCount(t))
+	assert.Empty(t, labelPosts(t))
+}
+
+func Test_RunFixer_should_wait_when_a_listed_check_name_has_no_run_and_write_nothing(t *testing.T) {
+	repoDir := readyReviewers(t)
+	stubCheckRuns(t, headSHA, checkRunsPayload())
+	before := stateCounts(t, repoDir)
+	id := runTick(t, repoDir)
+
+	err := runFixer(t, repoDir, id)
+	require.NoError(t, err)
+
+	assertWroteNothing(t, repoDir, before)
+	requests := checkRunRequests(t)
+	require.Len(t, requests, 1)
+	assert.Equal(t, "all", requests[0].filter)
+}
+
+func Test_RunFixer_should_ignore_an_older_passed_run_of_a_listed_name_when_a_newer_run_of_that_name_has_not_finished(t *testing.T) {
+	repoDir := readyReviewers(t)
+	older := oneRun(checkName, "completed", "success", olderStart)
+	newer := oneRun(checkName, "in_progress", "", newerStart)
+	stubCheckRuns(t, headSHA, checkRunsPayload(older, newer))
+	before := stateCounts(t, repoDir)
+	id := runTick(t, repoDir)
+
+	err := runFixer(t, repoDir, id)
+	require.NoError(t, err)
+
+	assertWroteNothing(t, repoDir, before)
+	requests := checkRunRequests(t)
+	require.Len(t, requests, 1)
+	assert.Equal(t, "all", requests[0].filter)
+	assert.Empty(t, requests[0].checkName)
+}
+
+func Test_RunFixer_should_ignore_a_check_run_whose_name_is_not_listed_and_write_nothing_because_of_it(t *testing.T) {
+	repoDir := readyReviewers(t)
+	listed := oneRun(checkName, "completed", "success", olderStart)
+	unlisted := oneRun(otherCheckName, "in_progress", "", newerStart)
+	stubCheckRuns(t, headSHA, checkRunsPayload(listed, unlisted))
+	before := stateCounts(t, repoDir)
+	id := runTick(t, repoDir)
+
+	err := runFixer(t, repoDir, id)
+	require.NoError(t, err)
+
+	assertWroteNothing(t, repoDir, before)
+	requests := checkRunRequests(t)
+	require.Len(t, requests, 1)
+	assert.Equal(t, "/repos/octo/app/commits/"+headSHA+"/check-runs", requests[0].path)
+	assert.Empty(t, requests[0].checkName)
+	assert.Zero(t, reviewRequestCount(t))
+	assert.Empty(t, labelPosts(t))
+}
+
+type counts struct {
+	agents int
+	events int
+}
+
+func stateCounts(t *testing.T, repoDir string) (counted counts) {
+	t.Helper()
+	db := openStateTip(t, repoDir)
+	counted.agents = len(listAgents(t, db))
+	counted.events = len(listEvents(t, db))
+	err := db.Close()
+	require.NoError(t, err)
+	return
+}
+
+func assertWroteNothing(t *testing.T, repoDir string, before counts) {
+	t.Helper()
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
+	assert.Empty(t, strings.TrimSpace(string(body)))
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	assert.Empty(t, works[0].Status)
+	assert.False(t, works[0].FixerAgent.Valid)
+	assert.False(t, works[0].FixerHeadSha.Valid)
+	agents := listAgents(t, db)
+	assert.Len(t, agents, before.agents)
+	_, fixerFound := agentByRole(agents, "fixer")
+	assert.False(t, fixerFound)
+	events := listEvents(t, db)
+	assert.Len(t, events, before.events)
+}
+
+func readyReviewers(t *testing.T) (repoDir string) {
+	t.Helper()
+	resetWireMock(t)
+	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
+	stubCursor(t, 200, `{"run":{"id":"`+runID+`"}}`)
+	repoDir = setupFactory(t)
+	id := runTick(t, repoDir)
+	err := runCompile(t, repoDir, id)
+	require.NoError(t, err)
+	err = runBuilder(t, repoDir, id)
+	require.NoError(t, err)
+	agentID := builderAgentID(t, repoDir)
+	stubRun(t, agentID, finishedRun("https://github.com/octo/app/pull/9"))
+	stubPull(t, 9, headSHA)
+	later := runTick(t, repoDir)
+	err = runCheck(t, repoDir, later)
+	require.NoError(t, err)
+	standardsTick := runTick(t, repoDir)
+	err = runStandards(t, repoDir, standardsTick)
+	require.NoError(t, err)
+	finishReviewer(t, repoDir, "standards_reviewer")
+	specificationTick := runTick(t, repoDir)
+	err = runSpecification(t, repoDir, specificationTick)
+	require.NoError(t, err)
+	finishReviewer(t, repoDir, "specification_reviewer")
+	return
+}
+
+func setupFactory(t *testing.T) (repoDir string) {
+	t.Helper()
+	repoDir = initFactory(t)
+	mustRoot(t, "setup repo add --owner octo --name app")
+	mustRoot(t, "setup label add --owner octo --repo app --name ready --color ededed")
+	mustRoot(t, "setup label add --owner octo --repo app --name stop --color ff0000")
+	mustRoot(t, "setup apps add --id 42")
+	mustRoot(t, "setup apps attach --owner octo --repo app --id 42")
+	mustRoot(t, "setup apps add --id 43")
+	mustRoot(t, "setup apps attach --owner octo --repo app --id 43")
+	line := fmt.Sprintf("setup development add --owner octo --repo app --name %s --starting %s --attention %s --standards-app %s --specification-app %s", developmentName, "ready", "stop", "42", "43")
+	mustRoot(t, line)
+	checkLine := fmt.Sprintf("setup development check add --owner octo --repo app --development %s --name %q", developmentName, checkName)
+	mustRoot(t, checkLine)
+	writeInstruction(t, repoDir, "builder", builderInstruction)
+	writeInstruction(t, repoDir, "standards_reviewer", standardsInstruction)
+	writeInstruction(t, repoDir, "specification_reviewer", specificationInstruction)
+	writeInstruction(t, repoDir, "fixer", "")
+	commitConfig(t, repoDir)
+	useStateBranch(t, repoDir)
+	return
+}
+
+func writeInstruction(t *testing.T, repoDir string, role string, text string) {
+	t.Helper()
+	path := filepath.Join(repoDir, "repos", owner, repoName, "developments", developmentName, role+".md")
+	err := os.MkdirAll(filepath.Dir(path), 0755)
+	require.NoError(t, err)
+	err = os.WriteFile(path, []byte(text), 0644)
+	require.NoError(t, err)
+}
+
+func initFactory(t *testing.T) (repoDir string) {
+	t.Helper()
+	repoDir = filepath.Join(JunkDir, t.Name())
+	err := os.RemoveAll(repoDir)
+	require.NoError(t, err)
+	err = os.MkdirAll(repoDir, 0755)
+	require.NoError(t, err)
+	_ = mustGit(t, repoDir, "init -b main")
+	_ = mustGit(t, repoDir, "config user.email test@example.com")
+	_ = mustGit(t, repoDir, "config user.name test")
+	_ = mustGit(t, repoDir, "commit --allow-empty -m init")
+	t.Chdir(repoDir)
+	return
+}
+
+func commitConfig(t *testing.T, repoDir string) {
+	t.Helper()
+	_ = mustGit(t, repoDir, "add -A")
+	_ = mustGit(t, repoDir, "commit -m config")
+}
+
+func useStateBranch(t *testing.T, repoDir string) {
+	t.Helper()
+	_ = mustGit(t, repoDir, "checkout -b state")
+	_ = mustGit(t, repoDir, "checkout main")
+}
+
+func runTick(t *testing.T, repoDir string) (id string) {
+	t.Helper()
+	t.Chdir(repoDir)
+	stdout := mustRoot(t, "tick")
+	id = strings.TrimSpace(stdout)
+	require.NotEmpty(t, id)
+	return
+}
+
+func runCompile(t *testing.T, repoDir string, id string) (err error) {
+	t.Helper()
+	t.Chdir(repoDir)
+	line := fmt.Sprintf("compile development --tick %s", id)
+	_, err = runRoot(t, line)
+	return
+}
+
+func runBuilder(t *testing.T, repoDir string, id string) (err error) {
+	t.Helper()
+	t.Setenv("GH_TOKEN", token)
+	t.Chdir(repoDir)
+	line := fmt.Sprintf("run builder --tick %s", id)
+	_, err = runRoot(t, line)
+	return
+}
+
+func runCheck(t *testing.T, repoDir string, id string) (err error) {
+	t.Helper()
+	t.Setenv("GH_TOKEN", token)
+	t.Chdir(repoDir)
+	line := fmt.Sprintf("check builder --tick %s", id)
+	_, err = runRoot(t, line)
+	return
+}
+
+func runStandards(t *testing.T, repoDir string, id string) (err error) {
+	t.Helper()
+	t.Setenv("GH_TOKEN", token)
+	t.Chdir(repoDir)
+	line := fmt.Sprintf("run standards-reviewer --tick %s", id)
+	_, err = runRoot(t, line)
+	return
+}
+
+func runSpecification(t *testing.T, repoDir string, id string) (err error) {
+	t.Helper()
+	t.Setenv("GH_TOKEN", token)
+	t.Chdir(repoDir)
+	line := fmt.Sprintf("run specification-reviewer --tick %s", id)
+	_, err = runRoot(t, line)
+	return
+}
+
+func runFixer(t *testing.T, repoDir string, id string) (err error) {
+	t.Helper()
+	t.Setenv("GH_TOKEN", token)
+	t.Chdir(repoDir)
+	line := fmt.Sprintf("run fixer --tick %s", id)
+	_, err = runRoot(t, line)
+	return
+}
+
+func finishReviewer(t *testing.T, repoDir string, role string) {
+	t.Helper()
+	worktree := filepath.Join(repoDir, ".worktrees", "state")
+	addLine := fmt.Sprintf("worktree add '%s' state", worktree)
+	_ = mustGit(t, repoDir, addLine)
+	dbPath := filepath.Join(worktree, "repos", owner, repoName, "state.db")
+	db, err := statedb.Open(t.Context(), dbPath)
+	require.NoError(t, err)
+	agents := listAgents(t, db)
+	reviewer, found := agentByRole(agents, role)
+	require.True(t, found)
+	err = db.Queries.SetDevelopmentAgentFinished(t.Context(), reviewer.ID)
+	require.NoError(t, err)
+	err = db.Close()
+	require.NoError(t, err)
+	stateFile := fmt.Sprintf("repos/%s/%s/state.db", owner, repoName)
+	addState := fmt.Sprintf("add -- %s", stateFile)
+	_ = mustGit(t, worktree, addState)
+	_ = mustGit(t, worktree, "commit -m precondition")
+	removeLine := fmt.Sprintf("worktree remove --force '%s'", worktree)
+	_ = mustGit(t, repoDir, removeLine)
+}
+
+func runRoot(t *testing.T, line string) (stdout string, err error) {
+	t.Helper()
+	command := root.NewRoot()
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	command.SetOut(&out)
+	command.SetErr(&errOut)
+	wrapped := commands.NewCmd(command)
+	err = wrapped.Shell(t.Context(), line)
+	stdout = out.String()
+	return
+}
+
+func mustRoot(t *testing.T, line string) (stdout string) {
+	t.Helper()
+	stdout, err := runRoot(t, line)
+	require.NoError(t, err)
+	return
+}
+
+func builderAgentID(t *testing.T, repoDir string) (id string) {
+	t.Helper()
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	agents := listAgents(t, db)
+	require.Len(t, agents, 1)
+	id = agents[0].ID
+	return
+}
+
+func openStateTip(t *testing.T, repoDir string) (db *statedb.DB) {
+	t.Helper()
+	tipPath := filepath.Join(JunkDir, t.Name()+"-state-tip.db")
+	spec := fmt.Sprintf("state:repos/%s/%s/state.db", owner, repoName)
+	showLine := fmt.Sprintf("show %s", spec)
+	blob := mustGit(t, repoDir, showLine)
+	err := os.WriteFile(tipPath, blob, 0644)
+	require.NoError(t, err)
+	db, err = statedb.Open(t.Context(), tipPath)
+	require.NoError(t, err)
+	return
+}
+
+func listWorks(t *testing.T, db *statedb.DB) (rows []records.DevelopmentWork) {
+	t.Helper()
+	rows, err := db.Queries.ListDevelopmentWorks(t.Context())
+	require.NoError(t, err)
+	return
+}
+
+func listAgents(t *testing.T, db *statedb.DB) (rows []records.DevelopmentAgent) {
+	t.Helper()
+	rows, err := db.Queries.ListDevelopmentAgents(t.Context())
+	require.NoError(t, err)
+	return
+}
+
+func listEvents(t *testing.T, db *statedb.DB) (rows []records.DevelopmentEvent) {
+	t.Helper()
+	rows, err := db.Queries.ListDevelopmentEvents(t.Context())
+	require.NoError(t, err)
+	return
+}
+
+func agentByRole(agents []records.DevelopmentAgent, role string) (agent records.DevelopmentAgent, found bool) {
+	for _, item := range agents {
+		matched := item.Role == role
+		if matched {
+			agent = item
+			found = true
+			return
+		}
+	}
+	return
+}
+
+func issueJSON(number int, title string, body string) (payload string) {
+	payload = fmt.Sprintf(`[{"number":%d,"title":"%s","body":"%s","html_url":"https://github.com/octo/app/issues/%d","state":"open"}]`, number, title, body, number)
+	return
+}
+
+func finishedRun(prURL string) (payload string) {
+	payload = fmt.Sprintf(`{"id":"%s","status":"FINISHED","git":{"branches":[{"repoUrl":"https://github.com/octo/app","prUrl":"%s"}]}}`, runID, prURL)
+	return
+}
+
+func oneRun(name string, status string, conclusion string, started string) (payload string) {
+	bare := conclusion == ""
+	if bare {
+		payload = fmt.Sprintf(`{"name":%q,"status":%q,"started_at":%q}`, name, status, started)
+		return
+	}
+	payload = fmt.Sprintf(`{"name":%q,"status":%q,"conclusion":%q,"started_at":%q}`, name, status, conclusion, started)
+	return
+}
+
+func checkRunsPayload(runs ...string) (payload string) {
+	joined := strings.Join(runs, ",")
+	payload = fmt.Sprintf(`{"total_count":%d,"check_runs":[%s]}`, len(runs), joined)
+	return
+}
+
+func resetWireMock(t *testing.T) {
+	t.Helper()
+	err := wiremockClient.Reset()
+	require.NoError(t, err)
+}
+
+func stubIssues(t *testing.T, payload string) {
+	t.Helper()
+	rule := wiremock.Get(wiremock.URLPathEqualTo("/repos/octo/app/issues")).WillReturnResponse(
+		wiremock.NewResponse().WithStatus(200).WithHeader("Content-Type", "application/json").WithBody(payload),
+	)
+	err := wiremockClient.StubFor(rule)
+	require.NoError(t, err)
+}
+
+func stubCursor(t *testing.T, status int, payload string) {
+	t.Helper()
+	rule := wiremock.Post(wiremock.URLPathEqualTo("/v1/agents")).WillReturnResponse(
+		wiremock.NewResponse().WithStatus(int64(status)).WithHeader("Content-Type", "application/json").WithBody(payload),
+	)
+	err := wiremockClient.StubFor(rule)
+	require.NoError(t, err)
+}
+
+func stubRun(t *testing.T, agentID string, payload string) {
+	t.Helper()
+	path := fmt.Sprintf("/v1/agents/%s/runs/%s", agentID, runID)
+	rule := wiremock.Get(wiremock.URLPathEqualTo(path)).WillReturnResponse(
+		wiremock.NewResponse().WithStatus(200).WithHeader("Content-Type", "application/json").WithBody(payload),
+	)
+	err := wiremockClient.StubFor(rule)
+	require.NoError(t, err)
+}
+
+func stubPull(t *testing.T, number int, sha string) {
+	t.Helper()
+	path := fmt.Sprintf("/repos/octo/app/pulls/%d", number)
+	body := fmt.Sprintf(`{"number":%d,"head":{"sha":"%s"}}`, number, sha)
+	rule := wiremock.Get(wiremock.URLPathEqualTo(path)).WillReturnResponse(
+		wiremock.NewResponse().WithStatus(200).WithHeader("Content-Type", "application/json").WithBody(body),
+	)
+	err := wiremockClient.StubFor(rule)
+	require.NoError(t, err)
+}
+
+func stubCheckRuns(t *testing.T, sha string, payload string) {
+	t.Helper()
+	path := fmt.Sprintf("/repos/octo/app/commits/%s/check-runs", sha)
+	rule := wiremock.Get(wiremock.URLPathEqualTo(path)).WillReturnResponse(
+		wiremock.NewResponse().WithStatus(200).WithHeader("Content-Type", "application/json").WithBody(payload),
+	)
+	err := wiremockClient.StubFor(rule)
+	require.NoError(t, err)
+}
+
+type checkRunRequest struct {
+	path      string
+	filter    string
+	checkName string
+}
+
+func checkRunRequests(t *testing.T) (requests []checkRunRequest) {
+	t.Helper()
+	journal, err := wiremockClient.GetAllRequests()
+	require.NoError(t, err)
+	for _, entry := range journal.Requests {
+		request := entry.Request
+		matched := request.Method == "GET" && strings.Contains(request.URL, "/check-runs")
+		if matched {
+			path, _, _ := strings.Cut(request.URL, "?")
+			item := checkRunRequest{
+				path:      path,
+				filter:    queryValue(request.URL, request.QueryParams, "filter"),
+				checkName: queryValue(request.URL, request.QueryParams, "check_name"),
+			}
+			requests = append(requests, item)
+		}
+	}
+	return
+}
+
+func queryValue(raw string, params journal.Params, name string) (value string) {
+	param, found := params[name]
+	hasValue := found && len(param.Values) > 0
+	if hasValue {
+		value = param.Values[0]
+		return
+	}
+	_, query, present := strings.Cut(raw, "?")
+	if !present {
+		return
+	}
+	for _, pair := range strings.Split(query, "&") {
+		key, item, ok := strings.Cut(pair, "=")
+		matched := ok && key == name
+		if matched {
+			value = item
+			return
+		}
+	}
+	return
+}
+
+func reviewRequestCount(t *testing.T) (count int) {
+	t.Helper()
+	journal, err := wiremockClient.GetAllRequests()
+	require.NoError(t, err)
+	for _, entry := range journal.Requests {
+		request := entry.Request
+		matched := strings.Contains(request.URL, "reviews")
+		if matched {
+			count++
+		}
+	}
+	return
+}
+
+type labelPost struct {
+	url  string
+	body string
+}
+
+func labelPosts(t *testing.T) (posts []labelPost) {
+	t.Helper()
+	journal, err := wiremockClient.GetAllRequests()
+	require.NoError(t, err)
+	for _, entry := range journal.Requests {
+		request := entry.Request
+		matched := request.Method == "POST" && strings.HasSuffix(request.URL, "/labels")
+		if matched {
+			post := labelPost{url: request.URL, body: request.Body}
+			posts = append(posts, post)
+		}
+	}
+	return
+}

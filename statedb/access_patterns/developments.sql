@@ -59,3 +59,6 @@ INSERT INTO development_check (development_name, name) VALUES (?, ?);
 
 -- name: ListDevelopmentChecks :many
 SELECT development_name, name FROM development_check ORDER BY development_name, name;
+
+-- name: ListDevelopmentCheckNames :many
+SELECT name FROM development_check WHERE development_name = ? ORDER BY name;

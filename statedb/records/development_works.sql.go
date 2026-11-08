@@ -409,6 +409,61 @@ func (q *Queries) ListReadyStandardsWorks(ctx context.Context) ([]ListReadyStand
 	return items, nil
 }
 
+const listWorksReadyForChecks = `-- name: ListWorksReadyForChecks :many
+SELECT
+    w.id AS work_id,
+    w.development_name,
+    w.issue_number,
+    w.builder_head_sha
+FROM development_work w
+JOIN development_agent standards ON standards.id = w.standards_reviewer_agent
+JOIN development_agent specification ON specification.id = w.specification_reviewer_agent
+WHERE w.status = ''
+AND w.fixer_agent IS NULL
+AND standards.role = 'standards_reviewer'
+AND standards.finished_at IS NOT NULL
+AND specification.role = 'specification_reviewer'
+AND specification.finished_at IS NOT NULL
+AND w.builder_head_sha IS NOT NULL
+AND w.builder_head_sha != ''
+ORDER BY w.issue_number
+`
+
+type ListWorksReadyForChecksRow struct {
+	WorkID          string         `json:"work_id"`
+	DevelopmentName string         `json:"development_name"`
+	IssueNumber     int64          `json:"issue_number"`
+	BuilderHeadSha  sql.NullString `json:"builder_head_sha"`
+}
+
+func (q *Queries) ListWorksReadyForChecks(ctx context.Context) ([]ListWorksReadyForChecksRow, error) {
+	rows, err := q.db.QueryContext(ctx, listWorksReadyForChecks)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListWorksReadyForChecksRow
+	for rows.Next() {
+		var i ListWorksReadyForChecksRow
+		if err := rows.Scan(
+			&i.WorkID,
+			&i.DevelopmentName,
+			&i.IssueNumber,
+			&i.BuilderHeadSha,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setDevelopmentAgentFinished = `-- name: SetDevelopmentAgentFinished :exec
 UPDATE development_agent
 SET finished_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
