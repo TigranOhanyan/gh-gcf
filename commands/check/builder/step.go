@@ -78,6 +78,15 @@ func (step checkStep) observe(ctx context.Context, repo commands.Repo, stepID st
 	if stillRunning {
 		return
 	}
+	errored := run.Status == runError
+	cancelled := run.Status == runCancelled
+	expired := run.Status == runExpired
+	failed := errored || cancelled || expired
+	if failed {
+		reason := fmt.Sprintf("[%d] %s", item.IssueNumber, run.Status)
+		line, err = step.stopForPerson(ctx, repo, stepID, client, item, reason)
+		return
+	}
 	finished := run.Status == runFinished
 	if !finished {
 		return
@@ -107,13 +116,18 @@ func (step checkStep) finishBuilder(ctx context.Context, repo commands.Repo, ste
 }
 
 func (step checkStep) missingPull(ctx context.Context, repo commands.Repo, stepID string, client *github.Client, item records.ListPendingDevelopmentBuildersRow) (line string, err error) {
+	reason := fmt.Sprintf("[%d] pull request is missing", item.IssueNumber)
+	line, err = step.stopForPerson(ctx, repo, stepID, client, item, reason)
+	return
+}
+
+func (step checkStep) stopForPerson(ctx context.Context, repo commands.Repo, stepID string, client *github.Client, item records.ListPendingDevelopmentBuildersRow, reason string) (line string, err error) {
 	development, err := repo.State.Queries.GetDevelopment(ctx, item.DevelopmentName)
 	if err != nil {
 		log.Error("development", "development", item.DevelopmentName, "err", err)
 		return
 	}
-	reason := fmt.Sprintf("[%d] pull request is missing", item.IssueNumber)
-	err = markMissingPull(ctx, repo, stepID, item.WorkID, item.AgentID, reason)
+	err = markFailed(ctx, repo, stepID, item.WorkID, item.AgentID, reason)
 	if err != nil {
 		return
 	}
@@ -155,7 +169,7 @@ func markBuilt(ctx context.Context, repo commands.Repo, stepID string, agentID s
 	return
 }
 
-func markMissingPull(ctx context.Context, repo commands.Repo, stepID string, workID string, agentID string, reason string) (err error) {
+func markFailed(ctx context.Context, repo commands.Repo, stepID string, workID string, agentID string, reason string) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
 		log.Error("begin check", "err", err)

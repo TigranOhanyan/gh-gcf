@@ -20,6 +20,9 @@ const defaultCursorAPI = "https://api.cursor.com"
 const runCreating = "CREATING"
 const runRunning = "RUNNING"
 const runFinished = "FINISHED"
+const runError = "ERROR"
+const runCancelled = "CANCELLED"
+const runExpired = "EXPIRED"
 
 type cursorBranch struct {
 	RepoURL string `json:"repoUrl"`

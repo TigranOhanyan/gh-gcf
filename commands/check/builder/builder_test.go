@@ -174,6 +174,87 @@ func Test_CheckBuilder_should_set_attention_when_the_finished_builder_has_no_pul
 	assert.Contains(t, labels[0].body, "stop")
 }
 
+func Test_CheckBuilder_should_set_attention_when_the_builder_run_has_failed(t *testing.T) {
+	resetWireMock(t)
+	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
+	stubCursor(t, 200, `{"run":{"id":"`+runID+`"}}`)
+	stubLabels(t, 7)
+	repoDir := setupFactory(t, instruction)
+	id := runTick(t, repoDir)
+	err := runCompile(t, repoDir, id)
+	require.NoError(t, err)
+	err = runBuilder(t, repoDir, id)
+	require.NoError(t, err)
+	agentID := builderAgentID(t, repoDir)
+	stubRun(t, agentID, failedRun())
+	later := runTick(t, repoDir)
+
+	err = runCheck(t, repoDir, later)
+	require.NoError(t, err)
+
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
+	assert.Contains(t, string(body), "✅ [7] ERROR")
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	assert.Equal(t, "attention", works[0].Status)
+	assert.False(t, works[0].PullRequestNumber.Valid)
+	assert.False(t, works[0].BuilderHeadSha.Valid)
+	agents := listAgents(t, db)
+	require.Len(t, agents, 1)
+	assert.False(t, agents[0].FinishedAt.Valid)
+	events := listEvents(t, db)
+	failed, found := eventByKind(events, "failed")
+	require.True(t, found)
+	assert.Equal(t, agents[0].ID, failed.AgentID)
+	assert.Equal(t, "[7] ERROR", failed.Message)
+	_, completed := eventByKind(events, "completed")
+	assert.False(t, completed)
+	labels := labelPosts(t)
+	require.Len(t, labels, 1)
+	assert.Equal(t, "/repos/octo/app/issues/7/labels", labels[0].url)
+	assert.Contains(t, labels[0].body, "stop")
+}
+
+func Test_CheckBuilder_should_leave_an_attention_work_and_start_no_second_builder(t *testing.T) {
+	resetWireMock(t)
+	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
+	stubCursor(t, 200, `{"run":{"id":"`+runID+`"}}`)
+	stubLabels(t, 7)
+	repoDir := setupFactory(t, instruction)
+	id := runTick(t, repoDir)
+	err := runCompile(t, repoDir, id)
+	require.NoError(t, err)
+	err = runBuilder(t, repoDir, id)
+	require.NoError(t, err)
+	agentID := builderAgentID(t, repoDir)
+	stubRun(t, agentID, failedRun())
+	failedTick := runTick(t, repoDir)
+	err = runCheck(t, repoDir, failedTick)
+	require.NoError(t, err)
+	later := runTick(t, repoDir)
+
+	err = runCheck(t, repoDir, later)
+	require.NoError(t, err)
+	err = runBuilder(t, repoDir, later)
+	require.NoError(t, err)
+
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	assert.Equal(t, "attention", works[0].Status)
+	agents := listAgents(t, db)
+	require.Len(t, agents, 1)
+	assert.False(t, agents[0].FinishedAt.Valid)
+	events := listEvents(t, db)
+	assert.Len(t, events, 3)
+	assert.Len(t, cursorCreates(t), 1)
+	assert.Len(t, cursorRunRequests(t), 1)
+	assert.Len(t, labelPosts(t), 1)
+}
+
 func setupFactory(t *testing.T, text string) (repoDir string) {
 	t.Helper()
 	repoDir = initFactory(t)
@@ -362,6 +443,11 @@ func runningRun() (payload string) {
 	return
 }
 
+func failedRun() (payload string) {
+	payload = fmt.Sprintf(`{"id":"%s","status":"ERROR"}`, runID)
+	return
+}
+
 func resetWireMock(t *testing.T) {
 	t.Helper()
 	err := wiremockClient.Reset()
@@ -415,6 +501,20 @@ func stubLabels(t *testing.T, number int) {
 	)
 	err := wiremockClient.StubFor(rule)
 	require.NoError(t, err)
+}
+
+func cursorCreates(t *testing.T) (paths []string) {
+	t.Helper()
+	journal, err := wiremockClient.GetAllRequests()
+	require.NoError(t, err)
+	for _, entry := range journal.Requests {
+		request := entry.Request
+		matched := request.Method == "POST" && request.URL == "/v1/agents"
+		if matched {
+			paths = append(paths, request.URL)
+		}
+	}
+	return
 }
 
 func cursorRunRequests(t *testing.T) (paths []string) {
