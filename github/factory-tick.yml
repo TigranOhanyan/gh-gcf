@@ -62,7 +62,7 @@ jobs:
           gh gcf app --tick "${tick_id}"
           gh gcf label --tick "${tick_id}"
           gh gcf compile coding --tick "${tick_id}"
-          gh gcf run development --tick "${tick_id}"
+          gh gcf run builder --tick "${tick_id}"
           gh gcf poll agent --tick "${tick_id}"
 
           git push origin state

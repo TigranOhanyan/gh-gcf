@@ -1,4 +1,4 @@
-package development
+package builder
 
 import (
 	"context"
@@ -19,24 +19,24 @@ import (
 	"github.com/TigranOhanyan/gh-gcf/statedb/records"
 )
 
-const stepName = "run_development"
+const stepName = "run_builder"
 const roleBuilder = "builder"
 const eventStarting = "starting"
 const eventAck = "ack"
 const eventRejected = "rejected"
 
-type developmentStep struct {
+type builderStep struct {
 	GitHub *github.Client
 	app    commands.FactoryApp
 	cursor run.CursorClient
 }
 
-func (developmentStep) Name() (name string) {
+func (builderStep) Name() (name string) {
 	name = stepName
 	return
 }
 
-func (step developmentStep) Apply(ctx context.Context, repo commands.Repo, _ records.Tick, stepRow records.Step) (message string, err error) {
+func (step builderStep) Apply(ctx context.Context, repo commands.Repo, _ records.Tick, stepRow records.Step) (message string, err error) {
 	developments, err := repo.State.Queries.ListDevelopments(ctx)
 	if err != nil {
 		log.Error("list developments", "owner", repo.Owner, "name", repo.Name, "err", err)
@@ -67,7 +67,7 @@ func (step developmentStep) Apply(ctx context.Context, repo commands.Repo, _ rec
 	return
 }
 
-func (step developmentStep) startDevelopment(ctx context.Context, repo commands.Repo, stepID string, client *github.Client, item records.Development) (lines []string, err error) {
+func (step builderStep) startDevelopment(ctx context.Context, repo commands.Repo, stepID string, client *github.Client, item records.Development) (lines []string, err error) {
 	sum, err := commands.DevelopmentInstructionFingerprint(repo.Dir, item.Name, roleBuilder)
 	if err != nil {
 		return
@@ -108,7 +108,7 @@ func (step developmentStep) startDevelopment(ctx context.Context, repo commands.
 	return
 }
 
-func (step developmentStep) startIssue(ctx context.Context, repo commands.Repo, stepID string, client *github.Client, item records.Development, instruction string, issue *github.Issue) (line string, err error) {
+func (step builderStep) startIssue(ctx context.Context, repo commands.Repo, stepID string, client *github.Client, item records.Development, instruction string, issue *github.Issue) (line string, err error) {
 	number := issue.GetNumber()
 	_, err = repo.State.Queries.GetDevelopmentWorkByIssue(ctx, int64(number))
 	absent := errors.Is(err, sql.ErrNoRows)

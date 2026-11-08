@@ -2,7 +2,7 @@
 name: coding
 description: >-
   Command packages for this repo. Main commands are bind, setup, run, and compile.
-  A command follows commands/run/development/development.go. A subcommand is its own package,
+  A command follows commands/run/builder/builder.go. A subcommand is its own package,
   at most three packages deep; deeper subcommands are files. Helpers stay in the
   parent package and are exported. Command tests run plain shell lines through
   the root command with Shell and Git. Breaking changes outside the current
@@ -27,7 +27,7 @@ commands/run
 commands/compile
 ```
 
-Write a command like [commands/run/development/development.go](../../../commands/run/development/development.go). It reads the working directory, requires a checkout, and hands one step to the executor.
+Write a command like [commands/run/builder/builder.go](../../../commands/run/builder/builder.go). It reads the working directory, requires a checkout, and hands one step to the executor.
 
 A subcommand of a main command is its own package. Three packages is the deepest the tree goes. `commands/setup/development` and `commands/compile/development` are that depth. A further subcommand is a file in that package, not another package. `setup development add` is `add.go`. `setup development check add` is `add_check.go`. `compile development` is the package itself.
 

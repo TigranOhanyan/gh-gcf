@@ -10,7 +10,7 @@ import (
 	"github.com/TigranOhanyan/gh-gcf/commands/label"
 	"github.com/TigranOhanyan/gh-gcf/commands/poll"
 	"github.com/TigranOhanyan/gh-gcf/commands/run"
-	rundevelopment "github.com/TigranOhanyan/gh-gcf/commands/run/development"
+	"github.com/TigranOhanyan/gh-gcf/commands/run/builder"
 	"github.com/TigranOhanyan/gh-gcf/commands/setup"
 	"github.com/TigranOhanyan/gh-gcf/commands/setup/development"
 	"github.com/TigranOhanyan/gh-gcf/commands/tick"
@@ -38,8 +38,8 @@ func NewRoot() (cmd *cobra.Command) {
 	setupCmd.AddCommand(developmentCmd)
 	cmd.AddCommand(setupCmd)
 	runCmd := run.NewRun()
-	runDevelopmentCmd := rundevelopment.NewRunDevelopment()
-	runCmd.AddCommand(runDevelopmentCmd)
+	runBuilderCmd := builder.NewRunBuilder()
+	runCmd.AddCommand(runBuilderCmd)
 	cmd.AddCommand(runCmd)
 	pollCmd := poll.NewPoll()
 	cmd.AddCommand(pollCmd)

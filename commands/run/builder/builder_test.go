@@ -1,4 +1,4 @@
-package development_test
+package builder_test
 
 import (
 	"bytes"
@@ -26,7 +26,7 @@ const developmentName = "features"
 const instruction = "Build the issue."
 const runID = "run-11111111-1111-7111-8111-111111111111"
 
-func Test_CodingDevelopment_should_start_a_builder_for_an_open_issue(t *testing.T) {
+func Test_RunBuilder_should_start_a_builder_for_an_open_issue(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
 	stubCursor(t, 200, `{"run":{"id":"`+runID+`"}}`)
@@ -35,7 +35,7 @@ func Test_CodingDevelopment_should_start_a_builder_for_an_open_issue(t *testing.
 	err := runCompile(t, repoDir, id)
 	require.NoError(t, err)
 
-	err = runCoding(t, repoDir, id)
+	err = runBuilder(t, repoDir, id)
 	require.NoError(t, err)
 
 	body := mustGit(t, repoDir, "log -1 --format=%b state")
@@ -56,7 +56,7 @@ func Test_CodingDevelopment_should_start_a_builder_for_an_open_issue(t *testing.
 	assert.Contains(t, requests[0], agents[0].ID)
 }
 
-func Test_CodingDevelopment_should_store_the_issue_and_point_at_the_development_and_the_builder(t *testing.T) {
+func Test_RunBuilder_should_store_the_issue_and_point_at_the_development_and_the_builder(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
 	stubCursor(t, 200, `{"run":{"id":"`+runID+`"}}`)
@@ -65,7 +65,7 @@ func Test_CodingDevelopment_should_store_the_issue_and_point_at_the_development_
 	err := runCompile(t, repoDir, id)
 	require.NoError(t, err)
 
-	err = runCoding(t, repoDir, id)
+	err = runBuilder(t, repoDir, id)
 	require.NoError(t, err)
 
 	db := openStateTip(t, repoDir)
@@ -90,7 +90,7 @@ func Test_CodingDevelopment_should_store_the_issue_and_point_at_the_development_
 	assert.Empty(t, work.Status)
 }
 
-func Test_CodingDevelopment_should_record_the_builder_started_time_and_a_starting_event(t *testing.T) {
+func Test_RunBuilder_should_record_the_builder_started_time_and_a_starting_event(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
 	stubCursor(t, 200, `{"run":{"id":"`+runID+`"}}`)
@@ -100,7 +100,7 @@ func Test_CodingDevelopment_should_record_the_builder_started_time_and_a_startin
 	require.NoError(t, err)
 	startOfTest := time.Now().Add(-time.Second)
 
-	err = runCoding(t, repoDir, id)
+	err = runBuilder(t, repoDir, id)
 	require.NoError(t, err)
 	startOfCheck := time.Now().Add(time.Second)
 
@@ -124,7 +124,7 @@ func Test_CodingDevelopment_should_record_the_builder_started_time_and_a_startin
 	assert.WithinRange(t, recorded, startOfTest, startOfCheck)
 }
 
-func Test_CodingDevelopment_should_leave_an_issue_that_already_has_a_development_work(t *testing.T) {
+func Test_RunBuilder_should_leave_an_issue_that_already_has_a_development_work(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
 	stubCursor(t, 200, `{"run":{"id":"`+runID+`"}}`)
@@ -132,11 +132,11 @@ func Test_CodingDevelopment_should_leave_an_issue_that_already_has_a_development
 	id := runTick(t, repoDir)
 	err := runCompile(t, repoDir, id)
 	require.NoError(t, err)
-	err = runCoding(t, repoDir, id)
+	err = runBuilder(t, repoDir, id)
 	require.NoError(t, err)
 
 	later := runTick(t, repoDir)
-	err = runCoding(t, repoDir, later)
+	err = runBuilder(t, repoDir, later)
 	require.NoError(t, err)
 
 	assert.Len(t, cursorRequests(t), 1)
@@ -148,7 +148,7 @@ func Test_CodingDevelopment_should_leave_an_issue_that_already_has_a_development
 	assert.Len(t, agents, 1)
 }
 
-func Test_CodingDevelopment_should_wait_when_the_builder_instruction_hash_differs(t *testing.T) {
+func Test_RunBuilder_should_wait_when_the_builder_instruction_hash_differs(t *testing.T) {
 	resetWireMock(t)
 	repoDir := setupFactory(t, instruction)
 	id := runTick(t, repoDir)
@@ -156,7 +156,7 @@ func Test_CodingDevelopment_should_wait_when_the_builder_instruction_hash_differ
 	require.NoError(t, err)
 	writeInstruction(t, repoDir, "builder", "A different instruction.")
 
-	err = runCoding(t, repoDir, id)
+	err = runBuilder(t, repoDir, id)
 	require.NoError(t, err)
 
 	body := mustGit(t, repoDir, "log -1 --format=%b state")
@@ -168,7 +168,7 @@ func Test_CodingDevelopment_should_wait_when_the_builder_instruction_hash_differ
 	assert.Empty(t, cursorRequests(t))
 }
 
-func Test_CodingDevelopment_should_set_attention_when_the_create_is_refused(t *testing.T) {
+func Test_RunBuilder_should_set_attention_when_the_create_is_refused(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
 	stubCursor(t, 500, `{"error":"nope"}`)
@@ -178,7 +178,7 @@ func Test_CodingDevelopment_should_set_attention_when_the_create_is_refused(t *t
 	err := runCompile(t, repoDir, id)
 	require.NoError(t, err)
 
-	err = runCoding(t, repoDir, id)
+	err = runBuilder(t, repoDir, id)
 	require.NoError(t, err)
 
 	body := mustGit(t, repoDir, "log -1 --format=%b state")
@@ -199,7 +199,7 @@ func Test_CodingDevelopment_should_set_attention_when_the_create_is_refused(t *t
 	assert.Contains(t, labels[0].body, "stop")
 
 	later := runTick(t, repoDir)
-	err = runCoding(t, repoDir, later)
+	err = runBuilder(t, repoDir, later)
 	require.NoError(t, err)
 
 	assert.Len(t, cursorRequests(t), 1)
@@ -292,11 +292,11 @@ func runCompile(t *testing.T, repoDir string, id string) (err error) {
 	return
 }
 
-func runCoding(t *testing.T, repoDir string, id string) (err error) {
+func runBuilder(t *testing.T, repoDir string, id string) (err error) {
 	t.Helper()
 	t.Setenv("GH_TOKEN", token)
 	t.Chdir(repoDir)
-	line := fmt.Sprintf("run development --tick %s", id)
+	line := fmt.Sprintf("run builder --tick %s", id)
 	_, err = runRoot(t, line)
 	return
 }

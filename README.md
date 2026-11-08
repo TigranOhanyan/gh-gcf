@@ -60,7 +60,7 @@ gh gcf setup member add-builder --owner octo --repo app --name features --starti
 gh gcf setup check add --owner octo --repo app --builder features --name "ci / unit"
 ```
 
-The scheduled workflow records a tick, then runs `app`, `label`, `compile coding`, `run development`, and `poll agent`, then pushes state. `app` checks each App ID configured for a repo. When that App is installed there, it records the client id and the installation id. A missing or suspended installation stops the step. `label` creates a configured label the app repo does not yet have.
+The scheduled workflow records a tick, then runs `app`, `label`, `compile coding`, `run builder`, and `poll agent`, then pushes state. `app` checks each App ID configured for a repo. When that App is installed there, it records the client id and the installation id. A missing or suspended installation stops the step. `label` creates a configured label the app repo does not yet have.
 
 From the factory checkout, after `gh gcf tick` prints an id:
 
@@ -68,10 +68,10 @@ From the factory checkout, after `gh gcf tick` prints an id:
 gh gcf app --tick <id>
 gh gcf label --tick <id>
 gh gcf compile coding --tick <id>
-gh gcf run development --tick <id>
+gh gcf run builder --tick <id>
 gh gcf poll agent --tick <id>
 ```
 
 ## Run
 
-`run development` starts the builder for an open issue that carries a development's starting label and has no development work. The work stores the issue number and URL and points at the development and the builder. The agent does not point back at the work. When the builder instruction no longer matches the compiled hash, that development waits and nothing is written. A refused create sets the work to attention and applies the development's attention label. A later run does not start another builder for that issue.
+`run builder` starts the builder for an open issue that carries a development's starting label and has no development work. The work stores the issue number and URL and points at the development and the builder. The agent does not point back at the work. When the builder instruction no longer matches the compiled hash, that development waits and nothing is written. A refused create sets the work to attention and applies the development's attention label. A later run does not start another builder for that issue.

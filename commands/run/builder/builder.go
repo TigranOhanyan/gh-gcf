@@ -1,4 +1,4 @@
-package development
+package builder
 
 import (
 	"os"
@@ -12,13 +12,13 @@ import (
 	"github.com/TigranOhanyan/gh-gcf/commands/run"
 )
 
-func NewRunDevelopment() (cmd *cobra.Command) {
+func NewRunBuilder() (cmd *cobra.Command) {
 	var configBranch string
 	var stateBranch string
 	var tickID string
 
 	cmd = &cobra.Command{
-		Use:   "development",
+		Use:   "builder",
 		Short: "Start the builder for an open issue with a development's starting label",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) (err error) {
@@ -54,7 +54,7 @@ func NewRunDevelopment() (cmd *cobra.Command) {
 				StateBranch:  stateBranch,
 				TickID:       tickID,
 			}
-			step := developmentStep{GitHub: client, app: app, cursor: cursor}
+			step := builderStep{GitHub: client, app: app, cursor: cursor}
 			err = exec.Execute(cmd.Context(), step)
 			return
 		},
