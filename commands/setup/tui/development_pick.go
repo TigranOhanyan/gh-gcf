@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"path/filepath"
 
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbletea/v2"
@@ -157,7 +158,8 @@ func (s developmentPick) choose() (updated tea.Model) {
 }
 
 func (s developmentPick) finish() (updated tea.Model) {
-	stored, err := development.Add(s.ctx, s.db, s.draft.name, s.draft.starting, s.draft.attention, s.draft.standards, s.draft.specification)
+	repoDir := filepath.Join(s.dir, "repos", s.owner, s.name)
+	stored, err := development.Add(s.ctx, s.db, repoDir, s.draft.name, s.draft.starting, s.draft.attention, s.draft.standards, s.draft.specification)
 	if err != nil {
 		s.notice = err.Error()
 		updated = s

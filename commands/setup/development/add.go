@@ -3,6 +3,8 @@ package development
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"charm.land/log/v2"
 	"github.com/spf13/cobra"
@@ -11,6 +13,13 @@ import (
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 	configrecords "github.com/TigranOhanyan/gh-gcf/configdb/records"
 )
+
+var instructionRoles = []string{
+	"builder",
+	"standards_reviewer",
+	"specification_reviewer",
+	"fixer",
+}
 
 func newAdd() (cmd *cobra.Command) {
 	var owner string
@@ -49,15 +58,16 @@ func newAdd() (cmd *cobra.Command) {
 
 func runAdd(cmd *cobra.Command, rawOwner string, rawRepo string, rawName string, rawStarting string, rawAttention string, rawStandardsApp string, rawSpecificationApp string) (err error) {
 	ctx := cmd.Context()
-	use := func(_ string, _ string, _ string, db *configdb.DB) (useErr error) {
-		_, useErr = Add(ctx, db, rawName, rawStarting, rawAttention, rawStandardsApp, rawSpecificationApp)
+	use := func(dir string, owner string, repo string, db *configdb.DB) (useErr error) {
+		repoDir := filepath.Join(dir, "repos", owner, repo)
+		_, useErr = Add(ctx, db, repoDir, rawName, rawStarting, rawAttention, rawStandardsApp, rawSpecificationApp)
 		return
 	}
 	err = common.WithRepo(ctx, rawOwner, rawRepo, use)
 	return
 }
 
-func Add(ctx context.Context, db *configdb.DB, rawName string, rawStarting string, rawAttention string, rawStandardsApp string, rawSpecificationApp string) (name string, err error) {
+func Add(ctx context.Context, db *configdb.DB, repoDir string, rawName string, rawStarting string, rawAttention string, rawStandardsApp string, rawSpecificationApp string) (name string, err error) {
 	name, err = common.NormalizeSegment(rawName)
 	if err != nil {
 		return
@@ -92,6 +102,10 @@ func Add(ctx context.Context, db *configdb.DB, rawName string, rawStarting strin
 	if err != nil {
 		return
 	}
+	err = refuseExistingFolder(repoDir, name)
+	if err != nil {
+		return
+	}
 
 	params := configrecords.CreateDevelopmentParams{
 		Name:                     name,
@@ -105,7 +119,49 @@ func Add(ctx context.Context, db *configdb.DB, rawName string, rawStarting strin
 		log.Error("create development", "name", name, "err", err)
 		return
 	}
+	err = writeInstructions(repoDir, name)
+	if err != nil {
+		return
+	}
 	log.Info("create development", "name", name)
+	return
+}
+
+func refuseExistingFolder(repoDir string, name string) (err error) {
+	dir := filepath.Join(repoDir, "developments", name)
+	_, statErr := os.Stat(dir)
+	exists := statErr == nil
+	if exists {
+		err = fmt.Errorf("%s should be removed", dir)
+		log.Info("development folder exists", "path", dir)
+		return
+	}
+	missing := os.IsNotExist(statErr)
+	if !missing {
+		err = statErr
+		log.Error("stat development folder", "path", dir, "err", err)
+	}
+	return
+}
+
+func writeInstructions(repoDir string, name string) (err error) {
+	dir := filepath.Join(repoDir, "developments", name)
+	err = os.MkdirAll(dir, 0755)
+	if err != nil {
+		log.Error("create instructions", "path", dir, "err", err)
+		return
+	}
+	empty := []byte{}
+	for _, role := range instructionRoles {
+		fileName := role + ".md"
+		path := filepath.Join(dir, fileName)
+		err = os.WriteFile(path, empty, 0644)
+		if err != nil {
+			log.Error("create instruction", "path", path, "err", err)
+			return
+		}
+	}
+	log.Info("create instructions", "development", name, "path", dir)
 	return
 }
 

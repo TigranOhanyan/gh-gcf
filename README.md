@@ -44,7 +44,7 @@ Enter opens Repos or Apps. `a` adds a repo, a label, or an App ID. An App is the
 
 Inside a repo, setup records labels, the Apps that repo uses, and developments. A label is a name you choose for one app repo. The starting label marks an issue as ready. The attention label marks an issue the factory stopped on, so a person has to look. The factory creates a missing label on that app repo. A label recorded for one app repo is not a label on another.
 
-A development has a name, a starting label, one attention label, and two reviewer App IDs. The two reviewers do not share an App. Its instructions are `repos/<owner>/<name>/developments/<name>/builder.md`, `standards_reviewer.md`, `specification_reviewer.md`, and `fixer.md`. You edit those files in your editor. A GitHub check name on the development can claim the fixer.
+A development has a name, a starting label, one attention label, and two reviewer App IDs. The two reviewers do not share an App. Adding it creates `repos/<owner>/<name>/developments/<name>/` with empty `builder.md`, `standards_reviewer.md`, `specification_reviewer.md`, and `fixer.md`. When that folder is already there, the add stops and the folder should be removed. You edit those files in your editor. A GitHub check name on the development can claim the fixer.
 
 Setup writes the config in the checkout you have open. Commit and push that change the same way as bind.
 

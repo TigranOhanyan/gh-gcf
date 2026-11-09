@@ -43,6 +43,49 @@ func Test_SetupDevelopment_should_store_a_development(t *testing.T) {
 	assert.Equal(t, int64(43), specificationApp)
 }
 
+func Test_SetupDevelopment_should_write_empty_instruction_files(t *testing.T) {
+	repoDir := readyDevelopmentRepo(t)
+
+	line := `setup development add --owner octo --repo app --name " features " --starting " ready " --attention " stop " --standards-app " 42 " --specification-app " 43 "`
+	_, err := runSetup(t, line)
+	require.NoError(t, err)
+
+	roles := []string{"builder", "standards_reviewer", "specification_reviewer", "fixer"}
+	for _, role := range roles {
+		fileName := role + ".md"
+		path := filepath.Join(repoDir, "repos", "octo", "app", "developments", "features", fileName)
+		body, readErr := os.ReadFile(path)
+		require.NoError(t, readErr)
+		assert.Empty(t, body)
+	}
+}
+
+func Test_SetupDevelopment_should_refuse_an_existing_development_folder(t *testing.T) {
+	repoDir := readyDevelopmentRepo(t)
+	dir := filepath.Join(repoDir, "repos", "octo", "app", "developments", "features")
+	err := os.MkdirAll(dir, 0755)
+	require.NoError(t, err)
+	kept := []byte("Build it.")
+	path := filepath.Join(dir, "builder.md")
+	err = os.WriteFile(path, kept, 0644)
+	require.NoError(t, err)
+
+	line := "setup development add --owner octo --repo app --name features --starting ready --attention stop --standards-app 42 --specification-app 43"
+	_, err = runSetup(t, line)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "should be removed")
+	assert.Contains(t, err.Error(), dir)
+
+	db := openStored(t, repoDir)
+	assert.Equal(t, 0, countRows(t, db, "development"))
+	body, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	assert.Equal(t, kept, body)
+	_, statErr := os.Stat(filepath.Join(dir, "standards_reviewer.md"))
+	missing := os.IsNotExist(statErr)
+	assert.True(t, missing)
+}
+
 func Test_SetupDevelopment_should_record_a_development_without_writing_a_member(t *testing.T) {
 	repoDir := readyDevelopmentRepo(t)
 
@@ -113,6 +156,7 @@ func Test_SetupDevelopment_should_refuse_the_same_reviewer_app(t *testing.T) {
 	db := openStored(t, repoDir)
 	assert.Equal(t, 0, countRows(t, db, "development"))
 	assert.Equal(t, 0, countRows(t, db, "development_check"))
+	assertNoInstructionDir(t, repoDir, "features")
 }
 
 func Test_SetupDevelopment_should_refuse_a_repeated_starting_label(t *testing.T) {
@@ -129,6 +173,7 @@ func Test_SetupDevelopment_should_refuse_a_repeated_starting_label(t *testing.T)
 	require.Len(t, names, 1)
 	assert.Equal(t, "features", names[0])
 	assert.Equal(t, 0, countRows(t, db, "development_check"))
+	assertNoInstructionDir(t, repoDir, "bugs")
 }
 
 func Test_SetupDevelopment_should_refuse_a_reviewer_app_another_development_uses(t *testing.T) {
@@ -146,6 +191,7 @@ func Test_SetupDevelopment_should_refuse_a_reviewer_app_another_development_uses
 	require.Len(t, names, 1)
 	assert.Equal(t, "features", names[0])
 	assert.Equal(t, 0, countRows(t, db, "development_check"))
+	assertNoInstructionDir(t, repoDir, "bugs")
 }
 
 func readyDevelopmentRepo(t *testing.T) (repoDir string) {
@@ -160,6 +206,14 @@ func readyDevelopmentRepo(t *testing.T) (repoDir string) {
 	addStoredApp(t, "100")
 	attachStoredApp(t, "100")
 	return
+}
+
+func assertNoInstructionDir(t *testing.T, repoDir string, name string) {
+	t.Helper()
+	path := filepath.Join(repoDir, "repos", "octo", "app", "developments", name)
+	_, err := os.Stat(path)
+	missing := os.IsNotExist(err)
+	assert.True(t, missing)
 }
 
 func addStoredCheck(t *testing.T, developmentName string, name string) {
