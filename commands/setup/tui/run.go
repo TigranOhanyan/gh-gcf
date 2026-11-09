@@ -57,6 +57,6 @@ func closeDB(db *configdb.DB) {
 }
 
 func appSecret(id int64) (name string) {
-	name = fmt.Sprintf("GITHUB_APP_%d", id)
+	name = fmt.Sprintf("FACTORY_GITHUB_APP_%d", id)
 	return
 }

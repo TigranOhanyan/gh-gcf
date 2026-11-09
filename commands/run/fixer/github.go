@@ -38,7 +38,7 @@ func listCheckRuns(ctx context.Context, client *github.Client, owner string, rep
 }
 
 const reviewPageSize = 100
-const keyPrefix = "GITHUB_APP_"
+const keyPrefix = "FACTORY_GITHUB_APP_"
 const verdictApprove = "approve"
 const verdictChanges = "changes_requested"
 const reviewApproved = "APPROVED"

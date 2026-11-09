@@ -7,7 +7,7 @@
 # The runner has no git author. The bot is github-actions[bot], the account GITHUB_TOKEN pushes as.
 # CURSOR_API_KEY is available for later steps. It is never printed.
 # FACTORY_GITHUB_APP_ID and FACTORY_GITHUB_APP_PRIVATE_KEY let the label step mint an installation token.
-# Bind replaces __APP_KEYS__ with one GITHUB_APP_<app id> line per file in apps/.
+# Bind replaces __APP_KEYS__ with one FACTORY_GITHUB_APP_<app id> line per file in apps/.
 # GH_TOKEN stays the Actions token, used to install gh-gcf and push state.
 
 name: Factory Tick

@@ -13,7 +13,7 @@ import (
 	"github.com/TigranOhanyan/gh-gcf/commands"
 )
 
-const keyPrefix = "GITHUB_APP_"
+const keyPrefix = "FACTORY_GITHUB_APP_"
 
 func (step appStep) lookUp(ctx context.Context, owner string, repoName string, id int64) (seen sight, clientID string, installationID int64, err error) {
 	key, err := loadAppKey(id)

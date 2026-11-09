@@ -190,7 +190,7 @@ func appKeyLines(indent string, ids []int64) (lines [][]byte) {
 	lines = make([][]byte, 0, len(ids))
 	for _, id := range ids {
 		text := strconv.FormatInt(id, 10)
-		line := indent + "GITHUB_APP_" + text + ": ${{ secrets.GITHUB_APP_" + text + " }}"
+		line := indent + "FACTORY_GITHUB_APP_" + text + ": ${{ secrets.FACTORY_GITHUB_APP_" + text + " }}"
 		raw := []byte(line)
 		lines = append(lines, raw)
 	}

@@ -26,7 +26,7 @@ func Test_Bind_should_name_each_registered_app_key(t *testing.T) {
 	committed := gitOut(t, repoDir, "show main:.github/workflows/factory-tick.yml")
 	text := string(committed)
 	indent := indentOf(t, text, "FACTORY_GITHUB_APP_PRIVATE_KEY:")
-	want := indent + "GITHUB_APP_42: ${{ secrets.GITHUB_APP_42 }}\n"
+	want := indent + "FACTORY_GITHUB_APP_42: ${{ secrets.FACTORY_GITHUB_APP_42 }}\n"
 	assert.Contains(t, text, want)
 	assert.NotContains(t, text, "__APP_KEYS__\n")
 }

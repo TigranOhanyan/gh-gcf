@@ -102,7 +102,7 @@ func Test_Setup_should_attach_a_registered_app(t *testing.T) {
 	session.wait("app id:")
 	session.write("42")
 	session.write("\r")
-	session.wait("GITHUB_APP_42")
+	session.wait("FACTORY_GITHUB_APP_42")
 	session.escape()
 	session.wait("repos")
 	session.write("\r")
@@ -115,7 +115,7 @@ func Test_Setup_should_attach_a_registered_app(t *testing.T) {
 	session.write("a")
 	session.wait("42")
 	session.write("\r")
-	session.wait("GITHUB_APP_42")
+	session.wait("FACTORY_GITHUB_APP_42")
 	err := session.quit()
 	require.NoError(t, err)
 

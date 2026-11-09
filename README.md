@@ -40,7 +40,7 @@ Bind writes the tick workflow and commits. Push the branch. When the factory rep
 gh gcf setup tui
 ```
 
-Enter opens Repos or Apps. `a` adds a repo, a label, or an App ID. An App is the number GitHub shows as the App ID. Setup writes that id as `apps/<app id>`, and a repo can then use it. Adding the App on GitHub, and the secret `GITHUB_APP_<app id>`, are under [GitHub Apps](#github-apps).
+Enter opens Repos or Apps. `a` adds a repo, a label, or an App ID. An App is the number GitHub shows as the App ID. Setup writes that id as `apps/<app id>`, and a repo can then use it. Adding the App on GitHub, and the secret `FACTORY_GITHUB_APP_<app id>`, are under [GitHub Apps](#github-apps).
 
 Inside a repo, setup records labels, the Apps that repo uses, and developments. A label is a name you choose for one app repo. The starting label marks an issue as ready. The attention label marks an issue the factory stopped on, so a person has to look. The factory creates a missing label on that app repo. A label recorded for one app repo is not a label on another.
 
@@ -93,7 +93,7 @@ The factory app is the identity the tick uses when it creates and reads GitHub r
 A reviewer App is the identity one reviewer posts as. A development has two, and they are different Apps. The builder and the fixer have none.
 
 1. Create one App per reviewer and note each App ID.
-2. Generate a private key for each. Store the PEM as the Actions secret `GITHUB_APP_<app id>`. The key stays in that secret.
+2. Generate a private key for each. Store the PEM as the Actions secret `FACTORY_GITHUB_APP_<app id>`. The key stays in that secret.
 3. Install each App on the account that owns the app repo. `compile app` records that installation. A missing or suspended installation stops the step.
 4. Register and attach the id from the factory checkout:
 
@@ -102,7 +102,7 @@ gh gcf setup apps add --id 42
 gh gcf setup apps attach --owner octo --repo app --id 42
 ```
 
-5. Run `gh gcf bind` again after `apps/<app id>` exists, so the tick workflow receives `GITHUB_APP_<app id>`. Commit and push that change the same way as the first bind.
+5. Run `gh gcf bind` again after `apps/<app id>` exists, so the tick workflow receives `FACTORY_GITHUB_APP_<app id>`. Commit and push that change the same way as the first bind.
 
 ## Steps
 
