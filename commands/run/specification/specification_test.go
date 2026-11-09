@@ -291,25 +291,25 @@ func runSpecification(t *testing.T, repoDir string, id string) (err error) {
 
 func finishStandardsReviewer(t *testing.T, repoDir string) {
 	t.Helper()
-	worktree := filepath.Join(repoDir, ".worktrees", "state")
-	addLine := fmt.Sprintf("worktree add '%s' state", worktree)
-	_ = mustGit(t, repoDir, addLine)
-	dbPath := filepath.Join(worktree, "repos", owner, repoName, "state.db")
-	db, err := statedb.Open(t.Context(), dbPath)
-	require.NoError(t, err)
+	db := openStateTip(t, repoDir)
 	agents := listAgents(t, db)
+	err := db.Close()
+	require.NoError(t, err)
 	reviewer, found := agentByRole(agents, "standards_reviewer")
 	require.True(t, found)
-	err = db.Queries.SetDevelopmentAgentFinished(t.Context(), reviewer.ID)
+	stubRun(t, reviewer.ID, finishedRun("https://github.com/octo/app/pull/9"))
+	id := runTick(t, repoDir)
+	err = runCheckStandards(t, repoDir, id)
 	require.NoError(t, err)
-	err = db.Close()
-	require.NoError(t, err)
-	stateFile := fmt.Sprintf("repos/%s/%s/state.db", owner, repoName)
-	addState := fmt.Sprintf("add -- %s", stateFile)
-	_ = mustGit(t, worktree, addState)
-	_ = mustGit(t, worktree, "commit -m precondition")
-	removeLine := fmt.Sprintf("worktree remove --force '%s'", worktree)
-	_ = mustGit(t, repoDir, removeLine)
+}
+
+func runCheckStandards(t *testing.T, repoDir string, id string) (err error) {
+	t.Helper()
+	t.Setenv("GH_TOKEN", token)
+	t.Chdir(repoDir)
+	line := fmt.Sprintf("check standards-reviewer --tick %s", id)
+	_, err = runRoot(t, line)
+	return
 }
 
 func runRoot(t *testing.T, line string) (stdout string, err error) {

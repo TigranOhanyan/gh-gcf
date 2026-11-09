@@ -83,6 +83,58 @@ AND NOT EXISTS (
 )
 ORDER BY w.issue_number;
 
+-- name: ListPendingDevelopmentStandardsReviewers :many
+SELECT
+    w.id AS work_id,
+    w.development_name,
+    w.issue_number,
+    a.id AS agent_id,
+    a.cursor_run_id
+FROM development_work w
+JOIN development_agent a ON a.id = w.standards_reviewer_agent
+WHERE w.status = ''
+AND a.role = 'standards_reviewer'
+AND a.cursor_run_id IS NOT NULL
+AND a.cursor_run_id != ''
+AND a.finished_at IS NULL
+AND EXISTS (
+    SELECT 1 FROM development_event e
+    WHERE e.agent_id = a.id
+    AND e.kind = 'ack'
+)
+AND NOT EXISTS (
+    SELECT 1 FROM development_event e
+    WHERE e.agent_id = a.id
+    AND e.kind IN ('completed', 'failed', 'rejected')
+)
+ORDER BY w.issue_number;
+
+-- name: ListPendingDevelopmentSpecificationReviewers :many
+SELECT
+    w.id AS work_id,
+    w.development_name,
+    w.issue_number,
+    a.id AS agent_id,
+    a.cursor_run_id
+FROM development_work w
+JOIN development_agent a ON a.id = w.specification_reviewer_agent
+WHERE w.status = ''
+AND a.role = 'specification_reviewer'
+AND a.cursor_run_id IS NOT NULL
+AND a.cursor_run_id != ''
+AND a.finished_at IS NULL
+AND EXISTS (
+    SELECT 1 FROM development_event e
+    WHERE e.agent_id = a.id
+    AND e.kind = 'ack'
+)
+AND NOT EXISTS (
+    SELECT 1 FROM development_event e
+    WHERE e.agent_id = a.id
+    AND e.kind IN ('completed', 'failed', 'rejected')
+)
+ORDER BY w.issue_number;
+
 -- name: ListPendingDevelopmentFixers :many
 SELECT
     w.id AS work_id,

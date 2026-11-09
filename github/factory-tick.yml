@@ -65,7 +65,9 @@ jobs:
           gh gcf run builder --tick "${tick_id}"
           gh gcf check builder --tick "${tick_id}"
           gh gcf run standards-reviewer --tick "${tick_id}"
+          gh gcf check standards-reviewer --tick "${tick_id}"
           gh gcf run specification-reviewer --tick "${tick_id}"
+          gh gcf check specification-reviewer --tick "${tick_id}"
           gh gcf run fixer --tick "${tick_id}"
           gh gcf check fixer --tick "${tick_id}"
 

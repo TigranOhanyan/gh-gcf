@@ -71,7 +71,9 @@ gh gcf compile development --tick <id>
 gh gcf run builder --tick <id>
 gh gcf check builder --tick <id>
 gh gcf run standards-reviewer --tick <id>
+gh gcf check standards-reviewer --tick <id>
 gh gcf run specification-reviewer --tick <id>
+gh gcf check specification-reviewer --tick <id>
 gh gcf run fixer --tick <id>
 gh gcf check fixer --tick <id>
 ```
