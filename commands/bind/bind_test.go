@@ -8,13 +8,13 @@ import (
 	"strings"
 	"testing"
 
-	workflowfile "github.com/TigranOhanyan/gh-gcf/github"
 	"github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/TigranOhanyan/gh-gcf/configdb"
+	"github.com/TigranOhanyan/gh-gcf/github"
 )
 
 func Test_Bind_should_commit_the_workflow_on_main(t *testing.T) {
@@ -137,10 +137,11 @@ func Test_Bind_should_refuse_a_directory_that_is_not_a_git_repo(t *testing.T) {
 
 func pinnedWorkflow(t *testing.T) (contents []byte) {
 	t.Helper()
+	template, err := workflowfile.ReadFactoryTick()
+	require.NoError(t, err)
 	token := []byte(versionToken)
 	version := []byte(Version)
-	replaced := bytes.ReplaceAll(workflowfile.FactoryTick, token, version)
-	var err error
+	replaced := bytes.ReplaceAll(template, token, version)
 	contents, err = replaceAppKeys(replaced, nil)
 	require.NoError(t, err)
 	return
