@@ -9,7 +9,7 @@ import (
 	"charm.land/log/v2"
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
-	"github.com/TigranOhanyan/gh-gcf/commands/setup/config"
+	"github.com/TigranOhanyan/gh-gcf/commands/setup/common"
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 )
 
@@ -44,8 +44,8 @@ func Run(ctx context.Context, dir string) (err error) {
 }
 
 func openRepo(ctx context.Context, dir string, owner string, name string) (db *configdb.DB, missing bool, err error) {
-	path := config.ConfigPath(dir, owner, name)
-	db, missing, err = config.OpenConfig(ctx, path)
+	path := common.ConfigPath(dir, owner, name)
+	db, missing, err = common.OpenConfig(ctx, path)
 	return
 }
 
@@ -53,7 +53,7 @@ func closeDB(db *configdb.DB) {
 	if db == nil {
 		return
 	}
-	config.CloseConfig(db)
+	common.CloseConfig(db)
 }
 
 func appSecret(id int64) (name string) {

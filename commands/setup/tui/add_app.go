@@ -6,7 +6,7 @@ import (
 
 	"charm.land/bubbletea/v2"
 
-	"github.com/TigranOhanyan/gh-gcf/commands/setup/config"
+	setupapps "github.com/TigranOhanyan/gh-gcf/commands/setup/apps"
 )
 
 type addApp struct {
@@ -18,7 +18,7 @@ type addApp struct {
 func newAddApp(ctx context.Context, dir string) (s addApp, cmd tea.Cmd) {
 	s.ctx = ctx
 	s.dir = dir
-	s.form, cmd = newForm("app id: ", "")
+	s.form, cmd = newForm("app id: ")
 	return
 }
 
@@ -82,8 +82,8 @@ func (s addApp) advance() (updated tea.Model, cmd tea.Cmd) {
 }
 
 func (s addApp) submit() (updated tea.Model) {
-	raw := s.form.first.Value()
-	id, err := config.CreateAppFile(s.dir, raw)
+	raw := s.form.value(0)
+	id, err := setupapps.CreateFile(s.dir, raw)
 	if err != nil {
 		s.form.notice = err.Error()
 		updated = s

@@ -3,7 +3,7 @@ package repo
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/TigranOhanyan/gh-gcf/commands/setup/config"
+	"github.com/TigranOhanyan/gh-gcf/commands/setup/common"
 )
 
 func newAdd() (cmd *cobra.Command) {
@@ -21,21 +21,21 @@ func newAdd() (cmd *cobra.Command) {
 	flags := cmd.Flags()
 	flags.StringVar(&owner, "owner", "", "owner of the app repo")
 	flags.StringVar(&name, "name", "", "name of the app repo")
-	config.RequireFlag(cmd, "owner")
-	config.RequireFlag(cmd, "name")
+	common.RequireFlag(cmd, "owner")
+	common.RequireFlag(cmd, "name")
 	return
 }
 
 func runAdd(cmd *cobra.Command, owner string, name string) (err error) {
 	ctx := cmd.Context()
-	dir, err := config.CurrentFactory(ctx)
+	dir, err := common.CurrentFactory(ctx)
 	if err != nil {
 		return
 	}
-	db, err := config.CreateRepo(ctx, dir, owner, name)
+	db, err := Create(ctx, dir, owner, name)
 	if err != nil {
 		return
 	}
-	config.CloseConfig(db)
+	common.CloseConfig(db)
 	return
 }

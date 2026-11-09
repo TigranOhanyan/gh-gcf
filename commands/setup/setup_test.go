@@ -481,6 +481,156 @@ func Test_Setup_should_show_a_label_added_while_the_repo_menu_is_showing(t *test
 	assert.Equal(t, "ededed", labels[0].Color)
 }
 
+func Test_Setup_should_store_a_development(t *testing.T) {
+	repoDir := setupCheckout(t)
+	recordDevelopmentRepo(t, repoDir)
+
+	session := startSetup(t, repoDir)
+	openRepoList(t, session)
+	session.wait("octo/app")
+	session.write("\r")
+	openDevelopments(t, session)
+	submitDevelopment(t, session, "features", 0, 1, 0, 1, "features  ready  stop  42  43")
+	err := session.quit()
+	require.NoError(t, err)
+
+	rows := storedDevelopments(t, repoDir)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "features", rows[0].Name)
+	assert.Equal(t, "ready", rows[0].StartingLabel)
+	assert.Equal(t, "stop", rows[0].AttentionLabel)
+	assert.Equal(t, int64(42), rows[0].StandardsReviewerApp)
+	assert.Equal(t, int64(43), rows[0].SpecificationReviewerApp)
+}
+
+func Test_Setup_should_store_a_second_development(t *testing.T) {
+	repoDir := setupCheckout(t)
+	recordDevelopmentRepo(t, repoDir)
+	runBinary(t, repoDir, "setup", "label", "add", "--owner", "octo", "--repo", "app", "--name", "todo", "--color", "cccccc")
+	runBinary(t, repoDir, "setup", "apps", "add", "--id", "99")
+	runBinary(t, repoDir, "setup", "apps", "attach", "--owner", "octo", "--repo", "app", "--id", "99")
+	runBinary(t, repoDir, "setup", "apps", "add", "--id", "100")
+	runBinary(t, repoDir, "setup", "apps", "attach", "--owner", "octo", "--repo", "app", "--id", "100")
+	runBinary(t, repoDir, "setup", "development", "add", "--owner", "octo", "--repo", "app", "--name", "features", "--starting", "ready", "--attention", "stop", "--standards-app", "42", "--specification-app", "43")
+
+	session := startSetup(t, repoDir)
+	openRepoList(t, session)
+	session.wait("octo/app")
+	session.write("\r")
+	openDevelopments(t, session)
+	session.wait("features  ready  stop  42  43")
+	submitDevelopment(t, session, "bugs", 2, 1, 2, 3, "bugs  todo  stop  99  100")
+	err := session.quit()
+	require.NoError(t, err)
+
+	rows := storedDevelopments(t, repoDir)
+	require.Len(t, rows, 2)
+	assert.Equal(t, "bugs", rows[0].Name)
+	assert.Equal(t, "features", rows[1].Name)
+}
+
+func Test_Setup_should_store_a_check_on_a_development(t *testing.T) {
+	repoDir := setupCheckout(t)
+	recordDevelopmentRepo(t, repoDir)
+	runBinary(t, repoDir, "setup", "development", "add", "--owner", "octo", "--repo", "app", "--name", "features", "--starting", "ready", "--attention", "stop", "--standards-app", "42", "--specification-app", "43")
+
+	session := startSetup(t, repoDir)
+	openRepoList(t, session)
+	session.wait("octo/app")
+	session.write("\r")
+	openDevelopments(t, session)
+	session.wait("features  ready  stop  42  43")
+	session.write("\r")
+	session.wait("No checks yet.")
+	session.write("a")
+	session.wait("name:")
+	session.write("ci / unit")
+	session.write("\r")
+	session.waitGone("features>add")
+	session.wait("ci / unit")
+	err := session.quit()
+	require.NoError(t, err)
+
+	names := storedChecks(t, repoDir, "features")
+	require.Len(t, names, 1)
+	assert.Equal(t, "ci / unit", names[0])
+}
+
+func Test_Setup_should_leave_a_development_uncreated_when_add_is_cancelled(t *testing.T) {
+	repoDir := setupCheckout(t)
+	recordDevelopmentRepo(t, repoDir)
+
+	session := startSetup(t, repoDir)
+	openRepoList(t, session)
+	session.wait("octo/app")
+	session.write("\r")
+	openDevelopments(t, session)
+	session.write("a")
+	session.wait("name:")
+	session.write("features")
+	session.wait("features")
+	session.escape()
+	session.wait("No developments yet.")
+	err := session.quit()
+	require.NoError(t, err)
+
+	rows := storedDevelopments(t, repoDir)
+	assert.Empty(t, rows)
+}
+
+func Test_Setup_should_refuse_a_repeated_starting_label_in_the_tui(t *testing.T) {
+	repoDir := setupCheckout(t)
+	recordDevelopmentRepo(t, repoDir)
+	runBinary(t, repoDir, "setup", "development", "add", "--owner", "octo", "--repo", "app", "--name", "features", "--starting", "ready", "--attention", "stop", "--standards-app", "42", "--specification-app", "43")
+
+	session := startSetup(t, repoDir)
+	openRepoList(t, session)
+	session.wait("octo/app")
+	session.write("\r")
+	openDevelopments(t, session)
+	session.wait("features  ready  stop  42  43")
+	session.write("a")
+	session.wait("name:")
+	session.write("bugs")
+	session.write("\r")
+	session.wait("add>starting")
+	chooseRow(session, 0)
+	session.wait("add>attention")
+	chooseRow(session, 1)
+	session.wait("add>standards")
+	chooseRow(session, 0)
+	session.wait("add>specification")
+	chooseRow(session, 1)
+	session.wait("already used")
+	err := session.quit()
+	require.NoError(t, err)
+
+	rows := storedDevelopments(t, repoDir)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "features", rows[0].Name)
+}
+
+func Test_Setup_should_show_a_development_added_while_the_repo_menu_is_showing(t *testing.T) {
+	repoDir := setupCheckout(t)
+	recordDevelopmentRepo(t, repoDir)
+	session := startSetup(t, repoDir)
+	openRepoList(t, session)
+	session.wait("octo/app")
+	session.write("\r")
+	session.wait("labels")
+
+	runBinary(t, repoDir, "setup", "development", "add", "--owner", "octo", "--repo", "app", "--name", "features", "--starting", "ready", "--attention", "stop", "--standards-app", "42", "--specification-app", "43")
+
+	openDevelopments(t, session)
+	session.wait("features  ready  stop  42  43")
+	err := session.quit()
+	require.NoError(t, err)
+
+	rows := storedDevelopments(t, repoDir)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "features", rows[0].Name)
+}
+
 func setupCheckout(t *testing.T) (repoDir string) {
 	t.Helper()
 	repoDir = filepath.Join(JunkDir, t.Name())
@@ -496,10 +646,72 @@ func setupCheckout(t *testing.T) (repoDir string) {
 	return
 }
 
-func storedLabels(t *testing.T, repoDir string, owner string, name string) (labels []configrecords.Label) {
+func recordDevelopmentRepo(t *testing.T, repoDir string) {
+	t.Helper()
+	recordRepo(t, repoDir)
+	runBinary(t, repoDir, "setup", "label", "add", "--owner", "octo", "--repo", "app", "--name", "ready", "--color", "ededed")
+	runBinary(t, repoDir, "setup", "label", "add", "--owner", "octo", "--repo", "app", "--name", "stop", "--color", "ff0000")
+	runBinary(t, repoDir, "setup", "apps", "add", "--id", "42")
+	runBinary(t, repoDir, "setup", "apps", "attach", "--owner", "octo", "--repo", "app", "--id", "42")
+	runBinary(t, repoDir, "setup", "apps", "add", "--id", "43")
+	runBinary(t, repoDir, "setup", "apps", "attach", "--owner", "octo", "--repo", "app", "--id", "43")
+}
+
+func openDevelopments(t *testing.T, session *terminalSession) {
+	t.Helper()
+	session.wait("labels")
+	session.write("j")
+	session.write("j")
+	session.write("\r")
+	session.wait("app>developments")
+}
+
+func submitDevelopment(t *testing.T, session *terminalSession, name string, startingMoves int, attentionMoves int, standardsMoves int, specificationMoves int, row string) {
+	t.Helper()
+	session.write("a")
+	session.wait("name:")
+	session.write(name)
+	session.write("\r")
+	session.wait("ready  ededed")
+	chooseRow(session, startingMoves)
+	session.wait("add>attention")
+	chooseRow(session, attentionMoves)
+	session.wait("42")
+	chooseRow(session, standardsMoves)
+	session.wait("add>specification")
+	chooseRow(session, specificationMoves)
+	session.wait(row)
+}
+
+func chooseRow(session *terminalSession, moves int) {
+	session.t.Helper()
+	for i := 0; i < moves; i++ {
+		session.write("j")
+	}
+	session.write("\r")
+}
+
+func storedDevelopments(t *testing.T, repoDir string) (rows []configrecords.Development) {
+	t.Helper()
+	db := openStoredConfig(t, repoDir, "octo", "app")
+	rows, err := db.Queries.ListDevelopments(t.Context())
+	require.NoError(t, err)
+	return
+}
+
+func storedChecks(t *testing.T, repoDir string, developmentName string) (names []string) {
+	t.Helper()
+	db := openStoredConfig(t, repoDir, "octo", "app")
+	names, err := db.Queries.ListDevelopmentChecks(t.Context(), developmentName)
+	require.NoError(t, err)
+	return
+}
+
+func openStoredConfig(t *testing.T, repoDir string, owner string, name string) (db *configdb.DB) {
 	t.Helper()
 	path := filepath.Join(repoDir, "repos", owner, name, "config.db")
-	db, err := configdb.OpenIfMigrated(t.Context(), path)
+	var err error
+	db, err = configdb.OpenIfMigrated(t.Context(), path)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		closeErr := db.Close()
@@ -508,6 +720,13 @@ func storedLabels(t *testing.T, repoDir string, owner string, name string) (labe
 			t.Errorf("close config: %v", closeErr)
 		}
 	})
+	return
+}
+
+func storedLabels(t *testing.T, repoDir string, owner string, name string) (labels []configrecords.Label) {
+	t.Helper()
+	db := openStoredConfig(t, repoDir, owner, name)
+	var err error
 	labels, err = db.Queries.ListLabels(t.Context())
 	require.NoError(t, err)
 	return
@@ -612,6 +831,23 @@ func (session *terminalSession) write(text string) {
 	payload := []byte(text)
 	_, err := session.term.Emulator.InputPipe().Write(payload)
 	require.NoError(session.t, err)
+}
+
+func (session *terminalSession) waitGone(text string) {
+	session.t.Helper()
+	deadline := time.Now().Add(setupDrawLimit)
+	for {
+		screen := session.screen()
+		found := strings.Contains(screen, text)
+		if !found {
+			return
+		}
+		expired := time.Now().After(deadline)
+		if expired {
+			session.t.Fatalf("timed out waiting for %q to leave\n%s", text, screen)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 func (session *terminalSession) wait(text string) {

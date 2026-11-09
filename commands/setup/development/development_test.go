@@ -19,7 +19,8 @@ import (
 func Test_NewSetup_should_list_development(t *testing.T) {
 	text := setupHelp(t, "development --help")
 	assert.Contains(t, text, "Store a development")
-	assert.Contains(t, text, "Store a check name")
+	assert.Contains(t, text, "Print developments")
+	assert.Contains(t, text, "Add or list check names")
 }
 
 func Test_SetupDevelopment_should_store_a_development(t *testing.T) {
@@ -52,6 +53,36 @@ func Test_SetupDevelopment_should_record_a_development_without_writing_a_member(
 	db := openStored(t, repoDir)
 	assert.Equal(t, 1, countRows(t, db, "development"))
 	assertAbsentTable(t, db.DB, "member")
+}
+
+func Test_SetupDevelopment_should_list_nothing_before_a_development_is_stored(t *testing.T) {
+	readyDevelopmentRepo(t)
+
+	stdout, err := runSetup(t, "setup development list --owner octo --repo app")
+	require.NoError(t, err)
+	assert.Empty(t, stdout)
+}
+
+func Test_SetupDevelopment_should_list_developments(t *testing.T) {
+	readyDevelopmentRepo(t)
+	addStoredLabel(t, "todo", "cccccc")
+	addStoredDevelopment(t, "features", "ready", "stop", "42", "43")
+	addStoredDevelopment(t, "bugs", "todo", "stop", "99", "100")
+
+	stdout, err := runSetup(t, "setup development list --owner octo --repo app")
+	require.NoError(t, err)
+	assert.Equal(t, "bugs  todo  stop  99  100\nfeatures  ready  stop  42  43\n", stdout)
+}
+
+func Test_SetupDevelopment_should_list_check_names(t *testing.T) {
+	readyDevelopmentRepo(t)
+	addStoredDevelopment(t, "features", "ready", "stop", "42", "43")
+	addStoredCheck(t, "features", "lint")
+	addStoredCheck(t, "features", "ci / unit")
+
+	stdout, err := runSetup(t, "setup development check list --owner octo --repo app --development features")
+	require.NoError(t, err)
+	assert.Equal(t, "ci / unit\nlint\n", stdout)
 }
 
 func Test_SetupDevelopment_should_store_a_check_name(t *testing.T) {
@@ -129,6 +160,13 @@ func readyDevelopmentRepo(t *testing.T) (repoDir string) {
 	addStoredApp(t, "100")
 	attachStoredApp(t, "100")
 	return
+}
+
+func addStoredCheck(t *testing.T, developmentName string, name string) {
+	t.Helper()
+	line := fmt.Sprintf("setup development check add --owner octo --repo app --development %s --name %q", developmentName, name)
+	_, err := runSetup(t, line)
+	require.NoError(t, err)
 }
 
 func addStoredDevelopment(t *testing.T, name string, starting string, attention string, standardsApp string, specificationApp string) {

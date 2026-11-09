@@ -6,7 +6,7 @@ import (
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbletea/v2"
 
-	"github.com/TigranOhanyan/gh-gcf/commands/setup/config"
+	"github.com/TigranOhanyan/gh-gcf/commands/setup/common"
 )
 
 type menu struct {
@@ -23,7 +23,7 @@ func newMenu(ctx context.Context, dir string, owner string, name string) (s menu
 	s.dir = dir
 	s.owner = owner
 	s.name = name
-	items := []string{"labels", "apps"}
+	items := []string{"labels", "apps", "developments"}
 	heading := owner + "/" + name
 	s.list = newChooser(heading, items, items, "")
 	return
@@ -77,12 +77,16 @@ func (s menu) open() (updated tea.Model) {
 		updated = s
 		return
 	}
-	labels := item.value == "labels"
-	if labels {
+	switch item.value {
+	case "labels":
 		updated = s.openLabels()
-		return
+	case "apps":
+		updated = s.openApps()
+	case "developments":
+		updated = s.openDevelopments()
+	default:
+		updated = s
 	}
-	updated = s.openApps()
 	return
 }
 
@@ -94,7 +98,7 @@ func (s menu) openLabels() (updated tea.Model) {
 		return
 	}
 	if missing {
-		s.notice = config.MissingConfig
+		s.notice = common.MissingConfig
 		updated = s
 		return
 	}
@@ -110,10 +114,26 @@ func (s menu) openApps() (updated tea.Model) {
 		return
 	}
 	if missing {
-		s.notice = config.MissingConfig
+		s.notice = common.MissingConfig
 		updated = s
 		return
 	}
 	updated = newRepoApps(s.ctx, s.dir, s.owner, s.name, db, "", "")
+	return
+}
+
+func (s menu) openDevelopments() (updated tea.Model) {
+	db, missing, err := openRepo(s.ctx, s.dir, s.owner, s.name)
+	if err != nil {
+		s.notice = err.Error()
+		updated = s
+		return
+	}
+	if missing {
+		s.notice = common.MissingConfig
+		updated = s
+		return
+	}
+	updated = newDevelopments(s.ctx, s.dir, s.owner, s.name, db, "", "")
 	return
 }

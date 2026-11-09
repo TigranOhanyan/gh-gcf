@@ -7,7 +7,8 @@ import (
 	"charm.land/bubbletea/v2"
 	"charm.land/log/v2"
 
-	"github.com/TigranOhanyan/gh-gcf/commands/setup/config"
+	"github.com/TigranOhanyan/gh-gcf/commands/setup/common"
+	"github.com/TigranOhanyan/gh-gcf/commands/setup/repo"
 )
 
 type repos struct {
@@ -20,21 +21,21 @@ type repos struct {
 func newRepos(ctx context.Context, dir string, selectKey string) (s repos) {
 	s.ctx = ctx
 	s.dir = dir
-	found, err := config.ListRepos(dir)
+	found, err := repo.List(dir)
 	if err != nil {
 		log.Error("list repos", "err", err)
 		s.notice = err.Error()
 	}
 	items := make([]string, 0, len(found))
 	values := make([]string, 0, len(found))
-	for _, repo := range found {
-		line := config.RepoKey(repo)
-		missing := !repo.HasConfig
+	for _, stored := range found {
+		line := repo.Key(stored)
+		missing := !stored.HasConfig
 		if missing {
-			line = line + "  " + config.MissingConfig
+			line = line + "  " + common.MissingConfig
 		}
 		items = append(items, line)
-		values = append(values, config.RepoKey(repo))
+		values = append(values, repo.Key(stored))
 	}
 	s.list = newChooser("Repos", items, values, selectKey)
 	return

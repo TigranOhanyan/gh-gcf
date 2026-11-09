@@ -14,7 +14,7 @@ import (
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
 	"github.com/TigranOhanyan/gh-gcf/configdb"
-	workflowfile "github.com/TigranOhanyan/gh-gcf/github"
+	"github.com/TigranOhanyan/gh-gcf/github"
 )
 
 const (
@@ -121,14 +121,18 @@ func requireRelease() (err error) {
 const appKeyToken = "__APP_KEYS__"
 
 func workflowContents(factoryDir string) (contents []byte, err error) {
+	template, err := workflowfile.ReadFactoryTick()
+	if err != nil {
+		return
+	}
 	token := []byte(versionToken)
-	hasToken := bytes.Contains(workflowfile.FactoryTick, token)
+	hasToken := bytes.Contains(template, token)
 	if !hasToken {
 		err = fmt.Errorf("workflow template has no version token")
 		return
 	}
 	version := []byte(Version)
-	contents = bytes.ReplaceAll(workflowfile.FactoryTick, token, version)
+	contents = bytes.ReplaceAll(template, token, version)
 
 	ids, err := commands.ListAppIDs(factoryDir)
 	if err != nil {

@@ -57,14 +57,6 @@ type DevelopmentWork struct {
 	Status                     string         `json:"status"`
 }
 
-type Event struct {
-	ID        string `json:"id"`
-	StepID    string `json:"step_id"`
-	Kind      string `json:"kind"`
-	Message   string `json:"message"`
-	CreatedAt string `json:"created_at"`
-}
-
 type GithubApp struct {
 	AppID          int64  `json:"app_id"`
 	ClientID       string `json:"client_id"`

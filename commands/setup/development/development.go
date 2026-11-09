@@ -7,9 +7,10 @@ import (
 func NewSetupDevelopment() (cmd *cobra.Command) {
 	cmd = &cobra.Command{
 		Use:   "development",
-		Short: "Add a development",
+		Short: "Add or list developments",
 	}
 	cmd.AddCommand(newAdd())
+	cmd.AddCommand(newList())
 	cmd.AddCommand(newCheck())
 	return
 }

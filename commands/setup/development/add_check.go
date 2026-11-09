@@ -7,7 +7,7 @@ import (
 	"charm.land/log/v2"
 	"github.com/spf13/cobra"
 
-	"github.com/TigranOhanyan/gh-gcf/commands/setup/config"
+	"github.com/TigranOhanyan/gh-gcf/commands/setup/common"
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 	configrecords "github.com/TigranOhanyan/gh-gcf/configdb/records"
 )
@@ -15,9 +15,10 @@ import (
 func newCheck() (cmd *cobra.Command) {
 	cmd = &cobra.Command{
 		Use:   "check",
-		Short: "Store a check name",
+		Short: "Add or list check names",
 	}
 	cmd.AddCommand(newAddCheck())
+	cmd.AddCommand(newListCheck())
 	return
 }
 
@@ -40,29 +41,29 @@ func newAddCheck() (cmd *cobra.Command) {
 	flags.StringVar(&repo, "repo", "", "name of the app repo")
 	flags.StringVar(&development, "development", "", "development name")
 	flags.StringVar(&name, "name", "", "check name")
-	config.RequireFlag(cmd, "owner")
-	config.RequireFlag(cmd, "repo")
-	config.RequireFlag(cmd, "development")
-	config.RequireFlag(cmd, "name")
+	common.RequireFlag(cmd, "owner")
+	common.RequireFlag(cmd, "repo")
+	common.RequireFlag(cmd, "development")
+	common.RequireFlag(cmd, "name")
 	return
 }
 
 func runAddCheck(cmd *cobra.Command, rawOwner string, rawRepo string, rawDevelopment string, rawName string) (err error) {
 	ctx := cmd.Context()
 	use := func(_ string, _ string, _ string, db *configdb.DB) (useErr error) {
-		_, useErr = addCheck(ctx, db, rawDevelopment, rawName)
+		_, useErr = AddCheck(ctx, db, rawDevelopment, rawName)
 		return
 	}
-	err = config.WithRepo(ctx, rawOwner, rawRepo, use)
+	err = common.WithRepo(ctx, rawOwner, rawRepo, use)
 	return
 }
 
-func addCheck(ctx context.Context, db *configdb.DB, rawDevelopment string, rawName string) (name string, err error) {
-	development, err := config.NormalizeSegment(rawDevelopment)
+func AddCheck(ctx context.Context, db *configdb.DB, rawDevelopment string, rawName string) (name string, err error) {
+	development, err := common.NormalizeSegment(rawDevelopment)
 	if err != nil {
 		return
 	}
-	name, err = config.NormalizeCheckName(rawName)
+	name, err = common.NormalizeCheckName(rawName)
 	if err != nil {
 		return
 	}

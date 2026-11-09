@@ -5,7 +5,7 @@ import (
 
 	"charm.land/bubbletea/v2"
 
-	"github.com/TigranOhanyan/gh-gcf/commands/setup/config"
+	"github.com/TigranOhanyan/gh-gcf/commands/setup/label"
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 )
 
@@ -90,9 +90,9 @@ func (s addLabel) advance() (updated tea.Model, cmd tea.Cmd) {
 }
 
 func (s addLabel) submit() (updated tea.Model) {
-	rawName := s.form.first.Value()
-	rawColor := s.form.second.Value()
-	stored, err := config.AddLabel(s.ctx, s.db, rawName, rawColor)
+	rawName := s.form.value(0)
+	rawColor := s.form.value(1)
+	stored, err := label.Add(s.ctx, s.db, rawName, rawColor)
 	if err != nil {
 		s.form.notice = err.Error()
 		updated = s
