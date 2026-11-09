@@ -490,7 +490,7 @@ func Test_Setup_should_store_a_development(t *testing.T) {
 	session.wait("octo/app")
 	session.write("\r")
 	openDevelopments(t, session)
-	submitDevelopment(t, session, "features", "ready", "stop", "42", "43", "features  ready  stop  42  43")
+	submitDevelopment(t, session, "features", 0, 1, 0, 1, "features  ready  stop  42  43")
 	err := session.quit()
 	require.NoError(t, err)
 
@@ -519,7 +519,7 @@ func Test_Setup_should_store_a_second_development(t *testing.T) {
 	session.write("\r")
 	openDevelopments(t, session)
 	session.wait("features  ready  stop  42  43")
-	submitDevelopment(t, session, "bugs", "todo", "stop", "99", "100", "bugs  todo  stop  99  100")
+	submitDevelopment(t, session, "bugs", 2, 1, 2, 3, "bugs  todo  stop  99  100")
 	err := session.quit()
 	require.NoError(t, err)
 
@@ -566,7 +566,7 @@ func Test_Setup_should_leave_a_development_uncreated_when_add_is_cancelled(t *te
 	session.write("\r")
 	openDevelopments(t, session)
 	session.write("a")
-	session.wait("starting:")
+	session.wait("name:")
 	session.write("features")
 	session.wait("features")
 	session.escape()
@@ -590,20 +590,18 @@ func Test_Setup_should_refuse_a_repeated_starting_label_in_the_tui(t *testing.T)
 	openDevelopments(t, session)
 	session.wait("features  ready  stop  42  43")
 	session.write("a")
-	session.wait("specification app:")
+	session.wait("name:")
 	session.write("bugs")
 	session.write("\r")
-	session.write("ready")
-	session.write("\r")
-	session.write("stop")
-	session.write("\r")
-	session.write("99")
-	session.write("\r")
-	session.wait("saves")
-	session.write("100")
-	session.write("\r")
+	session.wait("add>starting")
+	chooseRow(session, 0)
+	session.wait("add>attention")
+	chooseRow(session, 1)
+	session.wait("add>standards")
+	chooseRow(session, 0)
+	session.wait("add>specification")
+	chooseRow(session, 1)
 	session.wait("already used")
-	session.leave()
 	err := session.quit()
 	require.NoError(t, err)
 
@@ -668,22 +666,29 @@ func openDevelopments(t *testing.T, session *terminalSession) {
 	session.wait("app>developments")
 }
 
-func submitDevelopment(t *testing.T, session *terminalSession, name string, starting string, attention string, standards string, specification string, row string) {
+func submitDevelopment(t *testing.T, session *terminalSession, name string, startingMoves int, attentionMoves int, standardsMoves int, specificationMoves int, row string) {
 	t.Helper()
 	session.write("a")
-	session.wait("specification app:")
+	session.wait("name:")
 	session.write(name)
 	session.write("\r")
-	session.write(starting)
-	session.write("\r")
-	session.write(attention)
-	session.write("\r")
-	session.write(standards)
-	session.write("\r")
-	session.wait("saves")
-	session.write(specification)
-	session.write("\r")
+	session.wait("ready  ededed")
+	chooseRow(session, startingMoves)
+	session.wait("add>attention")
+	chooseRow(session, attentionMoves)
+	session.wait("42")
+	chooseRow(session, standardsMoves)
+	session.wait("add>specification")
+	chooseRow(session, specificationMoves)
 	session.wait(row)
+}
+
+func chooseRow(session *terminalSession, moves int) {
+	session.t.Helper()
+	for i := 0; i < moves; i++ {
+		session.write("j")
+	}
+	session.write("\r")
 }
 
 func storedDevelopments(t *testing.T, repoDir string) (rows []configrecords.Development) {

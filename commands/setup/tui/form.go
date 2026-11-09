@@ -27,6 +27,12 @@ func newField(prompt string) (field textinput.Model) {
 	return
 }
 
+func (f form) setValue(index int, text string) (updated form) {
+	updated = f
+	updated.fields[index].SetValue(text)
+	return
+}
+
 func (f form) value(index int) (text string) {
 	text = f.fields[index].Value()
 	return

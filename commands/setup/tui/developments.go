@@ -92,7 +92,7 @@ func (s developments) View() (view tea.View) {
 }
 
 func (s developments) add() (updated tea.Model, cmd tea.Cmd) {
-	next, focus := newAddDevelopment(s.ctx, s.dir, s.owner, s.name, s.db)
+	next, focus := newAddDevelopment(s.ctx, s.dir, s.owner, s.name, s.db, "")
 	updated = next
 	cmd = focus
 	return
