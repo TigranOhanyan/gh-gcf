@@ -5,7 +5,8 @@ import (
 
 	"charm.land/bubbletea/v2"
 
-	"github.com/TigranOhanyan/gh-gcf/commands/setup/config"
+	"github.com/TigranOhanyan/gh-gcf/commands/setup/common"
+	"github.com/TigranOhanyan/gh-gcf/commands/setup/repo"
 )
 
 type addRepo struct {
@@ -81,17 +82,17 @@ func (s addRepo) advance() (updated tea.Model, cmd tea.Cmd) {
 }
 
 func (s addRepo) submit() (updated tea.Model) {
-	rawOwner := s.form.first.Value()
-	rawName := s.form.second.Value()
-	db, err := config.CreateRepo(s.ctx, s.dir, rawOwner, rawName)
+	rawOwner := s.form.value(0)
+	rawName := s.form.value(1)
+	db, err := repo.Create(s.ctx, s.dir, rawOwner, rawName)
 	if err != nil {
 		s.form.notice = err.Error()
 		updated = s
 		return
 	}
 	closeDB(db)
-	owner, ownerErr := config.NormalizeSegment(rawOwner)
-	name, nameErr := config.NormalizeSegment(rawName)
+	owner, ownerErr := common.NormalizeSegment(rawOwner)
+	name, nameErr := common.NormalizeSegment(rawName)
 	key := ""
 	named := ownerErr == nil && nameErr == nil
 	if named {

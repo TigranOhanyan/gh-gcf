@@ -3,7 +3,7 @@ package label
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/TigranOhanyan/gh-gcf/commands/setup/config"
+	"github.com/TigranOhanyan/gh-gcf/commands/setup/common"
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 )
 
@@ -26,19 +26,19 @@ func newAdd() (cmd *cobra.Command) {
 	flags.StringVar(&repo, "repo", "", "name of the app repo")
 	flags.StringVar(&name, "name", "", "label name")
 	flags.StringVar(&color, "color", "", "six hex digits")
-	config.RequireFlag(cmd, "owner")
-	config.RequireFlag(cmd, "repo")
-	config.RequireFlag(cmd, "name")
-	config.RequireFlag(cmd, "color")
+	common.RequireFlag(cmd, "owner")
+	common.RequireFlag(cmd, "repo")
+	common.RequireFlag(cmd, "name")
+	common.RequireFlag(cmd, "color")
 	return
 }
 
 func runAdd(cmd *cobra.Command, owner string, repo string, name string, color string) (err error) {
 	ctx := cmd.Context()
 	use := func(_ string, _ string, _ string, db *configdb.DB) (useErr error) {
-		_, useErr = config.AddLabel(ctx, db, name, color)
+		_, useErr = Add(ctx, db, name, color)
 		return
 	}
-	err = config.WithRepo(ctx, owner, repo, use)
+	err = common.WithRepo(ctx, owner, repo, use)
 	return
 }

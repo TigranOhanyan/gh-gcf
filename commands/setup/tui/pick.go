@@ -9,7 +9,7 @@ import (
 	"charm.land/log/v2"
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
-	"github.com/TigranOhanyan/gh-gcf/commands/setup/config"
+	setupapps "github.com/TigranOhanyan/gh-gcf/commands/setup/apps"
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 )
 
@@ -95,7 +95,7 @@ func (s pick) open() (updated tea.Model) {
 		updated = s
 		return
 	}
-	err = config.AttachApp(s.ctx, s.db, id)
+	err = setupapps.Attach(s.ctx, s.db, id)
 	if err != nil {
 		s.notice = err.Error()
 		updated = s

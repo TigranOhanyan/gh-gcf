@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
-	"github.com/TigranOhanyan/gh-gcf/commands/setup/config"
+	"github.com/TigranOhanyan/gh-gcf/commands/setup/common"
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 )
 
@@ -34,7 +34,7 @@ func newList() (cmd *cobra.Command) {
 
 func runList(cmd *cobra.Command, owner string, repo string) (err error) {
 	ctx := cmd.Context()
-	dir, err := config.CurrentFactory(ctx)
+	dir, err := common.CurrentFactory(ctx)
 	if err != nil {
 		return
 	}
@@ -76,7 +76,7 @@ func printAttachedApps(cmd *cobra.Command, owner string, repo string) (err error
 		}
 		return
 	}
-	err = config.WithRepo(ctx, owner, repo, use)
+	err = common.WithRepo(ctx, owner, repo, use)
 	if err != nil {
 		return
 	}

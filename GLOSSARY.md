@@ -31,7 +31,7 @@ The one place the TUI is showing. A return builds it again.
 _Avoid_: page, widget, step
 
 **Repo menu**:
-The labels and attached Apps of one app repo.
+The labels, attached Apps, and developments of one app repo.
 _Avoid_: sections
 
 ## Running

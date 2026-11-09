@@ -37,7 +37,7 @@ A subcommand of a main command is its own package. Three packages is the deepest
 
 Each of bind, check, compile, run, and setup builds its own command and adds its subcommands. The root command adds those five and does not add their subcommands.
 
-A helper used by a command package and its subcommands stays out of the command package, because that package imports the subcommands. Setup helpers are package `config` in `commands/setup/config`. Run helpers are package `agent` in `commands/run/agent`. Do not add another shared package.
+A helper used by a command package and its subcommands stays out of the command package, because that package imports the subcommands. Setup helpers that every action uses are package `common` in `commands/setup/common`. A write or a list for one action lives in that action's package, and the TUI imports the action package and calls the same function. Run helpers are package `agent` in `commands/run/agent`. Do not add another shared package.
 
 A subcommand imports the helper package. It does not import the command package that imports the subcommand.
 

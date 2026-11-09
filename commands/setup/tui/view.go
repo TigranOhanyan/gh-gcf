@@ -8,6 +8,8 @@ import (
 const noRepos = "No app repos yet."
 const noLabels = "No labels yet."
 const noApps = "No apps yet."
+const noDevelopments = "No developments yet."
+const noChecks = "No checks yet."
 
 const pathPastFg = "#E8EEF4"
 const pathPastBg = "#3C4F65"
@@ -37,6 +39,12 @@ var listKeys = []keyHint{
 
 var pickKeys = []keyHint{
 	{key: "enter", label: "select"},
+	{key: "esc", label: "back"},
+	{key: "q", label: "quit"},
+}
+
+var addKeys = []keyHint{
+	{key: "a", label: "add"},
 	{key: "esc", label: "back"},
 	{key: "q", label: "quit"},
 }

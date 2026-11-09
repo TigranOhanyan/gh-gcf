@@ -7,18 +7,15 @@ import (
 
 type form struct {
 	field  int
-	first  textinput.Model
-	second textinput.Model
-	two    bool
+	fields []textinput.Model
 	notice string
 }
 
-func newForm(firstPrompt string, secondPrompt string) (f form, cmd tea.Cmd) {
-	f.first = newField(firstPrompt)
-	two := secondPrompt != ""
-	f.two = two
-	if two {
-		f.second = newField(secondPrompt)
+func newForm(prompts ...string) (f form, cmd tea.Cmd) {
+	f.fields = make([]textinput.Model, 0, len(prompts))
+	for _, prompt := range prompts {
+		field := newField(prompt)
+		f.fields = append(f.fields, field)
 	}
 	f, cmd = f.focus()
 	return
@@ -30,42 +27,29 @@ func newField(prompt string) (field textinput.Model) {
 	return
 }
 
-func (f form) active() (field textinput.Model) {
-	second := f.field == 1 && f.two
-	if second {
-		field = f.second
-		return
-	}
-	field = f.first
-	return
-}
-
-func (f form) setActive(field textinput.Model) (updated form) {
-	updated = f
-	second := updated.field == 1 && updated.two
-	if second {
-		updated.second = field
-		return
-	}
-	updated.first = field
+func (f form) value(index int) (text string) {
+	text = f.fields[index].Value()
 	return
 }
 
 func (f form) focus() (updated form, cmd tea.Cmd) {
 	updated = f
-	updated.first.Blur()
-	updated.second.Blur()
-	field := updated.active()
+	for i := range updated.fields {
+		updated.fields[i].Blur()
+	}
+	index := updated.field
+	field := updated.fields[index]
 	cmd = field.Focus()
-	updated = updated.setActive(field)
+	updated.fields[index] = field
 	return
 }
 
 func (f form) apply(msg tea.Msg) (updated form, cmd tea.Cmd) {
 	updated = f
-	field := updated.active()
+	index := updated.field
+	field := updated.fields[index]
 	field, cmd = field.Update(msg)
-	updated = updated.setActive(field)
+	updated.fields[index] = field
 	_, isPress := msg.(tea.KeyPressMsg)
 	if isPress {
 		updated.notice = ""
@@ -74,25 +58,22 @@ func (f form) apply(msg tea.Msg) (updated form, cmd tea.Cmd) {
 }
 
 func (f form) advance() (updated form, done bool, cmd tea.Cmd) {
-	one := !f.two
-	last := f.field == 1
-	done = one || last
+	last := f.field >= len(f.fields)-1
+	done = last
 	if done {
 		updated = f
 		return
 	}
 	updated = f
-	updated.field = 1
+	updated.field++
 	updated.notice = ""
 	updated, cmd = updated.focus()
 	return
 }
 
 func (f form) help() (hints []keyHint) {
-	one := !f.two
-	last := f.field == 1
-	saving := one || last
-	if saving {
+	last := f.field >= len(f.fields)-1
+	if last {
 		hints = formSaveKeys
 		return
 	}
@@ -101,24 +82,25 @@ func (f form) help() (hints []keyHint) {
 }
 
 func (f form) body() (text string) {
-	text = f.first.View()
-	if f.two {
-		text = text + "\n" + f.second.View()
+	for i, field := range f.fields {
+		line := field.View()
+		first := i == 0
+		if first {
+			text = line
+			continue
+		}
+		text = text + "\n" + line
 	}
 	return
 }
 
 func (f form) cursor() (cursor *tea.Cursor) {
-	field := f.active()
+	field := f.fields[f.field]
 	cursor = field.Cursor()
 	if cursor == nil {
 		return
 	}
-	cursor.Position.Y += 2
-	second := f.field == 1 && f.two
-	if second {
-		cursor.Position.Y++
-	}
+	cursor.Position.Y += 2 + f.field
 	return
 }
 

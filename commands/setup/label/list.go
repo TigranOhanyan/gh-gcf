@@ -7,7 +7,7 @@ import (
 	"charm.land/log/v2"
 	"github.com/spf13/cobra"
 
-	"github.com/TigranOhanyan/gh-gcf/commands/setup/config"
+	"github.com/TigranOhanyan/gh-gcf/commands/setup/common"
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 	configrecords "github.com/TigranOhanyan/gh-gcf/configdb/records"
 )
@@ -27,8 +27,8 @@ func newList() (cmd *cobra.Command) {
 	flags := cmd.Flags()
 	flags.StringVar(&owner, "owner", "", "owner of the app repo")
 	flags.StringVar(&repo, "repo", "", "name of the app repo")
-	config.RequireFlag(cmd, "owner")
-	config.RequireFlag(cmd, "repo")
+	common.RequireFlag(cmd, "owner")
+	common.RequireFlag(cmd, "repo")
 	return
 }
 
@@ -42,7 +42,7 @@ func runList(cmd *cobra.Command, owner string, repo string) (err error) {
 		}
 		return
 	}
-	err = config.WithRepo(ctx, owner, repo, use)
+	err = common.WithRepo(ctx, owner, repo, use)
 	if err != nil {
 		return
 	}
