@@ -52,8 +52,9 @@ func Test_RunBuilder_should_start_a_builder_for_an_open_issue(t *testing.T) {
 	requests := cursorRequests(t)
 	require.Len(t, requests, 1)
 	assert.Contains(t, requests[0], instruction)
-	assert.Contains(t, requests[0], "Issue #7: Add a thing")
-	assert.Contains(t, requests[0], "Do it")
+	assert.Contains(t, requests[0], "Issue #7: https://github.com/octo/app/issues/7")
+	assert.NotContains(t, requests[0], "Add a thing")
+	assert.NotContains(t, requests[0], "Do it")
 	assert.Contains(t, requests[0], agents[0].ID)
 }
 

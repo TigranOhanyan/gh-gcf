@@ -136,7 +136,8 @@ func (step builderStep) startIssue(ctx context.Context, repo commands.Repo, step
 		return
 	}
 
-	text := promptText(instruction, issue)
+	url := issueURL(repo, issue)
+	text := promptText(instruction, number, url)
 	prompt := agent.CursorPrompt{Text: text}
 	repoURL := fmt.Sprintf("https://github.com/%s/%s", repo.Owner, repo.Name)
 	oneRepo := agent.CursorRepo{URL: repoURL}
@@ -287,12 +288,9 @@ func reject(ctx context.Context, repo commands.Repo, stepID string, workID strin
 	return
 }
 
-func promptText(instruction string, issue *github.Issue) (text string) {
-	number := issue.GetNumber()
-	title := issue.GetTitle()
-	body := issue.GetBody()
-	header := fmt.Sprintf("Issue #%d: %s", number, title)
-	text = instruction + "\n\n" + header + "\n\n" + body
+func promptText(instruction string, number int, url string) (text string) {
+	header := fmt.Sprintf("Issue #%d: %s", number, url)
+	text = instruction + "\n\n" + header
 	return
 }
 
