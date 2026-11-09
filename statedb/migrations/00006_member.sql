@@ -1,2 +1,0 @@
--- +goose Up
--- Members are gone. A development is the configured flow.
