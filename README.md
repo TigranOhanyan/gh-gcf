@@ -22,7 +22,7 @@ gh extension install TigranOhanyan/gh-gcf
 
 1. Create an empty repository and clone it. This is the factory repo.
 
-2. Create a GitHub App. This is the factory app. The factory acts on GitHub as this app. Install it on the factory repo and on each app repo, before the tick workflow runs.
+2. Create the factory app. The steps are under [GitHub Apps](#github-apps). Install it on the factory repo and on each app repo before the tick workflow runs.
 
 3. In the factory checkout, on the branch you want to change:
 
@@ -40,7 +40,7 @@ Bind writes the tick workflow and commits. Push the branch. When the factory rep
 gh gcf setup tui
 ```
 
-Enter opens Repos or Apps. `a` adds a repo, a label, or an App ID. An App is the number GitHub shows as the App ID. Setup writes that id as `apps/<app id>`, and a repo can then use it. The private key is the Actions secret `GITHUB_APP_<app id>`. Bind writes that secret into the tick workflow.
+Enter opens Repos or Apps. `a` adds a repo, a label, or an App ID. An App is the number GitHub shows as the App ID. Setup writes that id as `apps/<app id>`, and a repo can then use it. Adding the App on GitHub, and the secret `GITHUB_APP_<app id>`, are under [GitHub Apps](#github-apps).
 
 Inside a repo, setup records labels, the Apps that repo uses, and developments. A label is a name you choose for one app repo. The starting label marks an issue as ready. The attention label marks an issue the factory stopped on, so a person has to look. The factory creates a missing label on that app repo. A label recorded for one app repo is not a label on another.
 
@@ -60,9 +60,7 @@ gh gcf setup development add --owner octo --repo app --name features --starting 
 gh gcf setup development check add --owner octo --repo app --development features --name "ci / unit"
 ```
 
-The scheduled workflow records a tick, then runs `compile app`, `compile label`, `compile development`, the `run` commands that start agents, and the `check` commands that record a finished agent, then pushes state. `app` checks each App ID configured for a repo. When that App is installed there, it records the client id and the installation id. A missing or suspended installation stops the step. `label` creates a configured label the app repo does not yet have.
-
-From the factory checkout, after `gh gcf run tick` prints an id:
+The scheduled workflow records a tick, runs the [steps](#steps), and pushes state. From the factory checkout, after `gh gcf run tick` prints an id:
 
 ```shell
 gh gcf compile app --tick <id>
@@ -78,6 +76,82 @@ gh gcf run fixer --tick <id>
 gh gcf check fixer --tick <id>
 ```
 
-## Run
+## GitHub Apps
 
-`run builder` starts the builder for an open issue that carries a development's starting label and has no development work. The work stores the issue number and URL and points at the development and the builder. The agent does not point back at the work. When the builder instruction no longer matches the compiled hash, that development waits and nothing is written. A refused create sets the work to attention and applies the development's attention label. A later run does not start another builder for that issue.
+A person creates every App on GitHub. There are two kinds.
+
+### Factory app
+
+The factory app is the identity the tick uses when it creates and reads GitHub resources. It does not build, review, or fix.
+
+1. Create the App and note the App ID GitHub shows.
+2. Generate a private key. That PEM is the Actions secret `FACTORY_GITHUB_APP_PRIVATE_KEY`. The App ID is `FACTORY_GITHUB_APP_ID`.
+3. Install it on the factory repo and on each app repo before the tick workflow runs.
+
+### Reviewer App
+
+A reviewer App is the identity one reviewer posts as. A development has two, and they are different Apps. The builder and the fixer have none.
+
+1. Create one App per reviewer and note each App ID.
+2. Generate a private key for each. Store the PEM as the Actions secret `GITHUB_APP_<app id>`. The key stays in that secret.
+3. Install each App on the account that owns the app repo. `compile app` records that installation. A missing or suspended installation stops the step.
+4. Register and attach the id from the factory checkout:
+
+```shell
+gh gcf setup apps add --id 42
+gh gcf setup apps attach --owner octo --repo app --id 42
+```
+
+5. Run `gh gcf bind` again after `apps/<app id>` exists, so the tick workflow receives `GITHUB_APP_<app id>`. Commit and push that change the same way as the first bind.
+
+## Steps
+
+A tick runs these steps in this order. Each one takes the tick id printed by `gh gcf run tick`.
+
+### `compile app`
+
+`compile app` records the client id and the installation id for each App configured on a repo. The same installation is left as it is. A missing or suspended installation stops the step.
+
+### `compile label`
+
+`compile label` creates a configured label the app repo does not yet have.
+
+### `compile development`
+
+`compile development` copies each development into state, with its check names and the SHA-256 of `builder.md`, `standards_reviewer.md`, `specification_reviewer.md`, and `fixer.md`. A missing file stops compilation. An unchanged development is left as it is. A changed instruction stores the new hash.
+
+### `run builder`
+
+`run builder` claims an open issue that has the development's starting label and no development work. The work stores the issue number and URL and points at the builder. When the instruction hash differs from the compiled hash, that development waits. A refused create sets the work to attention and applies the attention label. A later run leaves that issue alone.
+
+### `check builder`
+
+`check builder` records a finished builder: the pull request number and the builder head SHA. A builder that is still running changes nothing. A finished builder with no pull request, or a failed run, sets attention and applies the attention label. A failed run records no finish time, so the standards reviewer does not start.
+
+### `run standards-reviewer`
+
+`run standards-reviewer` starts that reviewer after the builder has finished. It does not wait for checks and it does not read a verdict. A hash mismatch waits. A refused create sets attention.
+
+### `check standards-reviewer`
+
+`check standards-reviewer` records that the reviewer has finished. A run that is still going changes nothing. A failed run sets attention and applies the attention label.
+
+### `run specification-reviewer`
+
+`run specification-reviewer` starts that reviewer after the standards reviewer has finished. It does not wait for checks, and no verdict is read between the two reviewers. A hash mismatch waits. A refused create sets attention.
+
+### `check specification-reviewer`
+
+`check specification-reviewer` records that finish. A run that is still going changes nothing. A failed run sets attention and applies the attention label.
+
+### `run fixer`
+
+`run fixer` reads the listed checks on the builder head SHA once both reviewers have finished. The newest run of each listed name counts. A missing run, or a queued or in-progress run, waits. Success, skipped, and neutral have passed. Failure, cancelled, and timed out are red. A name that is not listed is ignored. No listed names means the checks have already passed.
+
+Verdicts are read only after every listed check has finished, including a red one. A verdict is that App's latest `APPROVED` or `CHANGES_REQUESTED` review. A `COMMENTED` review is a missing verdict. A missing verdict sets attention and does not start the fixer. With both verdicts present, a changes request or a red check starts the fixer once. Two approvals and every listed check passed set the work to finished and leave the pull request as it is. The fixer stays unset.
+
+### `check fixer`
+
+`check fixer` records the fixer head SHA when that run finishes. A run still going changes nothing. A failed run sets attention and records no fixer head SHA. After the fixer has finished, the listed checks are read on the fixer head SHA and reviews are not read again. A check that has not finished waits. Every listed check passed sets the work to finished and leaves the pull request as it is. One red check sets attention. The fixer does not run again.
+
+A later tick leaves an attention work and a finished work alone. The factory does not merge the pull request or close the issue.
