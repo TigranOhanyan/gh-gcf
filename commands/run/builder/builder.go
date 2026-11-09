@@ -9,7 +9,7 @@ import (
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
 	"github.com/TigranOhanyan/gh-gcf/commands/executor"
-	"github.com/TigranOhanyan/gh-gcf/commands/run"
+	"github.com/TigranOhanyan/gh-gcf/commands/run/agent"
 )
 
 func NewRunBuilder() (cmd *cobra.Command) {
@@ -44,7 +44,7 @@ func NewRunBuilder() (cmd *cobra.Command) {
 					return
 				}
 			}
-			cursor, err := run.NewCursorClient()
+			cursor, err := agent.NewCursorClient()
 			if err != nil {
 				return
 			}

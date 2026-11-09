@@ -383,7 +383,7 @@ func stepsAtTip(t *testing.T, repoDir string, rel string) (rows []records.Step) 
 func runTick(t *testing.T, repoDir string) (id string) {
 	t.Helper()
 	t.Chdir(repoDir)
-	stdout := mustRoot(t, "tick")
+	stdout := mustRoot(t, "run tick")
 	id = strings.TrimSpace(stdout)
 	require.NotEmpty(t, id)
 	return

@@ -701,7 +701,7 @@ func useStateBranch(t *testing.T, repoDir string) {
 func runTick(t *testing.T, repoDir string) (id string) {
 	t.Helper()
 	t.Chdir(repoDir)
-	stdout := mustRoot(t, "tick")
+	stdout := mustRoot(t, "run tick")
 	id = strings.TrimSpace(stdout)
 	require.NotEmpty(t, id)
 	return
@@ -1128,7 +1128,7 @@ func recordApps(t *testing.T, repoDir string) {
 func runApp(t *testing.T, repoDir string, id string) (err error) {
 	t.Helper()
 	t.Chdir(repoDir)
-	line := fmt.Sprintf("app --tick %s", id)
+	line := fmt.Sprintf("compile app --tick %s", id)
 	_, err = runRoot(t, line)
 	return
 }

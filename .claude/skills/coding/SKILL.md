@@ -3,8 +3,9 @@ name: coding
 description: >-
   Command packages for this repo. Main commands are bind, setup, run, compile, and check.
   A command follows commands/run/builder/builder.go. A subcommand is its own package,
-  at most three packages deep; deeper subcommands are files. Helpers stay in the
-  parent package and are exported. Command tests run plain shell lines through
+  at most three packages deep; deeper subcommands are files. Each main command
+  builds its own bundle. Root adds bind, check, compile, run, and setup.
+  Command tests run plain shell lines through
   the root command with Shell and Git. Breaking changes outside the current
   subissue of issue 21 are commented out. Schema changes go into the existing
   migration file. A new table gets a new file. Use when adding or moving a
@@ -34,9 +35,11 @@ A subcommand of a main command is its own package. Three packages is the deepest
 
 ## Helpers
 
-A helper used by a command package and its subcommand packages stays in the parent package and is exported. For setup, that is package `setup`. Do not add a `shared` package.
+Each of bind, check, compile, run, and setup builds its own command and adds its subcommands. The root command adds those five and does not add their subcommands.
 
-A child package may import its parent. The parent does not import the child. The root command attaches the child, so the two packages do not import each other.
+A helper used by a command package and its subcommands stays out of the command package, because that package imports the subcommands. Setup helpers are package `config` in `commands/setup/config`. Run helpers are package `agent` in `commands/run/agent`. Do not add another shared package.
+
+A subcommand imports the helper package. It does not import the command package that imports the subcommand.
 
 ## Tests
 

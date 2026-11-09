@@ -368,6 +368,8 @@ func Test_Setup_should_leave_a_missing_config_database_uncreated(t *testing.T) {
 	openRepoList(t, session)
 	session.wait("octo/app")
 	session.write("\r")
+	session.wait("labels")
+	session.write("\r")
 	session.wait("config.db is missing")
 	session.write("a")
 	err = session.quit()
@@ -416,6 +418,67 @@ func Test_Setup_should_leave_the_database_unchanged_when_add_is_cancelled(t *tes
 
 	labels := storedLabels(t, repoDir, "octo", "app")
 	assert.Empty(t, labels)
+}
+
+func Test_Setup_should_keep_a_log_line_off_the_screen(t *testing.T) {
+	repoDir := setupCheckout(t)
+	session := startSetup(t, repoDir)
+	openRepoList(t, session)
+	session.write("a")
+	session.wait("repos>add")
+	session.write("octo")
+	session.write("\r")
+	session.wait("save")
+	session.write("app")
+	session.write("\r")
+	session.wait("octo/app")
+
+	screen := session.screen()
+	assert.NotContains(t, screen, "INFO")
+	assert.NotContains(t, screen, "create repo")
+	err := session.quit()
+	require.NoError(t, err)
+}
+
+func Test_Setup_should_show_a_repo_added_after_leaving_the_list(t *testing.T) {
+	repoDir := setupCheckout(t)
+	session := startSetup(t, repoDir)
+	openRepoList(t, session)
+	session.wait("No app repos yet.")
+	session.escape()
+	session.wait("apps")
+
+	runBinary(t, repoDir, "setup", "repo", "add", "--owner", "octo", "--name", "app")
+
+	session.write("\r")
+	session.wait("octo/app")
+	err := session.quit()
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(repoDir, "repos", "octo", "app", "config.db"))
+	require.NoError(t, err)
+}
+
+func Test_Setup_should_show_a_label_added_while_the_repo_menu_is_showing(t *testing.T) {
+	repoDir := setupCheckout(t)
+	recordRepo(t, repoDir)
+	session := startSetup(t, repoDir)
+	openRepoList(t, session)
+	session.wait("octo/app")
+	session.write("\r")
+	session.wait("labels")
+
+	runBinary(t, repoDir, "setup", "label", "add", "--owner", "octo", "--repo", "app", "--name", "bug", "--color", "ededed")
+
+	session.write("\r")
+	session.wait("bug  ededed")
+	err := session.quit()
+	require.NoError(t, err)
+
+	labels := storedLabels(t, repoDir, "octo", "app")
+	require.Len(t, labels, 1)
+	assert.Equal(t, "bug", labels[0].Name)
+	assert.Equal(t, "ededed", labels[0].Color)
 }
 
 func setupCheckout(t *testing.T) (repoDir string) {
@@ -525,7 +588,7 @@ type terminalSession struct {
 func startSetup(t *testing.T, repoDir string) (session *terminalSession) {
 	t.Helper()
 	bin := setupBinary(t)
-	cmd := exec.Command(bin, "setup")
+	cmd := exec.Command(bin, "setup", "tui")
 	cmd.Dir = repoDir
 	cmd.Env = withTerm(os.Environ())
 	term, err := vttest.NewTerminal(t, setupCols, setupRows)
@@ -658,6 +721,15 @@ var (
 	setupBin     string
 	setupBinErr  error
 )
+
+func runBinary(t *testing.T, repoDir string, args ...string) {
+	t.Helper()
+	bin := setupBinary(t)
+	cmd := exec.Command(bin, args...)
+	cmd.Dir = repoDir
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+}
 
 func setupBinary(t *testing.T) (path string) {
 	t.Helper()

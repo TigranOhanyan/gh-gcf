@@ -15,7 +15,7 @@ import (
 	"github.com/oklog/ulid/v2"
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
-	"github.com/TigranOhanyan/gh-gcf/commands/run"
+	"github.com/TigranOhanyan/gh-gcf/commands/run/agent"
 	"github.com/TigranOhanyan/gh-gcf/statedb/records"
 )
 
@@ -28,7 +28,7 @@ const eventRejected = "rejected"
 type builderStep struct {
 	GitHub *github.Client
 	app    commands.FactoryApp
-	cursor run.CursorClient
+	cursor agent.CursorClient
 }
 
 func (builderStep) Name() (name string) {
@@ -84,7 +84,7 @@ func (step builderStep) startDevelopment(ctx context.Context, repo commands.Repo
 	if err != nil {
 		return
 	}
-	issues, err := run.ListOpenIssues(ctx, client, repo.Owner, repo.Name, item.StartingLabel)
+	issues, err := agent.ListOpenIssues(ctx, client, repo.Owner, repo.Name, item.StartingLabel)
 	if err != nil {
 		return
 	}
@@ -137,11 +137,11 @@ func (step builderStep) startIssue(ctx context.Context, repo commands.Repo, step
 	}
 
 	text := promptText(instruction, issue)
-	prompt := run.CursorPrompt{Text: text}
+	prompt := agent.CursorPrompt{Text: text}
 	repoURL := fmt.Sprintf("https://github.com/%s/%s", repo.Owner, repo.Name)
-	oneRepo := run.CursorRepo{URL: repoURL}
-	repos := []run.CursorRepo{oneRepo}
-	body := run.CursorCreate{
+	oneRepo := agent.CursorRepo{URL: repoURL}
+	repos := []agent.CursorRepo{oneRepo}
+	body := agent.CursorCreate{
 		Prompt:       prompt,
 		AutoCreatePR: true,
 		AgentID:      agentID,
