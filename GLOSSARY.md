@@ -16,9 +16,23 @@ _Avoid_: host, host repo, target repo
 The commit that installs a factory in its factory repo.
 _Avoid_: setup, init
 
+## Setup
+
 **Setup**:
 The user's recording of an app repo's config.
 _Avoid_: bind, init
+
+**TUI**:
+The interactive Setup. Its command is `setup tui`.
+_Avoid_: wizard
+
+**Screen**:
+The one place the TUI is showing. A return builds it again.
+_Avoid_: page, widget, step
+
+**Repo menu**:
+The labels and attached Apps of one app repo.
+_Avoid_: sections
 
 ## Running
 

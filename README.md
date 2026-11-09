@@ -37,7 +37,7 @@ Bind writes the tick workflow and commits. Push the branch. When the factory rep
 5. From the factory checkout:
 
 ```shell
-gh gcf setup
+gh gcf setup tui
 ```
 
 Enter opens Repos or Apps. `a` adds a repo, a label, or an App ID. An App is the number GitHub shows as the App ID. Setup writes that id as `apps/<app id>`, and a repo can then use it. The private key is the Actions secret `GITHUB_APP_<app id>`. Bind writes that secret into the tick workflow.

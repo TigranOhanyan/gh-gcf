@@ -18,9 +18,9 @@ import (
 var colorHex = regexp.MustCompile(`^[0-9a-f]{6}$`)
 
 type AppRepo struct {
-	owner     string
-	name      string
-	hasConfig bool
+	Owner     string
+	Name      string
+	HasConfig bool
 }
 
 func ListRepos(factoryDir string) (repos []AppRepo, err error) {
@@ -65,9 +65,9 @@ func ListRepos(factoryDir string) (repos []AppRepo, err error) {
 			_, statErr := os.Stat(configFile)
 			hasConfig := statErr == nil
 			repo := AppRepo{
-				owner:     ownerName,
-				name:      nameText,
-				hasConfig: hasConfig,
+				Owner:     ownerName,
+				Name:      nameText,
+				HasConfig: hasConfig,
 			}
 			repos = append(repos, repo)
 		}
@@ -82,7 +82,7 @@ func ListRepos(factoryDir string) (repos []AppRepo, err error) {
 }
 
 func RepoKey(repo AppRepo) (key string) {
-	key = repo.owner + "/" + repo.name
+	key = repo.Owner + "/" + repo.Name
 	return
 }
 
@@ -222,11 +222,6 @@ func AttachApp(ctx context.Context, db *configdb.DB, id int64) (err error) {
 		return
 	}
 	log.Info("attach app", "app", id)
-	return
-}
-
-func secretName(id int64) (name string) {
-	name = fmt.Sprintf("GITHUB_APP_%d", id)
 	return
 }
 
