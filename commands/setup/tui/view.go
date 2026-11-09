@@ -5,11 +5,6 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-const homeKeys = "enter open   q quit"
-const listKeys = "a add   enter open   esc back   q quit"
-const pickKeys = "enter select   esc back   q quit"
-const formNextKeys = "tab next   enter next   esc back"
-const formSaveKeys = "tab saves   enter saves   esc back"
 const noRepos = "No app repos yet."
 const noLabels = "No labels yet."
 const noApps = "No apps yet."
@@ -18,19 +13,115 @@ const pathPastFg = "#E8EEF4"
 const pathPastBg = "#3C4F65"
 const pathNowFg = "#FFFFFF"
 const pathNowBg = "#2F6FED"
+const keyFg = "#FFFFFF"
+const keyBg = "#2F6FED"
+const barFg = "#E8EEF4"
+const barBg = "#1B2836"
 
-func render(trail []string, body string, notice string, keys string, cursor *tea.Cursor) (view tea.View) {
+type keyHint struct {
+	key   string
+	label string
+}
+
+var homeKeys = []keyHint{
+	{key: "enter", label: "open"},
+	{key: "q", label: "quit"},
+}
+
+var listKeys = []keyHint{
+	{key: "a", label: "add"},
+	{key: "enter", label: "open"},
+	{key: "esc", label: "back"},
+	{key: "q", label: "quit"},
+}
+
+var pickKeys = []keyHint{
+	{key: "enter", label: "select"},
+	{key: "esc", label: "back"},
+	{key: "q", label: "quit"},
+}
+
+var formNextKeys = []keyHint{
+	{key: "tab", label: "next"},
+	{key: "enter", label: "next"},
+	{key: "esc", label: "back"},
+}
+
+var formSaveKeys = []keyHint{
+	{key: "tab", label: "saves"},
+	{key: "enter", label: "saves"},
+	{key: "esc", label: "back"},
+}
+
+var termWidth int
+var termHeight int
+
+func noteSize(msg tea.Msg) (sized bool) {
+	size, ok := msg.(tea.WindowSizeMsg)
+	if !ok {
+		return
+	}
+	termWidth = size.Width
+	termHeight = size.Height
+	sized = true
+	return
+}
+
+func render(trail []string, body string, notice string, hints []keyHint, cursor *tea.Cursor) (view tea.View) {
 	path := paintPath(trail)
 	lines := []string{path, "", body, ""}
 	lines = appendNotice(lines, notice)
-	lines = append(lines, keys)
-	text := joinLines(lines)
+	content := joinLines(lines)
+	bar := paintKeys(hints)
+	text := pinKeys(content, bar)
 	view = tea.NewView(text)
 	view.AltScreen = true
 	view.WindowTitle = "setup"
 	if cursor != nil {
 		view.Cursor = cursor
 	}
+	return
+}
+
+func paintKeys(hints []keyHint) (bar string) {
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(keyFg)).Background(lipgloss.Color(keyBg))
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(barFg)).Background(lipgloss.Color(barBg))
+	gap := labelStyle.Render("  ")
+	row := ""
+	for i, hint := range hints {
+		chip := keyStyle.Render(hint.key)
+		word := labelStyle.Render(" " + hint.label)
+		pair := chip + word
+		first := i == 0
+		if first {
+			row = pair
+			continue
+		}
+		row = row + gap + pair
+	}
+	style := lipgloss.NewStyle().Background(lipgloss.Color(barBg))
+	wide := termWidth > 0
+	if wide {
+		style = style.Width(termWidth)
+	}
+	bar = style.Render(row)
+	return
+}
+
+func pinKeys(content string, bar string) (text string) {
+	unknown := termHeight < 2
+	if unknown {
+		text = content + "\n" + bar
+		return
+	}
+	barHeight := lipgloss.Height(bar)
+	bodyHeight := termHeight - barHeight
+	short := bodyHeight < 1
+	if short {
+		bodyHeight = 1
+	}
+	fitted := lipgloss.NewStyle().MaxHeight(bodyHeight).Height(bodyHeight).Render(content)
+	text = fitted + "\n" + bar
 	return
 }
 

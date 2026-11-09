@@ -37,6 +37,11 @@ func (s addLabel) release() {
 }
 
 func (s addLabel) Update(msg tea.Msg) (updated tea.Model, cmd tea.Cmd) {
+	sized := noteSize(msg)
+	if sized {
+		updated = s
+		return
+	}
 	press, isPress := msg.(tea.KeyPressMsg)
 	if !isPress {
 		s.form, cmd = s.form.apply(msg)

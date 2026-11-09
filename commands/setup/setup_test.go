@@ -420,6 +420,26 @@ func Test_Setup_should_leave_the_database_unchanged_when_add_is_cancelled(t *tes
 	assert.Empty(t, labels)
 }
 
+func Test_Setup_should_keep_a_log_line_off_the_screen(t *testing.T) {
+	repoDir := setupCheckout(t)
+	session := startSetup(t, repoDir)
+	openRepoList(t, session)
+	session.write("a")
+	session.wait("repos>add")
+	session.write("octo")
+	session.write("\r")
+	session.wait("save")
+	session.write("app")
+	session.write("\r")
+	session.wait("octo/app")
+
+	screen := session.screen()
+	assert.NotContains(t, screen, "INFO")
+	assert.NotContains(t, screen, "create repo")
+	err := session.quit()
+	require.NoError(t, err)
+}
+
 func Test_Setup_should_show_a_repo_added_after_leaving_the_list(t *testing.T) {
 	repoDir := setupCheckout(t)
 	session := startSetup(t, repoDir)

@@ -29,6 +29,11 @@ func (s addApp) Init() (cmd tea.Cmd) {
 func (s addApp) release() {}
 
 func (s addApp) Update(msg tea.Msg) (updated tea.Model, cmd tea.Cmd) {
+	sized := noteSize(msg)
+	if sized {
+		updated = s
+		return
+	}
 	press, isPress := msg.(tea.KeyPressMsg)
 	if !isPress {
 		s.form, cmd = s.form.apply(msg)

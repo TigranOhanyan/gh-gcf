@@ -88,15 +88,15 @@ func (f form) advance() (updated form, done bool, cmd tea.Cmd) {
 	return
 }
 
-func (f form) help() (keys string) {
+func (f form) help() (hints []keyHint) {
 	one := !f.two
 	last := f.field == 1
 	saving := one || last
 	if saving {
-		keys = formSaveKeys
+		hints = formSaveKeys
 		return
 	}
-	keys = formNextKeys
+	hints = formNextKeys
 	return
 }
 

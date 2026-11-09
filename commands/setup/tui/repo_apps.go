@@ -47,6 +47,11 @@ func (s repoApps) release() {
 }
 
 func (s repoApps) Update(msg tea.Msg) (updated tea.Model, cmd tea.Cmd) {
+	sized := noteSize(msg)
+	if sized {
+		updated = s
+		return
+	}
 	press, isPress := msg.(tea.KeyPressMsg)
 	if !isPress {
 		updated = s

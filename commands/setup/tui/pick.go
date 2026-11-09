@@ -48,6 +48,11 @@ func (s pick) release() {
 }
 
 func (s pick) Update(msg tea.Msg) (updated tea.Model, cmd tea.Cmd) {
+	sized := noteSize(msg)
+	if sized {
+		updated = s
+		return
+	}
 	press, isPress := msg.(tea.KeyPressMsg)
 	if !isPress {
 		updated = s

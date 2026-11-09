@@ -29,6 +29,11 @@ func (s home) Init() (cmd tea.Cmd) {
 func (s home) release() {}
 
 func (s home) Update(msg tea.Msg) (updated tea.Model, cmd tea.Cmd) {
+	sized := noteSize(msg)
+	if sized {
+		updated = s
+		return
+	}
 	press, isPress := msg.(tea.KeyPressMsg)
 	if !isPress {
 		updated = s

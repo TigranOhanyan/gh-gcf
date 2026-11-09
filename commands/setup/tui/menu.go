@@ -36,6 +36,11 @@ func (s menu) Init() (cmd tea.Cmd) {
 func (s menu) release() {}
 
 func (s menu) Update(msg tea.Msg) (updated tea.Model, cmd tea.Cmd) {
+	sized := noteSize(msg)
+	if sized {
+		updated = s
+		return
+	}
 	press, isPress := msg.(tea.KeyPressMsg)
 	if !isPress {
 		updated = s

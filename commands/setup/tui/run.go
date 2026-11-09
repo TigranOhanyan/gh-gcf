@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"charm.land/bubbletea/v2"
 	"charm.land/log/v2"
@@ -23,12 +24,15 @@ func Run(ctx context.Context, dir string) (err error) {
 		log.Error("setup", "path", dir, "err", err)
 		return
 	}
-	log.Info("setup", "path", dir)
-
 	initial := newHome(ctx, dir)
 	option := tea.WithContext(ctx)
 	program := tea.NewProgram(initial, option)
+	previous := log.Default()
+	quiet := log.New(io.Discard)
+	log.SetDefault(quiet)
+	defer log.SetDefault(previous)
 	final, err := program.Run()
+	log.SetDefault(previous)
 	finished, ok := final.(sessionScreen)
 	if ok {
 		finished.release()
