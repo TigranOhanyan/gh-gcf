@@ -30,7 +30,7 @@ const headSHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 func Test_CheckBuilder_should_record_the_builders_finished_time_the_pull_request_number_and_the_builder_head_sha(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
-	stubCursor(t, 200, `{"run":{"id":"`+runID+`"}}`)
+	stubCursor(t, 200, `{"agent":{"id":"agent-11111111-1111-7111-8111-111111111111"},"run":{"id":"`+runID+`"}}`)
 	repoDir := setupFactory(t, instruction)
 	id := runTick(t, repoDir)
 	err := runCompile(t, repoDir, id)
@@ -97,7 +97,7 @@ func Test_CheckBuilder_should_record_the_builders_finished_time_the_pull_request
 func Test_CheckBuilder_should_leave_a_running_builder_and_write_no_finished_time(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
-	stubCursor(t, 200, `{"run":{"id":"`+runID+`"}}`)
+	stubCursor(t, 200, `{"agent":{"id":"agent-11111111-1111-7111-8111-111111111111"},"run":{"id":"`+runID+`"}}`)
 	repoDir := setupFactory(t, instruction)
 	id := runTick(t, repoDir)
 	err := runCompile(t, repoDir, id)
@@ -134,7 +134,7 @@ func Test_CheckBuilder_should_leave_a_running_builder_and_write_no_finished_time
 func Test_CheckBuilder_should_set_attention_when_the_finished_builder_has_no_pull_request(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
-	stubCursor(t, 200, `{"run":{"id":"`+runID+`"}}`)
+	stubCursor(t, 200, `{"agent":{"id":"agent-11111111-1111-7111-8111-111111111111"},"run":{"id":"`+runID+`"}}`)
 	stubLabels(t, 7)
 	repoDir := setupFactory(t, instruction)
 	id := runTick(t, repoDir)
@@ -177,7 +177,7 @@ func Test_CheckBuilder_should_set_attention_when_the_finished_builder_has_no_pul
 func Test_CheckBuilder_should_set_attention_when_the_builder_run_has_failed(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
-	stubCursor(t, 200, `{"run":{"id":"`+runID+`"}}`)
+	stubCursor(t, 200, `{"agent":{"id":"agent-11111111-1111-7111-8111-111111111111"},"run":{"id":"`+runID+`"}}`)
 	stubLabels(t, 7)
 	repoDir := setupFactory(t, instruction)
 	id := runTick(t, repoDir)
@@ -220,7 +220,7 @@ func Test_CheckBuilder_should_set_attention_when_the_builder_run_has_failed(t *t
 func Test_CheckBuilder_should_leave_an_attention_work_and_start_no_second_builder(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
-	stubCursor(t, 200, `{"run":{"id":"`+runID+`"}}`)
+	stubCursor(t, 200, `{"agent":{"id":"agent-11111111-1111-7111-8111-111111111111"},"run":{"id":"`+runID+`"}}`)
 	stubLabels(t, 7)
 	repoDir := setupFactory(t, instruction)
 	id := runTick(t, repoDir)

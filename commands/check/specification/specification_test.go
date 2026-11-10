@@ -2,6 +2,10 @@ package specification_test
 
 import (
 	"bytes"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -193,7 +197,7 @@ func startedSpecificationReviewer(t *testing.T) (repoDir string) {
 	t.Helper()
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
-	created := fmt.Sprintf(`{"run":{"id":"%s"}}`, runID)
+	created := fmt.Sprintf(`{"agent":{"id":"%s"},"run":{"id":"%s"}}`, "agent-11111111-1111-7111-8111-111111111111", runID)
 	stubCursor(t, 200, created)
 	repoDir = setupFactory(t)
 	id := runTick(t, repoDir)
@@ -210,7 +214,7 @@ func startedSpecificationReviewer(t *testing.T) (repoDir string) {
 	standardsTick := runTick(t, repoDir)
 	err = runStandards(t, repoDir, standardsTick)
 	require.NoError(t, err)
-	standardsID := agentIDByRole(t, repoDir, "standards_reviewer")
+	standardsID := cursorAgentIDByRole(t, repoDir, "standards_reviewer")
 	stubRun(t, standardsID, finishedReviewerRun())
 	checked := runTick(t, repoDir)
 	err = runCheckStandards(t, repoDir, checked)
@@ -317,10 +321,43 @@ func runCheckBuilder(t *testing.T, repoDir string, id string) (err error) {
 
 func runStandards(t *testing.T, repoDir string, id string) (err error) {
 	t.Helper()
+	allowStandardsApp(t)
 	t.Setenv("GH_TOKEN", token)
 	t.Chdir(repoDir)
 	line := fmt.Sprintf("run standards-reviewer --tick %s", id)
 	_, err = runRoot(t, line)
+	return
+}
+
+func allowStandardsApp(t *testing.T) {
+	t.Helper()
+	pemText := testAppKey(t)
+	t.Setenv("FACTORY_GITHUB_APP_42", pemText)
+	path := fmt.Sprintf("/repos/%s/%s/installation", owner, repoName)
+	body := `{"id":420,"client_id":"Iv1.standards","suspended_at":null}`
+	rule := wiremock.Get(wiremock.URLPathEqualTo(path)).WillReturnResponse(
+		wiremock.NewResponse().WithStatus(200).WithHeader("Content-Type", "application/json").WithBody(body),
+	)
+	err := wiremockClient.StubFor(rule)
+	require.NoError(t, err)
+	tokenPath := "/app/installations/420/access_tokens"
+	tokenBody := `{"token":"ghs_standards"}`
+	tokenRule := wiremock.Post(wiremock.URLPathEqualTo(tokenPath)).WillReturnResponse(
+		wiremock.NewResponse().WithStatus(200).WithHeader("Content-Type", "application/json").WithBody(tokenBody),
+	)
+	err = wiremockClient.StubFor(tokenRule)
+	require.NoError(t, err)
+}
+
+func testAppKey(t *testing.T) (pemText string) {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	block := &pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	}
+	pemText = string(pem.EncodeToMemory(block))
 	return
 }
 
@@ -389,6 +426,18 @@ func agentIDByRole(t *testing.T, repoDir string, role string) (id string) {
 	agent, found := agentByRole(agents, role)
 	require.True(t, found)
 	id = agent.ID
+	return
+}
+
+func cursorAgentIDByRole(t *testing.T, repoDir string, role string) (id string) {
+	t.Helper()
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	agents := listAgents(t, db)
+	agent, found := agentByRole(agents, role)
+	require.True(t, found)
+	require.True(t, agent.CursorAgentID.Valid)
+	id = agent.CursorAgentID.String
 	return
 }
 

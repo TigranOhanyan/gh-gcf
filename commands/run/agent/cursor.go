@@ -29,19 +29,26 @@ type CursorRepo struct {
 }
 
 // CursorCreate is the body that starts one Cursor agent.
+// An empty AgentID is omitted. Cursor refuses a body that sends both agentId and envVars.
 type CursorCreate struct {
-	Prompt       CursorPrompt `json:"prompt"`
-	Repos        []CursorRepo `json:"repos"`
-	AutoCreatePR bool         `json:"autoCreatePR"`
-	AgentID      string       `json:"agentId"`
+	Prompt       CursorPrompt      `json:"prompt"`
+	Repos        []CursorRepo      `json:"repos"`
+	AutoCreatePR bool              `json:"autoCreatePR"`
+	AgentID      string            `json:"agentId,omitempty"`
+	EnvVars      map[string]string `json:"envVars,omitempty"`
 }
 
 type cursorRun struct {
 	ID string `json:"id"`
 }
 
+type cursorAgent struct {
+	ID string `json:"id"`
+}
+
 type cursorCreateResponse struct {
-	Run cursorRun `json:"run"`
+	Agent cursorAgent `json:"agent"`
+	Run   cursorRun   `json:"run"`
 }
 
 // CursorClient posts agent creates to the Cursor API.
@@ -73,7 +80,8 @@ func NewCursorClient() (client CursorClient, err error) {
 
 // Create posts one agent. A transport failure returns status 0.
 // 200, 201, and 204 are success. Any other status returns the response body.
-func (client CursorClient) Create(ctx context.Context, body CursorCreate) (runID string, responseBody string, status int, err error) {
+// A success body with a missing agent id or a missing run id is an error.
+func (client CursorClient) Create(ctx context.Context, body CursorCreate) (agentID string, runID string, responseBody string, status int, err error) {
 	payload, err := json.Marshal(body)
 	if err != nil {
 		log.Error("cursor create", "err", err)
@@ -117,10 +125,17 @@ func (client CursorClient) Create(ctx context.Context, body CursorCreate) (runID
 		log.Error("cursor create", "err", err)
 		return
 	}
+	agentID = parsed.Agent.ID
 	runID = parsed.Run.ID
-	missing := runID == ""
-	if missing {
+	missingRun := runID == ""
+	if missingRun {
 		err = fmt.Errorf("cursor run id is missing")
+		log.Error("cursor create", "err", err)
+		return
+	}
+	missingAgent := agentID == ""
+	if missingAgent {
+		err = fmt.Errorf("cursor agent id is missing")
 		log.Error("cursor create", "err", err)
 	}
 	return

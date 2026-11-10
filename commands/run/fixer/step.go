@@ -191,7 +191,7 @@ func (step checkStep) startFixer(ctx context.Context, repo commands.Repo, stepID
 		AgentID:      agentID,
 	}
 	body.Repos = repos
-	runID, raw, status, err := step.cursor.Create(ctx, body)
+	_, runID, raw, status, err := step.cursor.Create(ctx, body)
 	lost := err != nil && status == 0
 	if lost {
 		return

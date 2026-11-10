@@ -2,6 +2,10 @@ package standards_test
 
 import (
 	"bytes"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +19,7 @@ import (
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
 	"github.com/TigranOhanyan/gh-gcf/commands/root"
+	"github.com/TigranOhanyan/gh-gcf/commands/run/agent"
 	"github.com/TigranOhanyan/gh-gcf/statedb"
 	"github.com/TigranOhanyan/gh-gcf/statedb/records"
 )
@@ -26,10 +31,14 @@ const developmentName = "features"
 const builderInstruction = "Build the issue."
 const standardsInstruction = "Review the standards."
 const runID = "run-11111111-1111-7111-8111-111111111111"
+const cursorAgentID = "agent-11111111-1111-7111-8111-111111111111"
 const headSHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+const standardsInstallation int64 = 420
+const standardsToken = "ghs_standards"
 
 func Test_RunStandardsReviewer_should_start_the_standards_reviewer_when_the_builder_has_finished(t *testing.T) {
 	repoDir := readyBuilder(t)
+	allowStandardsApp(t)
 	id := runTick(t, repoDir)
 
 	err := runStandards(t, repoDir, id)
@@ -67,22 +76,34 @@ func Test_RunStandardsReviewer_should_start_the_standards_reviewer_when_the_buil
 	assert.True(t, builderAgent.FinishedAt.Valid)
 	assert.True(t, strings.HasPrefix(reviewer.ID, "bc-"))
 	assert.Equal(t, "standards_reviewer", reviewer.Role)
+	assert.False(t, builderAgent.CursorAgentID.Valid)
+	assert.True(t, reviewer.CursorAgentID.Valid)
+	assert.Equal(t, cursorAgentID, reviewer.CursorAgentID.String)
 	assert.True(t, reviewer.CursorRunID.Valid)
 	assert.Equal(t, runID, reviewer.CursorRunID.String)
 	assert.NotEmpty(t, reviewer.StartedAt)
 	assert.False(t, reviewer.FinishedAt.Valid)
+	instructionPath := filepath.Join(repoDir, "repos", owner, repoName, "developments", developmentName, "standards_reviewer.md")
+	written, err := os.ReadFile(instructionPath)
+	require.NoError(t, err)
+	assert.Equal(t, standardsInstruction, string(written))
 	requests := cursorRequests(t)
 	require.Len(t, requests, 2)
-	request, found := requestFor(requests, reviewer.ID)
+	request, found := requestContaining(requests, standardsInstruction)
 	require.True(t, found)
-	assert.Contains(t, request, standardsInstruction)
 	assert.Contains(t, request, "Pull request #9")
 	assert.Contains(t, request, "Issue #7: https://github.com/octo/app/issues/7")
+	assert.Contains(t, request, agent.ReviewerTrailer())
+	assert.NotContains(t, request, "agentId")
+	assert.Contains(t, request, `"GH_PERMISSION":"WRITE_READ"`)
+	assert.Contains(t, request, `"GH_TOKEN":"`+standardsToken+`"`)
+	assert.Contains(t, request, `"GITHUB_TOKEN":"`+standardsToken+`"`)
 	assert.Contains(t, request, `"autoCreatePR":false`)
 }
 
 func Test_RunStandardsReviewer_should_record_the_standards_reviewers_started_time_and_a_starting_event(t *testing.T) {
 	repoDir := readyBuilder(t)
+	allowStandardsApp(t)
 	id := runTick(t, repoDir)
 	startOfTest := time.Now().Add(-time.Second)
 
@@ -138,7 +159,7 @@ func Test_RunStandardsReviewer_should_wait_when_the_standards_reviewer_instructi
 func Test_RunStandardsReviewer_should_not_start_a_standards_reviewer_when_the_development_work_is_attention(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
-	stubCursor(t, 200, `{"run":{"id":"`+runID+`"}}`)
+	stubCursor(t, 200, createdCursor())
 	stubLabels(t, 7)
 	repoDir := setupFactory(t, builderInstruction, standardsInstruction)
 	id := runTick(t, repoDir)
@@ -170,11 +191,136 @@ func Test_RunStandardsReviewer_should_not_start_a_standards_reviewer_when_the_de
 	assert.Len(t, cursorRequests(t), 1)
 }
 
+func Test_RunStandardsReviewer_should_set_attention_when_the_private_key_is_missing(t *testing.T) {
+	repoDir := readyBuilder(t)
+	resetWireMock(t)
+	stubLabels(t, 7)
+	t.Setenv("FACTORY_GITHUB_APP_42", "")
+	id := runTick(t, repoDir)
+
+	err := runStandards(t, repoDir, id)
+	require.NoError(t, err)
+
+	assert.Empty(t, cursorRequests(t))
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	assert.Equal(t, "attention", works[0].Status)
+	assert.True(t, works[0].StandardsReviewerAgent.Valid)
+	agents := listAgents(t, db)
+	reviewer, found := agentByRole(agents, "standards_reviewer")
+	require.True(t, found)
+	assert.False(t, reviewer.CursorAgentID.Valid)
+	assert.False(t, reviewer.CursorRunID.Valid)
+	events := listEvents(t, db)
+	_, ackFound := eventFor(events, reviewer.ID, "ack")
+	assert.False(t, ackFound)
+	rejected, rejectedFound := eventFor(events, reviewer.ID, "rejected")
+	require.True(t, rejectedFound)
+	assert.Contains(t, rejected.Message, "github app key is missing")
+	labels := labelPosts(t)
+	require.Len(t, labels, 1)
+	assert.Equal(t, "/repos/octo/app/issues/7/labels", labels[0].url)
+	assert.Contains(t, labels[0].body, "stop")
+}
+
+func Test_RunStandardsReviewer_should_set_attention_when_the_installation_token_is_refused(t *testing.T) {
+	repoDir := readyBuilder(t)
+	resetWireMock(t)
+	pemText := testAppKey(t)
+	t.Setenv("FACTORY_GITHUB_APP_42", pemText)
+	stubInstallation(t, standardsInstallation)
+	stubRefusedInstallationToken(t, standardsInstallation)
+	stubLabels(t, 7)
+	id := runTick(t, repoDir)
+
+	err := runStandards(t, repoDir, id)
+	require.NoError(t, err)
+
+	assert.Empty(t, cursorRequests(t))
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	assert.Equal(t, "attention", works[0].Status)
+	agents := listAgents(t, db)
+	reviewer, found := agentByRole(agents, "standards_reviewer")
+	require.True(t, found)
+	assert.False(t, reviewer.CursorAgentID.Valid)
+	events := listEvents(t, db)
+	_, ackFound := eventFor(events, reviewer.ID, "ack")
+	assert.False(t, ackFound)
+	_, rejectedFound := eventFor(events, reviewer.ID, "rejected")
+	assert.True(t, rejectedFound)
+}
+
+func Test_RunStandardsReviewer_should_set_attention_when_cursor_refuses_the_create(t *testing.T) {
+	repoDir := readyBuilder(t)
+	resetWireMock(t)
+	stubCursor(t, 400, `{"error":"nope"}`)
+	allowStandardsApp(t)
+	stubLabels(t, 7)
+	id := runTick(t, repoDir)
+
+	err := runStandards(t, repoDir, id)
+	require.NoError(t, err)
+
+	assert.Len(t, cursorRequests(t), 1)
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	assert.Equal(t, "attention", works[0].Status)
+	agents := listAgents(t, db)
+	reviewer, found := agentByRole(agents, "standards_reviewer")
+	require.True(t, found)
+	assert.False(t, reviewer.CursorAgentID.Valid)
+	assert.False(t, reviewer.CursorRunID.Valid)
+	events := listEvents(t, db)
+	_, ackFound := eventFor(events, reviewer.ID, "ack")
+	assert.False(t, ackFound)
+	rejected, rejectedFound := eventFor(events, reviewer.ID, "rejected")
+	require.True(t, rejectedFound)
+	assert.Contains(t, rejected.Message, "nope")
+}
+
+func Test_RunStandardsReviewer_should_leave_the_agent_unacknowledged_when_the_response_is_lost(t *testing.T) {
+	repoDir := readyBuilder(t)
+	resetWireMock(t)
+	stubCursorFault(t)
+	allowStandardsApp(t)
+	id := runTick(t, repoDir)
+
+	err := runStandards(t, repoDir, id)
+	require.Error(t, err)
+
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	assert.Empty(t, works[0].Status)
+	assert.True(t, works[0].StandardsReviewerAgent.Valid)
+	agents := listAgents(t, db)
+	reviewer, found := agentByRole(agents, "standards_reviewer")
+	require.True(t, found)
+	assert.False(t, reviewer.CursorAgentID.Valid)
+	assert.False(t, reviewer.CursorRunID.Valid)
+	events := listEvents(t, db)
+	_, startingFound := eventFor(events, reviewer.ID, "starting")
+	assert.True(t, startingFound)
+	_, ackFound := eventFor(events, reviewer.ID, "ack")
+	assert.False(t, ackFound)
+	_, rejectedFound := eventFor(events, reviewer.ID, "rejected")
+	assert.False(t, rejectedFound)
+	assert.Empty(t, labelPosts(t))
+}
+
 func readyBuilder(t *testing.T) (repoDir string) {
 	t.Helper()
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
-	stubCursor(t, 200, `{"run":{"id":"`+runID+`"}}`)
+	stubCursor(t, 200, createdCursor())
 	repoDir = setupFactory(t, builderInstruction, standardsInstruction)
 	id := runTick(t, repoDir)
 	err := runCompile(t, repoDir, id)
@@ -381,13 +527,99 @@ func eventFor(events []records.DevelopmentEvent, agentID string, kind string) (e
 	return
 }
 
-func requestFor(bodies []string, agentID string) (body string, found bool) {
+func requestContaining(bodies []string, fragment string) (body string, found bool) {
 	for _, item := range bodies {
-		matched := strings.Contains(item, agentID)
+		matched := strings.Contains(item, fragment)
 		if matched {
 			body = item
 			found = true
 			return
+		}
+	}
+	return
+}
+
+func createdCursor() (payload string) {
+	payload = `{"agent":{"id":"` + cursorAgentID + `"},"run":{"id":"` + runID + `"}}`
+	return
+}
+
+func allowStandardsApp(t *testing.T) {
+	t.Helper()
+	pemText := testAppKey(t)
+	t.Setenv("FACTORY_GITHUB_APP_42", pemText)
+	stubInstallation(t, standardsInstallation)
+	stubInstallationToken(t, standardsInstallation, standardsToken)
+}
+
+func stubInstallation(t *testing.T, installationID int64) {
+	t.Helper()
+	path := fmt.Sprintf("/repos/%s/%s/installation", owner, repoName)
+	body := fmt.Sprintf(`{"id":%d,"client_id":"Iv1.standards","suspended_at":null}`, installationID)
+	rule := wiremock.Get(wiremock.URLPathEqualTo(path)).WillReturnResponse(
+		wiremock.NewResponse().WithStatus(200).WithHeader("Content-Type", "application/json").WithBody(body),
+	)
+	err := wiremockClient.StubFor(rule)
+	require.NoError(t, err)
+}
+
+func stubInstallationToken(t *testing.T, installationID int64, issued string) {
+	t.Helper()
+	path := fmt.Sprintf("/app/installations/%d/access_tokens", installationID)
+	body := fmt.Sprintf(`{"token":%q}`, issued)
+	rule := wiremock.Post(wiremock.URLPathEqualTo(path)).WillReturnResponse(
+		wiremock.NewResponse().WithStatus(200).WithHeader("Content-Type", "application/json").WithBody(body),
+	)
+	err := wiremockClient.StubFor(rule)
+	require.NoError(t, err)
+}
+
+func stubRefusedInstallationToken(t *testing.T, installationID int64) {
+	t.Helper()
+	path := fmt.Sprintf("/app/installations/%d/access_tokens", installationID)
+	rule := wiremock.Post(wiremock.URLPathEqualTo(path)).WillReturnResponse(
+		wiremock.NewResponse().WithStatus(401).WithHeader("Content-Type", "application/json").WithBody(`{"message":"Bad credentials"}`),
+	)
+	err := wiremockClient.StubFor(rule)
+	require.NoError(t, err)
+}
+
+func stubCursorFault(t *testing.T) {
+	t.Helper()
+	rule := wiremock.Post(wiremock.URLPathEqualTo("/v1/agents")).WillReturnResponse(
+		wiremock.NewResponse().WithFault(wiremock.FaultConnectionResetByPeer),
+	)
+	err := wiremockClient.StubFor(rule)
+	require.NoError(t, err)
+}
+
+func testAppKey(t *testing.T) (pemText string) {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	block := &pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	}
+	pemText = string(pem.EncodeToMemory(block))
+	return
+}
+
+type labelPost struct {
+	url  string
+	body string
+}
+
+func labelPosts(t *testing.T) (posts []labelPost) {
+	t.Helper()
+	journal, err := wiremockClient.GetAllRequests()
+	require.NoError(t, err)
+	for _, entry := range journal.Requests {
+		request := entry.Request
+		matched := request.Method == "POST" && strings.HasSuffix(request.URL, "/labels")
+		if matched {
+			post := labelPost{url: request.URL, body: request.Body}
+			posts = append(posts, post)
 		}
 	}
 	return

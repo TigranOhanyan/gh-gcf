@@ -613,7 +613,7 @@ func prepareReviewers(t *testing.T, listed bool) (repoDir string) {
 	t.Helper()
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
-	stubCursor(t, 200, `{"run":{"id":"`+runID+`"}}`)
+	stubCursor(t, 200, `{"agent":{"id":"agent-11111111-1111-7111-8111-111111111111"},"run":{"id":"`+runID+`"}}`)
 	repoDir = setupFactory(t, listed)
 	id := runTick(t, repoDir)
 	err := runCompile(t, repoDir, id)
@@ -737,6 +737,7 @@ func runCheck(t *testing.T, repoDir string, id string) (err error) {
 
 func runStandards(t *testing.T, repoDir string, id string) (err error) {
 	t.Helper()
+	allowStandardsApp(t)
 	t.Setenv("GH_TOKEN", token)
 	t.Chdir(repoDir)
 	line := fmt.Sprintf("run standards-reviewer --tick %s", id)
@@ -770,9 +771,14 @@ func finishReviewer(t *testing.T, repoDir string, role string) {
 	require.NoError(t, err)
 	reviewer, found := agentByRole(agents, role)
 	require.True(t, found)
-	stubRun(t, reviewer.ID, finishedRun("https://github.com/octo/app/pull/9"))
-	id := runTick(t, repoDir)
+	polled := reviewer.ID
 	standards := role == "standards_reviewer"
+	if standards {
+		require.True(t, reviewer.CursorAgentID.Valid)
+		polled = reviewer.CursorAgentID.String
+	}
+	stubRun(t, polled, finishedRun("https://github.com/octo/app/pull/9"))
+	id := runTick(t, repoDir)
 	if standards {
 		err = runCheckStandards(t, repoDir, id)
 		require.NoError(t, err)
@@ -1149,6 +1155,20 @@ func runApp(t *testing.T, repoDir string, id string) (err error) {
 	line := fmt.Sprintf("compile app --tick %s", id)
 	_, err = runRoot(t, line)
 	return
+}
+
+func allowStandardsApp(t *testing.T) {
+	t.Helper()
+	pemText := testAppKey(t)
+	t.Setenv("FACTORY_GITHUB_APP_42", pemText)
+	path := "/repos/octo/app/installation"
+	body := fmt.Sprintf(`{"id":%d,"client_id":"Iv1.standards","suspended_at":null}`, standardsInstallation)
+	rule := wiremock.Get(wiremock.URLPathEqualTo(path)).WillReturnResponse(
+		wiremock.NewResponse().WithStatus(200).WithHeader("Content-Type", "application/json").WithBody(body),
+	)
+	err := wiremockClient.StubFor(rule)
+	require.NoError(t, err)
+	stubInstallationToken(t, standardsInstallation, standardsToken)
 }
 
 func stubInstallations(t *testing.T) {

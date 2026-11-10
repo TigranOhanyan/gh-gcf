@@ -23,11 +23,12 @@ type Development struct {
 }
 
 type DevelopmentAgent struct {
-	ID          string         `json:"id"`
-	Role        string         `json:"role"`
-	CursorRunID sql.NullString `json:"cursor_run_id"`
-	StartedAt   string         `json:"started_at"`
-	FinishedAt  sql.NullString `json:"finished_at"`
+	ID            string         `json:"id"`
+	Role          string         `json:"role"`
+	CursorAgentID sql.NullString `json:"cursor_agent_id"`
+	CursorRunID   sql.NullString `json:"cursor_run_id"`
+	StartedAt     string         `json:"started_at"`
+	FinishedAt    sql.NullString `json:"finished_at"`
 }
 
 type DevelopmentCheck struct {

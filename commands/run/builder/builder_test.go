@@ -30,7 +30,7 @@ const runID = "run-11111111-1111-7111-8111-111111111111"
 func Test_RunBuilder_should_start_a_builder_for_an_open_issue(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
-	stubCursor(t, 200, `{"run":{"id":"`+runID+`"}}`)
+	stubCursor(t, 200, `{"agent":{"id":"agent-11111111-1111-7111-8111-111111111111"},"run":{"id":"`+runID+`"}}`)
 	repoDir := setupFactory(t, instruction)
 	id := runTick(t, repoDir)
 	err := runCompile(t, repoDir, id)
@@ -61,7 +61,7 @@ func Test_RunBuilder_should_start_a_builder_for_an_open_issue(t *testing.T) {
 func Test_RunBuilder_should_start_a_builder_without_writing_a_coding_work(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
-	stubCursor(t, 200, `{"run":{"id":"`+runID+`"}}`)
+	stubCursor(t, 200, `{"agent":{"id":"agent-11111111-1111-7111-8111-111111111111"},"run":{"id":"`+runID+`"}}`)
 	repoDir := setupFactory(t, instruction)
 	id := runTick(t, repoDir)
 	err := runCompile(t, repoDir, id)
@@ -81,7 +81,7 @@ func Test_RunBuilder_should_start_a_builder_without_writing_a_coding_work(t *tes
 func Test_RunBuilder_should_store_the_issue_and_point_at_the_development_and_the_builder(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
-	stubCursor(t, 200, `{"run":{"id":"`+runID+`"}}`)
+	stubCursor(t, 200, `{"agent":{"id":"agent-11111111-1111-7111-8111-111111111111"},"run":{"id":"`+runID+`"}}`)
 	repoDir := setupFactory(t, instruction)
 	id := runTick(t, repoDir)
 	err := runCompile(t, repoDir, id)
@@ -115,7 +115,7 @@ func Test_RunBuilder_should_store_the_issue_and_point_at_the_development_and_the
 func Test_RunBuilder_should_record_the_builder_started_time_and_a_starting_event(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
-	stubCursor(t, 200, `{"run":{"id":"`+runID+`"}}`)
+	stubCursor(t, 200, `{"agent":{"id":"agent-11111111-1111-7111-8111-111111111111"},"run":{"id":"`+runID+`"}}`)
 	repoDir := setupFactory(t, instruction)
 	id := runTick(t, repoDir)
 	err := runCompile(t, repoDir, id)
@@ -149,7 +149,7 @@ func Test_RunBuilder_should_record_the_builder_started_time_and_a_starting_event
 func Test_RunBuilder_should_leave_an_issue_that_already_has_a_development_work(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
-	stubCursor(t, 200, `{"run":{"id":"`+runID+`"}}`)
+	stubCursor(t, 200, `{"agent":{"id":"agent-11111111-1111-7111-8111-111111111111"},"run":{"id":"`+runID+`"}}`)
 	repoDir := setupFactory(t, instruction)
 	id := runTick(t, repoDir)
 	err := runCompile(t, repoDir, id)

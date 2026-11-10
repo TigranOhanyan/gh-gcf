@@ -115,7 +115,7 @@ func (q *Queries) GetDevelopmentWorkByIssue(ctx context.Context, issueNumber int
 }
 
 const listDevelopmentAgents = `-- name: ListDevelopmentAgents :many
-SELECT id, role, cursor_run_id, started_at, finished_at
+SELECT id, role, cursor_agent_id, cursor_run_id, started_at, finished_at
 FROM development_agent
 ORDER BY id
 `
@@ -132,6 +132,7 @@ func (q *Queries) ListDevelopmentAgents(ctx context.Context) ([]DevelopmentAgent
 		if err := rows.Scan(
 			&i.ID,
 			&i.Role,
+			&i.CursorAgentID,
 			&i.CursorRunID,
 			&i.StartedAt,
 			&i.FinishedAt,
@@ -440,11 +441,14 @@ SELECT
     w.development_name,
     w.issue_number,
     a.id AS agent_id,
+    a.cursor_agent_id,
     a.cursor_run_id
 FROM development_work w
 JOIN development_agent a ON a.id = w.standards_reviewer_agent
 WHERE w.status = ''
 AND a.role = 'standards_reviewer'
+AND a.cursor_agent_id IS NOT NULL
+AND a.cursor_agent_id != ''
 AND a.cursor_run_id IS NOT NULL
 AND a.cursor_run_id != ''
 AND a.finished_at IS NULL
@@ -466,6 +470,7 @@ type ListPendingDevelopmentStandardsReviewersRow struct {
 	DevelopmentName string         `json:"development_name"`
 	IssueNumber     int64          `json:"issue_number"`
 	AgentID         string         `json:"agent_id"`
+	CursorAgentID   sql.NullString `json:"cursor_agent_id"`
 	CursorRunID     sql.NullString `json:"cursor_run_id"`
 }
 
@@ -483,6 +488,7 @@ func (q *Queries) ListPendingDevelopmentStandardsReviewers(ctx context.Context) 
 			&i.DevelopmentName,
 			&i.IssueNumber,
 			&i.AgentID,
+			&i.CursorAgentID,
 			&i.CursorRunID,
 		); err != nil {
 			return nil, err
@@ -714,6 +720,23 @@ func (q *Queries) ListWorksReadyForFixerChecks(ctx context.Context) ([]ListWorks
 		return nil, err
 	}
 	return items, nil
+}
+
+const setDevelopmentAgentCursorIDs = `-- name: SetDevelopmentAgentCursorIDs :exec
+UPDATE development_agent
+SET cursor_agent_id = ?, cursor_run_id = ?
+WHERE id = ?
+`
+
+type SetDevelopmentAgentCursorIDsParams struct {
+	CursorAgentID sql.NullString `json:"cursor_agent_id"`
+	CursorRunID   sql.NullString `json:"cursor_run_id"`
+	ID            string         `json:"id"`
+}
+
+func (q *Queries) SetDevelopmentAgentCursorIDs(ctx context.Context, arg SetDevelopmentAgentCursorIDsParams) error {
+	_, err := q.db.ExecContext(ctx, setDevelopmentAgentCursorIDs, arg.CursorAgentID, arg.CursorRunID, arg.ID)
+	return err
 }
 
 const setDevelopmentAgentFinished = `-- name: SetDevelopmentAgentFinished :exec

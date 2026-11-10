@@ -89,11 +89,14 @@ SELECT
     w.development_name,
     w.issue_number,
     a.id AS agent_id,
+    a.cursor_agent_id,
     a.cursor_run_id
 FROM development_work w
 JOIN development_agent a ON a.id = w.standards_reviewer_agent
 WHERE w.status = ''
 AND a.role = 'standards_reviewer'
+AND a.cursor_agent_id IS NOT NULL
+AND a.cursor_agent_id != ''
 AND a.cursor_run_id IS NOT NULL
 AND a.cursor_run_id != ''
 AND a.finished_at IS NULL
@@ -167,6 +170,11 @@ INSERT INTO development_agent (id, role) VALUES (?, ?);
 
 -- name: SetDevelopmentAgentRunID :exec
 UPDATE development_agent SET cursor_run_id = ? WHERE id = ?;
+
+-- name: SetDevelopmentAgentCursorIDs :exec
+UPDATE development_agent
+SET cursor_agent_id = ?, cursor_run_id = ?
+WHERE id = ?;
 
 -- name: ListReadyStandardsWorks :many
 SELECT
@@ -255,7 +263,7 @@ SET finished_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE id = ?;
 
 -- name: ListDevelopmentAgents :many
-SELECT id, role, cursor_run_id, started_at, finished_at
+SELECT id, role, cursor_agent_id, cursor_run_id, started_at, finished_at
 FROM development_agent
 ORDER BY id;
 

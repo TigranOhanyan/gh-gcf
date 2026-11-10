@@ -4,11 +4,12 @@
 -- status is empty while the factory is still at work.
 
 CREATE TABLE development_agent (
-    id            TEXT PRIMARY KEY,
-    role          TEXT NOT NULL CHECK (role IN ('builder', 'standards_reviewer', 'specification_reviewer', 'fixer')),
-    cursor_run_id TEXT,
-    started_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    finished_at   TEXT
+    id              TEXT PRIMARY KEY,
+    role            TEXT NOT NULL CHECK (role IN ('builder', 'standards_reviewer', 'specification_reviewer', 'fixer')),
+    cursor_agent_id TEXT,
+    cursor_run_id   TEXT,
+    started_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    finished_at     TEXT
 );
 
 CREATE TABLE development_work (
