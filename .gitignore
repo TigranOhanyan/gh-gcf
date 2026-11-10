@@ -4,3 +4,6 @@
 
 **/junk/*
 !**/junk/_keepme
+
+/.keys
+/.test_cursor

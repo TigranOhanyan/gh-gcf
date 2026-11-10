@@ -91,7 +91,7 @@ The text one role in a development gives its agent. Each of the four roles has i
 _Avoid_: brief, prompt
 
 **Builder**:
-The role in a development whose agent implements a ready issue and opens the pull request.
+The role in a development whose agent implements a ready issue and opens the pull request. It acts as an App.
 _Avoid_: implementer, coder, member
 
 **Reviewer**:
@@ -107,7 +107,7 @@ The reviewer that judges a pull request against the issue it claims to implement
 _Avoid_: spec reviewer, requirements reviewer, QA
 
 **Fixer**:
-The role that applies a changes request or a red GitHub check on that pull request, once. It stays idle when both reviewers approved and every listed GitHub check passed.
+The role that applies a changes request or a red GitHub check on that pull request, once. It acts as an App, which may be the builder's App. It stays idle when both reviewers approved and every listed GitHub check passed.
 _Avoid_: builder (second run), repairer, review applier
 
 **Development work**:
@@ -115,7 +115,7 @@ One issue taken by one development. It points at the agents it has started.
 _Avoid_: coding work, work, task, run, cycle
 
 **Agent**:
-One of a development's four roles acting through Cursor. The development work points at it, and the agent does not point back.
+One of a development's four roles acting through Cursor, addressed there by an id Cursor assigns. The development work points at the agent, and the agent does not point back.
 _Avoid_: bot, run
 
 **Verdict**:
