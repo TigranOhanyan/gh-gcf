@@ -17,6 +17,8 @@ const (
 	pickAttention
 	pickStandards
 	pickSpecification
+	pickBuilder
+	pickFixer
 )
 
 type developmentDraft struct {
@@ -25,6 +27,8 @@ type developmentDraft struct {
 	attention     string
 	standards     string
 	specification string
+	builder       string
+	fixer         string
 }
 
 type developmentPick struct {
@@ -150,8 +154,14 @@ func (s developmentPick) choose() (updated tea.Model) {
 	case pickStandards:
 		s.draft.standards = item.value
 		updated = newDevelopmentPick(s.ctx, s.dir, s.owner, s.name, s.db, s.draft, pickSpecification, "")
-	default:
+	case pickSpecification:
 		s.draft.specification = item.value
+		updated = newDevelopmentPick(s.ctx, s.dir, s.owner, s.name, s.db, s.draft, pickBuilder, "")
+	case pickBuilder:
+		s.draft.builder = item.value
+		updated = newDevelopmentPick(s.ctx, s.dir, s.owner, s.name, s.db, s.draft, pickFixer, "")
+	default:
+		s.draft.fixer = item.value
 		updated = s.finish()
 	}
 	return
@@ -159,7 +169,7 @@ func (s developmentPick) choose() (updated tea.Model) {
 
 func (s developmentPick) finish() (updated tea.Model) {
 	repoDir := filepath.Join(s.dir, "repos", s.owner, s.name)
-	stored, err := development.Add(s.ctx, s.db, repoDir, s.draft.name, s.draft.starting, s.draft.attention, s.draft.standards, s.draft.specification)
+	stored, err := development.Add(s.ctx, s.db, repoDir, s.draft.name, s.draft.starting, s.draft.attention, s.draft.standards, s.draft.specification, s.draft.builder, s.draft.fixer)
 	if err != nil {
 		s.notice = err.Error()
 		updated = s
@@ -177,8 +187,12 @@ func (s developmentPick) back() (updated tea.Model, cmd tea.Cmd) {
 		updated = newDevelopmentPick(s.ctx, s.dir, s.owner, s.name, s.db, s.draft, pickStarting, "")
 	case pickStandards:
 		updated = newDevelopmentPick(s.ctx, s.dir, s.owner, s.name, s.db, s.draft, pickAttention, "")
-	default:
+	case pickSpecification:
 		updated = newDevelopmentPick(s.ctx, s.dir, s.owner, s.name, s.db, s.draft, pickStandards, "")
+	case pickBuilder:
+		updated = newDevelopmentPick(s.ctx, s.dir, s.owner, s.name, s.db, s.draft, pickSpecification, "")
+	default:
+		updated = newDevelopmentPick(s.ctx, s.dir, s.owner, s.name, s.db, s.draft, pickBuilder, "")
 	}
 	return
 }
@@ -191,8 +205,12 @@ func pickTitle(step int) (title string) {
 		title = "attention"
 	case pickStandards:
 		title = "standards"
-	default:
+	case pickSpecification:
 		title = "specification"
+	case pickBuilder:
+		title = "builder"
+	default:
+		title = "fixer"
 	}
 	return
 }

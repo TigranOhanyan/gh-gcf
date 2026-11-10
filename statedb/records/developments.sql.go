@@ -16,11 +16,13 @@ INSERT INTO development (
     attention_label,
     standards_reviewer_app,
     specification_reviewer_app,
+    builder_app,
+    fixer_app,
     builder_instruction_sha256,
     standards_reviewer_instruction_sha256,
     specification_reviewer_instruction_sha256,
     fixer_instruction_sha256
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateDevelopmentParams struct {
@@ -29,6 +31,8 @@ type CreateDevelopmentParams struct {
 	AttentionLabel                         string `json:"attention_label"`
 	StandardsReviewerApp                   int64  `json:"standards_reviewer_app"`
 	SpecificationReviewerApp               int64  `json:"specification_reviewer_app"`
+	BuilderApp                             int64  `json:"builder_app"`
+	FixerApp                               int64  `json:"fixer_app"`
 	BuilderInstructionSha256               string `json:"builder_instruction_sha256"`
 	StandardsReviewerInstructionSha256     string `json:"standards_reviewer_instruction_sha256"`
 	SpecificationReviewerInstructionSha256 string `json:"specification_reviewer_instruction_sha256"`
@@ -42,6 +46,8 @@ func (q *Queries) CreateDevelopment(ctx context.Context, arg CreateDevelopmentPa
 		arg.AttentionLabel,
 		arg.StandardsReviewerApp,
 		arg.SpecificationReviewerApp,
+		arg.BuilderApp,
+		arg.FixerApp,
 		arg.BuilderInstructionSha256,
 		arg.StandardsReviewerInstructionSha256,
 		arg.SpecificationReviewerInstructionSha256,
@@ -71,6 +77,8 @@ SELECT
     attention_label,
     standards_reviewer_app,
     specification_reviewer_app,
+    builder_app,
+    fixer_app,
     builder_instruction_sha256,
     standards_reviewer_instruction_sha256,
     specification_reviewer_instruction_sha256,
@@ -88,6 +96,8 @@ func (q *Queries) GetDevelopment(ctx context.Context, name string) (Development,
 		&i.AttentionLabel,
 		&i.StandardsReviewerApp,
 		&i.SpecificationReviewerApp,
+		&i.BuilderApp,
+		&i.FixerApp,
 		&i.BuilderInstructionSha256,
 		&i.StandardsReviewerInstructionSha256,
 		&i.SpecificationReviewerInstructionSha256,
@@ -173,6 +183,8 @@ SELECT
     attention_label,
     standards_reviewer_app,
     specification_reviewer_app,
+    builder_app,
+    fixer_app,
     builder_instruction_sha256,
     standards_reviewer_instruction_sha256,
     specification_reviewer_instruction_sha256,
@@ -196,6 +208,8 @@ func (q *Queries) ListDevelopments(ctx context.Context) ([]Development, error) {
 			&i.AttentionLabel,
 			&i.StandardsReviewerApp,
 			&i.SpecificationReviewerApp,
+			&i.BuilderApp,
+			&i.FixerApp,
 			&i.BuilderInstructionSha256,
 			&i.StandardsReviewerInstructionSha256,
 			&i.SpecificationReviewerInstructionSha256,
@@ -220,6 +234,8 @@ SET starting_label = ?,
     attention_label = ?,
     standards_reviewer_app = ?,
     specification_reviewer_app = ?,
+    builder_app = ?,
+    fixer_app = ?,
     builder_instruction_sha256 = ?,
     standards_reviewer_instruction_sha256 = ?,
     specification_reviewer_instruction_sha256 = ?,
@@ -232,6 +248,8 @@ type UpdateDevelopmentParams struct {
 	AttentionLabel                         string `json:"attention_label"`
 	StandardsReviewerApp                   int64  `json:"standards_reviewer_app"`
 	SpecificationReviewerApp               int64  `json:"specification_reviewer_app"`
+	BuilderApp                             int64  `json:"builder_app"`
+	FixerApp                               int64  `json:"fixer_app"`
 	BuilderInstructionSha256               string `json:"builder_instruction_sha256"`
 	StandardsReviewerInstructionSha256     string `json:"standards_reviewer_instruction_sha256"`
 	SpecificationReviewerInstructionSha256 string `json:"specification_reviewer_instruction_sha256"`
@@ -245,6 +263,8 @@ func (q *Queries) UpdateDevelopment(ctx context.Context, arg UpdateDevelopmentPa
 		arg.AttentionLabel,
 		arg.StandardsReviewerApp,
 		arg.SpecificationReviewerApp,
+		arg.BuilderApp,
+		arg.FixerApp,
 		arg.BuilderInstructionSha256,
 		arg.StandardsReviewerInstructionSha256,
 		arg.SpecificationReviewerInstructionSha256,

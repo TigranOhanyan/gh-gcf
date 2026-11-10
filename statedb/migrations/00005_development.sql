@@ -8,6 +8,8 @@ CREATE TABLE development (
     attention_label                           TEXT NOT NULL,
     standards_reviewer_app                    INTEGER NOT NULL,
     specification_reviewer_app                INTEGER NOT NULL,
+    builder_app                               INTEGER NOT NULL,
+    fixer_app                                 INTEGER NOT NULL,
     builder_instruction_sha256                TEXT NOT NULL,
     standards_reviewer_instruction_sha256     TEXT NOT NULL,
     specification_reviewer_instruction_sha256 TEXT NOT NULL,

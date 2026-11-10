@@ -129,6 +129,8 @@ func saveDevelopment(ctx context.Context, queries *records.Queries, item configr
 			AttentionLabel:                         item.AttentionLabel,
 			StandardsReviewerApp:                   item.StandardsReviewerApp,
 			SpecificationReviewerApp:               item.SpecificationReviewerApp,
+			BuilderApp:                             item.BuilderApp,
+			FixerApp:                               item.FixerApp,
 			BuilderInstructionSha256:               sums.builder,
 			StandardsReviewerInstructionSha256:     sums.standards,
 			SpecificationReviewerInstructionSha256: sums.specification,
@@ -152,6 +154,8 @@ func saveDevelopment(ctx context.Context, queries *records.Queries, item configr
 		AttentionLabel:                         item.AttentionLabel,
 		StandardsReviewerApp:                   item.StandardsReviewerApp,
 		SpecificationReviewerApp:               item.SpecificationReviewerApp,
+		BuilderApp:                             item.BuilderApp,
+		FixerApp:                               item.FixerApp,
 		BuilderInstructionSha256:               sums.builder,
 		StandardsReviewerInstructionSha256:     sums.standards,
 		SpecificationReviewerInstructionSha256: sums.specification,
@@ -172,11 +176,13 @@ func sameDevelopment(stored records.Development, item configrecords.Development,
 	sameAttention := stored.AttentionLabel == item.AttentionLabel
 	sameStandardsApp := stored.StandardsReviewerApp == item.StandardsReviewerApp
 	sameSpecificationApp := stored.SpecificationReviewerApp == item.SpecificationReviewerApp
+	sameBuilderApp := stored.BuilderApp == item.BuilderApp
+	sameFixerApp := stored.FixerApp == item.FixerApp
 	sameBuilder := stored.BuilderInstructionSha256 == sums.builder
 	sameStandards := stored.StandardsReviewerInstructionSha256 == sums.standards
 	sameSpecification := stored.SpecificationReviewerInstructionSha256 == sums.specification
 	sameFixer := stored.FixerInstructionSha256 == sums.fixer
-	same = sameStart && sameAttention && sameStandardsApp && sameSpecificationApp && sameBuilder && sameStandards && sameSpecification && sameFixer
+	same = sameStart && sameAttention && sameStandardsApp && sameSpecificationApp && sameBuilderApp && sameFixerApp && sameBuilder && sameStandards && sameSpecification && sameFixer
 	return
 }
 

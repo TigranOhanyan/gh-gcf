@@ -14,6 +14,8 @@ type Development struct {
 	AttentionLabel           string `json:"attention_label"`
 	StandardsReviewerApp     int64  `json:"standards_reviewer_app"`
 	SpecificationReviewerApp int64  `json:"specification_reviewer_app"`
+	BuilderApp               int64  `json:"builder_app"`
+	FixerApp                 int64  `json:"fixer_app"`
 }
 
 type DevelopmentCheck struct {

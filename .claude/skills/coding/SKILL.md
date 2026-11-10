@@ -48,7 +48,7 @@ A command test runs the root command. Wrap `root.NewRoot()` with `commands.NewCm
 Build a line with `fmt.Sprintf`. Do not join it with `+`. A line built across a loop may use `strings.Builder`.
 
 ```go
-line := fmt.Sprintf("setup development add --owner octo --repo app --name %s --starting %s --attention %s --standards-app %s --specification-app %s", name, starting, attention, standardsApp, specificationApp)
+line := fmt.Sprintf("setup development add --owner octo --repo app --name %s --starting %s --attention %s --standards-app %s --specification-app %s --builder-app %s --fixer-app %s", name, starting, attention, standardsApp, specificationApp, builderApp, fixerApp)
 _, err := runSetup(t, line)
 ```
 

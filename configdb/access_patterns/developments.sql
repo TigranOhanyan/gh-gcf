@@ -1,5 +1,5 @@
 -- name: ListDevelopments :many
-SELECT name, starting_label, attention_label, standards_reviewer_app, specification_reviewer_app
+SELECT name, starting_label, attention_label, standards_reviewer_app, specification_reviewer_app, builder_app, fixer_app
 FROM development
 ORDER BY name;
 
@@ -9,8 +9,10 @@ INSERT INTO development (
     starting_label,
     attention_label,
     standards_reviewer_app,
-    specification_reviewer_app
-) VALUES (?, ?, ?, ?, ?);
+    specification_reviewer_app,
+    builder_app,
+    fixer_app
+) VALUES (?, ?, ?, ?, ?, ?, ?);
 
 -- name: ListDevelopmentStartingLabels :many
 SELECT starting_label FROM development ORDER BY starting_label;

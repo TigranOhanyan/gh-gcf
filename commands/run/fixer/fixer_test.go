@@ -647,7 +647,9 @@ func setupFactory(t *testing.T, listed bool) (repoDir string) {
 	mustRoot(t, "setup apps attach --owner octo --repo app --id 42")
 	mustRoot(t, "setup apps add --id 43")
 	mustRoot(t, "setup apps attach --owner octo --repo app --id 43")
-	line := fmt.Sprintf("setup development add --owner octo --repo app --name %s --starting %s --attention %s --standards-app %s --specification-app %s", developmentName, "ready", "stop", "42", "43")
+	mustRoot(t, "setup apps add --id 44")
+	mustRoot(t, "setup apps attach --owner octo --repo app --id 44")
+	line := fmt.Sprintf("setup development add --owner octo --repo app --name %s --starting %s --attention %s --standards-app %s --specification-app %s --builder-app %s --fixer-app %s", developmentName, "ready", "stop", "42", "43", "44", "44")
 	mustRoot(t, line)
 	if listed {
 		checkLine := fmt.Sprintf("setup development check add --owner octo --repo app --development %s --name %q", developmentName, checkName)
@@ -1135,6 +1137,7 @@ func recordApps(t *testing.T, repoDir string) {
 	pemText := testAppKey(t)
 	t.Setenv("FACTORY_GITHUB_APP_42", pemText)
 	t.Setenv("FACTORY_GITHUB_APP_43", pemText)
+	t.Setenv("FACTORY_GITHUB_APP_44", pemText)
 	id := runTick(t, repoDir)
 	err := runApp(t, repoDir, id)
 	require.NoError(t, err)

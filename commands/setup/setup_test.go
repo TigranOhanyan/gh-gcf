@@ -490,7 +490,7 @@ func Test_Setup_should_store_a_development(t *testing.T) {
 	session.wait("octo/app")
 	session.write("\r")
 	openDevelopments(t, session)
-	submitDevelopment(t, session, "features", 0, 1, 0, 1, "features  ready  stop  42  43")
+	submitDevelopment(t, session, "features", 0, 1, 0, 1, 2, 3, "features  ready  stop  42  43  44  45")
 	err := session.quit()
 	require.NoError(t, err)
 
@@ -501,6 +501,8 @@ func Test_Setup_should_store_a_development(t *testing.T) {
 	assert.Equal(t, "stop", rows[0].AttentionLabel)
 	assert.Equal(t, int64(42), rows[0].StandardsReviewerApp)
 	assert.Equal(t, int64(43), rows[0].SpecificationReviewerApp)
+	assert.Equal(t, int64(44), rows[0].BuilderApp)
+	assert.Equal(t, int64(45), rows[0].FixerApp)
 }
 
 func Test_Setup_should_store_a_second_development(t *testing.T) {
@@ -511,15 +513,15 @@ func Test_Setup_should_store_a_second_development(t *testing.T) {
 	runBinary(t, repoDir, "setup", "apps", "attach", "--owner", "octo", "--repo", "app", "--id", "99")
 	runBinary(t, repoDir, "setup", "apps", "add", "--id", "100")
 	runBinary(t, repoDir, "setup", "apps", "attach", "--owner", "octo", "--repo", "app", "--id", "100")
-	runBinary(t, repoDir, "setup", "development", "add", "--owner", "octo", "--repo", "app", "--name", "features", "--starting", "ready", "--attention", "stop", "--standards-app", "42", "--specification-app", "43")
+	runBinary(t, repoDir, "setup", "development", "add", "--owner", "octo", "--repo", "app", "--name", "features", "--starting", "ready", "--attention", "stop", "--standards-app", "42", "--specification-app", "43", "--builder-app", "44", "--fixer-app", "45")
 
 	session := startSetup(t, repoDir)
 	openRepoList(t, session)
 	session.wait("octo/app")
 	session.write("\r")
 	openDevelopments(t, session)
-	session.wait("features  ready  stop  42  43")
-	submitDevelopment(t, session, "bugs", 2, 1, 2, 3, "bugs  todo  stop  99  100")
+	session.wait("features  ready  stop  42  43  44  45")
+	submitDevelopment(t, session, "bugs", 2, 1, 4, 5, 2, 3, "bugs  todo  stop  99  100  44  45")
 	err := session.quit()
 	require.NoError(t, err)
 
@@ -532,14 +534,14 @@ func Test_Setup_should_store_a_second_development(t *testing.T) {
 func Test_Setup_should_store_a_check_on_a_development(t *testing.T) {
 	repoDir := setupCheckout(t)
 	recordDevelopmentRepo(t, repoDir)
-	runBinary(t, repoDir, "setup", "development", "add", "--owner", "octo", "--repo", "app", "--name", "features", "--starting", "ready", "--attention", "stop", "--standards-app", "42", "--specification-app", "43")
+	runBinary(t, repoDir, "setup", "development", "add", "--owner", "octo", "--repo", "app", "--name", "features", "--starting", "ready", "--attention", "stop", "--standards-app", "42", "--specification-app", "43", "--builder-app", "44", "--fixer-app", "45")
 
 	session := startSetup(t, repoDir)
 	openRepoList(t, session)
 	session.wait("octo/app")
 	session.write("\r")
 	openDevelopments(t, session)
-	session.wait("features  ready  stop  42  43")
+	session.wait("features  ready  stop  42  43  44  45")
 	session.write("\r")
 	session.wait("No checks yet.")
 	session.write("a")
@@ -581,14 +583,14 @@ func Test_Setup_should_leave_a_development_uncreated_when_add_is_cancelled(t *te
 func Test_Setup_should_refuse_a_repeated_starting_label_in_the_tui(t *testing.T) {
 	repoDir := setupCheckout(t)
 	recordDevelopmentRepo(t, repoDir)
-	runBinary(t, repoDir, "setup", "development", "add", "--owner", "octo", "--repo", "app", "--name", "features", "--starting", "ready", "--attention", "stop", "--standards-app", "42", "--specification-app", "43")
+	runBinary(t, repoDir, "setup", "development", "add", "--owner", "octo", "--repo", "app", "--name", "features", "--starting", "ready", "--attention", "stop", "--standards-app", "42", "--specification-app", "43", "--builder-app", "44", "--fixer-app", "45")
 
 	session := startSetup(t, repoDir)
 	openRepoList(t, session)
 	session.wait("octo/app")
 	session.write("\r")
 	openDevelopments(t, session)
-	session.wait("features  ready  stop  42  43")
+	session.wait("features  ready  stop  42  43  44  45")
 	session.write("a")
 	session.wait("name:")
 	session.write("bugs")
@@ -601,6 +603,10 @@ func Test_Setup_should_refuse_a_repeated_starting_label_in_the_tui(t *testing.T)
 	chooseRow(session, 0)
 	session.wait("add>specification")
 	chooseRow(session, 1)
+	session.wait("add>builder")
+	chooseRow(session, 2)
+	session.wait("add>fixer")
+	chooseRow(session, 3)
 	session.wait("already used")
 	err := session.quit()
 	require.NoError(t, err)
@@ -619,10 +625,10 @@ func Test_Setup_should_show_a_development_added_while_the_repo_menu_is_showing(t
 	session.write("\r")
 	session.wait("labels")
 
-	runBinary(t, repoDir, "setup", "development", "add", "--owner", "octo", "--repo", "app", "--name", "features", "--starting", "ready", "--attention", "stop", "--standards-app", "42", "--specification-app", "43")
+	runBinary(t, repoDir, "setup", "development", "add", "--owner", "octo", "--repo", "app", "--name", "features", "--starting", "ready", "--attention", "stop", "--standards-app", "42", "--specification-app", "43", "--builder-app", "44", "--fixer-app", "45")
 
 	openDevelopments(t, session)
-	session.wait("features  ready  stop  42  43")
+	session.wait("features  ready  stop  42  43  44  45")
 	err := session.quit()
 	require.NoError(t, err)
 
@@ -655,6 +661,10 @@ func recordDevelopmentRepo(t *testing.T, repoDir string) {
 	runBinary(t, repoDir, "setup", "apps", "attach", "--owner", "octo", "--repo", "app", "--id", "42")
 	runBinary(t, repoDir, "setup", "apps", "add", "--id", "43")
 	runBinary(t, repoDir, "setup", "apps", "attach", "--owner", "octo", "--repo", "app", "--id", "43")
+	runBinary(t, repoDir, "setup", "apps", "add", "--id", "44")
+	runBinary(t, repoDir, "setup", "apps", "attach", "--owner", "octo", "--repo", "app", "--id", "44")
+	runBinary(t, repoDir, "setup", "apps", "add", "--id", "45")
+	runBinary(t, repoDir, "setup", "apps", "attach", "--owner", "octo", "--repo", "app", "--id", "45")
 }
 
 func openDevelopments(t *testing.T, session *terminalSession) {
@@ -666,7 +676,7 @@ func openDevelopments(t *testing.T, session *terminalSession) {
 	session.wait("app>developments")
 }
 
-func submitDevelopment(t *testing.T, session *terminalSession, name string, startingMoves int, attentionMoves int, standardsMoves int, specificationMoves int, row string) {
+func submitDevelopment(t *testing.T, session *terminalSession, name string, startingMoves int, attentionMoves int, standardsMoves int, specificationMoves int, builderMoves int, fixerMoves int, row string) {
 	t.Helper()
 	session.write("a")
 	session.wait("name:")
@@ -680,6 +690,10 @@ func submitDevelopment(t *testing.T, session *terminalSession, name string, star
 	chooseRow(session, standardsMoves)
 	session.wait("add>specification")
 	chooseRow(session, specificationMoves)
+	session.wait("add>builder")
+	chooseRow(session, builderMoves)
+	session.wait("add>fixer")
+	chooseRow(session, fixerMoves)
 	session.wait(row)
 }
 

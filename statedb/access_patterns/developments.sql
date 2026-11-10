@@ -5,6 +5,8 @@ SELECT
     attention_label,
     standards_reviewer_app,
     specification_reviewer_app,
+    builder_app,
+    fixer_app,
     builder_instruction_sha256,
     standards_reviewer_instruction_sha256,
     specification_reviewer_instruction_sha256,
@@ -19,11 +21,13 @@ INSERT INTO development (
     attention_label,
     standards_reviewer_app,
     specification_reviewer_app,
+    builder_app,
+    fixer_app,
     builder_instruction_sha256,
     standards_reviewer_instruction_sha256,
     specification_reviewer_instruction_sha256,
     fixer_instruction_sha256
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: UpdateDevelopment :exec
 UPDATE development
@@ -31,6 +35,8 @@ SET starting_label = ?,
     attention_label = ?,
     standards_reviewer_app = ?,
     specification_reviewer_app = ?,
+    builder_app = ?,
+    fixer_app = ?,
     builder_instruction_sha256 = ?,
     standards_reviewer_instruction_sha256 = ?,
     specification_reviewer_instruction_sha256 = ?,
@@ -44,6 +50,8 @@ SELECT
     attention_label,
     standards_reviewer_app,
     specification_reviewer_app,
+    builder_app,
+    fixer_app,
     builder_instruction_sha256,
     standards_reviewer_instruction_sha256,
     specification_reviewer_instruction_sha256,

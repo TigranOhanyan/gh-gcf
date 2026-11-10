@@ -15,8 +15,10 @@ INSERT INTO development (
     starting_label,
     attention_label,
     standards_reviewer_app,
-    specification_reviewer_app
-) VALUES (?, ?, ?, ?, ?)
+    specification_reviewer_app,
+    builder_app,
+    fixer_app
+) VALUES (?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateDevelopmentParams struct {
@@ -25,6 +27,8 @@ type CreateDevelopmentParams struct {
 	AttentionLabel           string `json:"attention_label"`
 	StandardsReviewerApp     int64  `json:"standards_reviewer_app"`
 	SpecificationReviewerApp int64  `json:"specification_reviewer_app"`
+	BuilderApp               int64  `json:"builder_app"`
+	FixerApp                 int64  `json:"fixer_app"`
 }
 
 func (q *Queries) CreateDevelopment(ctx context.Context, arg CreateDevelopmentParams) error {
@@ -34,6 +38,8 @@ func (q *Queries) CreateDevelopment(ctx context.Context, arg CreateDevelopmentPa
 		arg.AttentionLabel,
 		arg.StandardsReviewerApp,
 		arg.SpecificationReviewerApp,
+		arg.BuilderApp,
+		arg.FixerApp,
 	)
 	return err
 }
@@ -139,7 +145,7 @@ func (q *Queries) ListDevelopmentStartingLabels(ctx context.Context) ([]string, 
 }
 
 const listDevelopments = `-- name: ListDevelopments :many
-SELECT name, starting_label, attention_label, standards_reviewer_app, specification_reviewer_app
+SELECT name, starting_label, attention_label, standards_reviewer_app, specification_reviewer_app, builder_app, fixer_app
 FROM development
 ORDER BY name
 `
@@ -159,6 +165,8 @@ func (q *Queries) ListDevelopments(ctx context.Context) ([]Development, error) {
 			&i.AttentionLabel,
 			&i.StandardsReviewerApp,
 			&i.SpecificationReviewerApp,
+			&i.BuilderApp,
+			&i.FixerApp,
 		); err != nil {
 			return nil, err
 		}
