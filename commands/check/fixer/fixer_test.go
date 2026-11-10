@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"database/sql"
+	"encoding/base64"
 	"encoding/pem"
 	"fmt"
 	"os"
@@ -522,6 +523,7 @@ func runStandards(t *testing.T, repoDir string, id string) (err error) {
 
 func runSpecification(t *testing.T, repoDir string, id string) (err error) {
 	t.Helper()
+	allowSpecificationApp(t)
 	t.Setenv("GH_TOKEN", token)
 	t.Chdir(repoDir)
 	line := fmt.Sprintf("run specification-reviewer --tick %s", id)
@@ -555,12 +557,9 @@ func finishReviewer(t *testing.T, repoDir string, role string) {
 	require.NoError(t, err)
 	reviewer, found := agentByRole(agents, role)
 	require.True(t, found)
-	polled := reviewer.ID
+	require.True(t, reviewer.CursorAgentID.Valid)
+	polled := reviewer.CursorAgentID.String
 	standards := role == "standards_reviewer"
-	if standards {
-		require.True(t, reviewer.CursorAgentID.Valid)
-		polled = reviewer.CursorAgentID.String
-	}
 	stubRun(t, polled, finishedRun("https://github.com/octo/app/pull/9"))
 	id := runTick(t, repoDir)
 	if standards {
@@ -869,6 +868,32 @@ func allowStandardsApp(t *testing.T) {
 	err := wiremockClient.StubFor(rule)
 	require.NoError(t, err)
 	stubInstallationToken(t, standardsInstallation, standardsToken)
+}
+
+func allowSpecificationApp(t *testing.T) {
+	t.Helper()
+	pemText := testAppKey(t)
+	t.Setenv("FACTORY_GITHUB_APP_43", pemText)
+	stubAppInstallation(t, 43, specificationInstallation)
+	stubInstallationToken(t, specificationInstallation, specificationToken)
+}
+
+func stubAppInstallation(t *testing.T, appID int64, installationID int64) {
+	t.Helper()
+	path := "/repos/octo/app/installation"
+	body := fmt.Sprintf(`{"id":%d,"client_id":"Iv1.specification","suspended_at":null}`, installationID)
+	suffix := appJWTSuffix(appID)
+	rule := wiremock.Get(wiremock.URLPathEqualTo(path)).
+		WithHeader("Authorization", wiremock.Contains(suffix)).
+		WillReturnResponse(wiremock.NewResponse().WithStatus(200).WithHeader("Content-Type", "application/json").WithBody(body))
+	err := wiremockClient.StubFor(rule)
+	require.NoError(t, err)
+}
+
+func appJWTSuffix(appID int64) (suffix string) {
+	tail := fmt.Sprintf("%d\"}", appID)
+	suffix = base64.RawURLEncoding.EncodeToString([]byte(tail))
+	return
 }
 
 func stubInstallations(t *testing.T) {

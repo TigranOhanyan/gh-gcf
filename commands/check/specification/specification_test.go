@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/pem"
 	"fmt"
 	"os"
@@ -31,11 +32,14 @@ const builderInstruction = "Build the issue."
 const standardsInstruction = "Review the standards."
 const specificationInstruction = "Review the specification."
 const runID = "run-11111111-1111-7111-8111-111111111111"
+const cursorAgentID = "agent-11111111-1111-7111-8111-111111111111"
 const headSHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+const specificationInstallation int64 = 430
+const specificationToken = "ghs_specification"
 
 func Test_CheckSpecificationReviewer_should_record_the_specification_reviewers_finished_time(t *testing.T) {
 	repoDir := startedSpecificationReviewer(t)
-	reviewerID := agentIDByRole(t, repoDir, "specification_reviewer")
+	reviewerID := cursorAgentIDByRole(t, repoDir, "specification_reviewer")
 	stubRun(t, reviewerID, finishedReviewerRun())
 	later := runTick(t, repoDir)
 	pulls := len(pullGets(t))
@@ -80,6 +84,8 @@ func Test_CheckSpecificationReviewer_should_record_the_specification_reviewers_f
 	assert.True(t, builderAgent.FinishedAt.Valid)
 	assert.True(t, standardsAgent.FinishedAt.Valid)
 	assert.Equal(t, "specification_reviewer", reviewer.Role)
+	assert.True(t, reviewer.CursorAgentID.Valid)
+	assert.Equal(t, cursorAgentID, reviewer.CursorAgentID.String)
 	assert.True(t, reviewer.CursorRunID.Valid)
 	assert.Equal(t, runID, reviewer.CursorRunID.String)
 	assert.NotEmpty(t, reviewer.StartedAt)
@@ -103,7 +109,7 @@ func Test_CheckSpecificationReviewer_should_record_the_specification_reviewers_f
 
 func Test_CheckSpecificationReviewer_should_leave_a_running_specification_reviewer_and_write_no_finished_time(t *testing.T) {
 	repoDir := startedSpecificationReviewer(t)
-	reviewerID := agentIDByRole(t, repoDir, "specification_reviewer")
+	reviewerID := cursorAgentIDByRole(t, repoDir, "specification_reviewer")
 	stubRun(t, reviewerID, runningRun())
 	later := runTick(t, repoDir)
 	runs := len(cursorRunRequests(t))
@@ -130,7 +136,7 @@ func Test_CheckSpecificationReviewer_should_leave_a_running_specification_review
 
 func Test_CheckSpecificationReviewer_should_set_attention_when_the_specification_reviewer_run_has_failed(t *testing.T) {
 	repoDir := startedSpecificationReviewer(t)
-	reviewerID := agentIDByRole(t, repoDir, "specification_reviewer")
+	reviewerID := cursorAgentIDByRole(t, repoDir, "specification_reviewer")
 	stubRun(t, reviewerID, failedRun())
 	stubLabels(t, 7)
 	later := runTick(t, repoDir)
@@ -161,9 +167,70 @@ func Test_CheckSpecificationReviewer_should_set_attention_when_the_specification
 	assert.Contains(t, labels[0].body, "stop")
 }
 
+func Test_CheckSpecificationReviewer_should_ask_cursor_with_the_stored_cursor_agent_id(t *testing.T) {
+	repoDir := startedSpecificationReviewer(t)
+	stored := cursorAgentIDByRole(t, repoDir, "specification_reviewer")
+	stubRun(t, stored, finishedReviewerRun())
+	later := runTick(t, repoDir)
+
+	err := runCheck(t, repoDir, later)
+	require.NoError(t, err)
+
+	want := fmt.Sprintf("/v1/agents/%s/runs/%s", stored, runID)
+	assert.Contains(t, cursorRunRequests(t), want)
+}
+
+func Test_CheckSpecificationReviewer_should_skip_an_agent_that_has_no_cursor_agent_id(t *testing.T) {
+	resetWireMock(t)
+	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
+	created := fmt.Sprintf(`{"agent":{"id":"%s"},"run":{"id":"%s"}}`, cursorAgentID, runID)
+	stubCursor(t, 200, created)
+	repoDir := setupFactory(t)
+	id := runTick(t, repoDir)
+	err := runCompile(t, repoDir, id)
+	require.NoError(t, err)
+	err = runBuilder(t, repoDir, id)
+	require.NoError(t, err)
+	agentID := builderAgentID(t, repoDir)
+	stubRun(t, agentID, finishedRun("https://github.com/octo/app/pull/9"))
+	stubPull(t, 9, headSHA)
+	later := runTick(t, repoDir)
+	err = runCheckBuilder(t, repoDir, later)
+	require.NoError(t, err)
+	standardsTick := runTick(t, repoDir)
+	err = runStandards(t, repoDir, standardsTick)
+	require.NoError(t, err)
+	standardsID := cursorAgentIDByRole(t, repoDir, "standards_reviewer")
+	stubRun(t, standardsID, finishedReviewerRun())
+	checkedStandards := runTick(t, repoDir)
+	err = runCheckStandards(t, repoDir, checkedStandards)
+	require.NoError(t, err)
+	resetWireMock(t)
+	stubCursorFault(t)
+	specificationTick := runTick(t, repoDir)
+	err = runSpecification(t, repoDir, specificationTick)
+	require.Error(t, err)
+	checked := runTick(t, repoDir)
+	before := len(cursorRunRequests(t))
+
+	err = runCheck(t, repoDir, checked)
+	require.NoError(t, err)
+
+	assert.Len(t, cursorRunRequests(t), before)
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	agents := listAgents(t, db)
+	reviewer, found := agentByRole(agents, "specification_reviewer")
+	require.True(t, found)
+	assert.False(t, reviewer.CursorAgentID.Valid)
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	assert.Empty(t, works[0].Status)
+}
+
 func Test_CheckSpecificationReviewer_should_leave_an_attention_work(t *testing.T) {
 	repoDir := startedSpecificationReviewer(t)
-	reviewerID := agentIDByRole(t, repoDir, "specification_reviewer")
+	reviewerID := cursorAgentIDByRole(t, repoDir, "specification_reviewer")
 	stubRun(t, reviewerID, failedRun())
 	stubLabels(t, 7)
 	failedTick := runTick(t, repoDir)
@@ -197,7 +264,7 @@ func startedSpecificationReviewer(t *testing.T) (repoDir string) {
 	t.Helper()
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
-	created := fmt.Sprintf(`{"agent":{"id":"%s"},"run":{"id":"%s"}}`, "agent-11111111-1111-7111-8111-111111111111", runID)
+	created := fmt.Sprintf(`{"agent":{"id":"%s"},"run":{"id":"%s"}}`, cursorAgentID, runID)
 	stubCursor(t, 200, created)
 	repoDir = setupFactory(t)
 	id := runTick(t, repoDir)
@@ -372,11 +439,58 @@ func runCheckStandards(t *testing.T, repoDir string, id string) (err error) {
 
 func runSpecification(t *testing.T, repoDir string, id string) (err error) {
 	t.Helper()
+	allowSpecificationApp(t)
 	t.Setenv("GH_TOKEN", token)
 	t.Chdir(repoDir)
 	line := fmt.Sprintf("run specification-reviewer --tick %s", id)
 	_, err = runRoot(t, line)
 	return
+}
+
+func allowSpecificationApp(t *testing.T) {
+	t.Helper()
+	pemText := testAppKey(t)
+	t.Setenv("FACTORY_GITHUB_APP_43", pemText)
+	stubAppInstallation(t, 43, specificationInstallation)
+	stubInstallationToken(t, specificationInstallation, specificationToken)
+}
+
+func stubAppInstallation(t *testing.T, appID int64, installationID int64) {
+	t.Helper()
+	path := fmt.Sprintf("/repos/%s/%s/installation", owner, repoName)
+	body := fmt.Sprintf(`{"id":%d,"client_id":"Iv1.specification","suspended_at":null}`, installationID)
+	suffix := appJWTSuffix(appID)
+	rule := wiremock.Get(wiremock.URLPathEqualTo(path)).
+		WithHeader("Authorization", wiremock.Contains(suffix)).
+		WillReturnResponse(wiremock.NewResponse().WithStatus(200).WithHeader("Content-Type", "application/json").WithBody(body))
+	err := wiremockClient.StubFor(rule)
+	require.NoError(t, err)
+}
+
+func appJWTSuffix(appID int64) (suffix string) {
+	tail := fmt.Sprintf("%d\"}", appID)
+	suffix = base64.RawURLEncoding.EncodeToString([]byte(tail))
+	return
+}
+
+func stubInstallationToken(t *testing.T, installationID int64, issued string) {
+	t.Helper()
+	path := fmt.Sprintf("/app/installations/%d/access_tokens", installationID)
+	body := fmt.Sprintf(`{"token":%q}`, issued)
+	rule := wiremock.Post(wiremock.URLPathEqualTo(path)).WillReturnResponse(
+		wiremock.NewResponse().WithStatus(200).WithHeader("Content-Type", "application/json").WithBody(body),
+	)
+	err := wiremockClient.StubFor(rule)
+	require.NoError(t, err)
+}
+
+func stubCursorFault(t *testing.T) {
+	t.Helper()
+	rule := wiremock.Post(wiremock.URLPathEqualTo("/v1/agents")).WillReturnResponse(
+		wiremock.NewResponse().WithFault(wiremock.FaultConnectionResetByPeer),
+	)
+	err := wiremockClient.StubFor(rule)
+	require.NoError(t, err)
 }
 
 func runCheck(t *testing.T, repoDir string, id string) (err error) {
@@ -415,17 +529,6 @@ func builderAgentID(t *testing.T, repoDir string) (id string) {
 	agents := listAgents(t, db)
 	require.Len(t, agents, 1)
 	id = agents[0].ID
-	return
-}
-
-func agentIDByRole(t *testing.T, repoDir string, role string) (id string) {
-	t.Helper()
-	db := openStateTip(t, repoDir)
-	defer db.Close()
-	agents := listAgents(t, db)
-	agent, found := agentByRole(agents, role)
-	require.True(t, found)
-	id = agent.ID
 	return
 }
 
