@@ -27,6 +27,10 @@ const eventRejected = "rejected"
 const conclusionFailure = "failure"
 const conclusionCancelled = "cancelled"
 const conclusionTimedOut = "timed_out"
+const envGHPermission = "GH_PERMISSION"
+const envGHToken = "GH_TOKEN"
+const envGitHubToken = "GITHUB_TOKEN"
+const permissionWriteRead = "WRITE_READ"
 
 type checkStep struct {
 	GitHub *github.Client
@@ -179,46 +183,60 @@ func (step checkStep) startFixer(ctx context.Context, repo commands.Repo, stepID
 		return
 	}
 
+	token, err := commands.InstallationToken(ctx, development.FixerApp, repo.Owner, repo.Name)
+	if err != nil {
+		reason := err.Error()
+		line, err = rejectCreate(ctx, repo, stepID, client, development, work, agentID, reason)
+		return
+	}
+
 	pullNumber := work.PullRequestNumber.Int64
 	promptBody := promptText(text, work.IssueNumber, work.IssueUrl, pullNumber)
 	prompt := agent.CursorPrompt{Text: promptBody}
 	repoURL := fmt.Sprintf("https://github.com/%s/%s", repo.Owner, repo.Name)
 	oneRepo := agent.CursorRepo{URL: repoURL}
 	repos := []agent.CursorRepo{oneRepo}
+	env := map[string]string{
+		envGHPermission: permissionWriteRead,
+		envGHToken:      token,
+		envGitHubToken:  token,
+	}
 	body := agent.CursorCreate{
 		Prompt:       prompt,
 		AutoCreatePR: false,
-		AgentID:      agentID,
+		EnvVars:      env,
 	}
 	body.Repos = repos
-	_, runID, raw, status, err := step.cursor.Create(ctx, body)
+	cursorAgentID, runID, raw, status, err := step.cursor.Create(ctx, body)
 	lost := err != nil && status == 0
 	if lost {
 		return
 	}
 	refused := err != nil
 	if refused {
-		rejectErr := reject(ctx, repo, stepID, work.WorkID, agentID, raw)
-		if rejectErr != nil {
-			err = rejectErr
-			return
-		}
-		number := int(work.IssueNumber)
-		labelErr := commands.AddAttention(ctx, client, repo.Owner, repo.Name, number, development.AttentionLabel)
-		if labelErr != nil {
-			err = labelErr
-			return
-		}
-		line = fmt.Sprintf("[%d] rejected", work.IssueNumber)
-		err = nil
+		line, err = rejectCreate(ctx, repo, stepID, client, development, work, agentID, raw)
 		return
 	}
 
-	err = ack(ctx, repo, stepID, agentID, runID)
+	err = ack(ctx, repo, stepID, agentID, cursorAgentID, runID)
 	if err != nil {
 		return
 	}
 	line = fmt.Sprintf("[%d] started", work.IssueNumber)
+	return
+}
+
+func rejectCreate(ctx context.Context, repo commands.Repo, stepID string, client *github.Client, development records.Development, work records.ListWorksReadyForChecksRow, agentID string, reason string) (line string, err error) {
+	err = reject(ctx, repo, stepID, work.WorkID, agentID, reason)
+	if err != nil {
+		return
+	}
+	number := int(work.IssueNumber)
+	err = commands.AddAttention(ctx, client, repo.Owner, repo.Name, number, development.AttentionLabel)
+	if err != nil {
+		return
+	}
+	line = fmt.Sprintf("[%d] rejected", work.IssueNumber)
 	return
 }
 
@@ -265,19 +283,21 @@ func claim(ctx context.Context, repo commands.Repo, stepID string, developmentNa
 	return
 }
 
-func ack(ctx context.Context, repo commands.Repo, stepID string, agentID string, runID string) (err error) {
+func ack(ctx context.Context, repo commands.Repo, stepID string, agentID string, cursorAgentID string, runID string) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
 		log.Error("begin run", "err", err)
 		return
 	}
 	queries := repo.State.Queries.WithTx(tx)
-	stored := sql.NullString{String: runID, Valid: true}
-	runParams := records.SetDevelopmentAgentRunIDParams{
-		CursorRunID: stored,
-		ID:          agentID,
+	storedAgent := sql.NullString{String: cursorAgentID, Valid: true}
+	storedRun := sql.NullString{String: runID, Valid: true}
+	runParams := records.SetDevelopmentAgentCursorIDsParams{
+		CursorAgentID: storedAgent,
+		CursorRunID:   storedRun,
+		ID:            agentID,
 	}
-	err = queries.SetDevelopmentAgentRunID(ctx, runParams)
+	err = queries.SetDevelopmentAgentCursorIDs(ctx, runParams)
 	if err != nil {
 		err = commands.FinishTx(tx, err)
 		return
@@ -331,7 +351,8 @@ func reject(ctx context.Context, repo commands.Repo, stepID string, workID strin
 func promptText(instruction string, issueNumber int64, issueURL string, pullNumber int64) (text string) {
 	header := fmt.Sprintf("Pull request #%d", pullNumber)
 	issue := fmt.Sprintf("Issue #%d: %s", issueNumber, issueURL)
-	text = instruction + "\n\n" + header + "\n\n" + issue
+	trailer := agent.CodingTrailer()
+	text = instruction + "\n\n" + header + "\n\n" + issue + "\n\n" + trailer
 	return
 }
 

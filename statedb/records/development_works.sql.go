@@ -316,11 +316,14 @@ SELECT
     w.issue_number,
     w.pull_request_number,
     a.id AS agent_id,
+    a.cursor_agent_id,
     a.cursor_run_id
 FROM development_work w
 JOIN development_agent a ON a.id = w.fixer_agent
 WHERE w.status = ''
 AND a.role = 'fixer'
+AND a.cursor_agent_id IS NOT NULL
+AND a.cursor_agent_id != ''
 AND a.cursor_run_id IS NOT NULL
 AND a.cursor_run_id != ''
 AND a.finished_at IS NULL
@@ -343,6 +346,7 @@ type ListPendingDevelopmentFixersRow struct {
 	IssueNumber       int64          `json:"issue_number"`
 	PullRequestNumber sql.NullInt64  `json:"pull_request_number"`
 	AgentID           string         `json:"agent_id"`
+	CursorAgentID     sql.NullString `json:"cursor_agent_id"`
 	CursorRunID       sql.NullString `json:"cursor_run_id"`
 }
 
@@ -361,6 +365,7 @@ func (q *Queries) ListPendingDevelopmentFixers(ctx context.Context) ([]ListPendi
 			&i.IssueNumber,
 			&i.PullRequestNumber,
 			&i.AgentID,
+			&i.CursorAgentID,
 			&i.CursorRunID,
 		); err != nil {
 			return nil, err

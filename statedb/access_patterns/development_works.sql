@@ -151,11 +151,14 @@ SELECT
     w.issue_number,
     w.pull_request_number,
     a.id AS agent_id,
+    a.cursor_agent_id,
     a.cursor_run_id
 FROM development_work w
 JOIN development_agent a ON a.id = w.fixer_agent
 WHERE w.status = ''
 AND a.role = 'fixer'
+AND a.cursor_agent_id IS NOT NULL
+AND a.cursor_agent_id != ''
 AND a.cursor_run_id IS NOT NULL
 AND a.cursor_run_id != ''
 AND a.finished_at IS NULL

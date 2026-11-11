@@ -44,7 +44,9 @@ const newerStart = "2026-11-08T10:00:00Z"
 const standardsInstallation int64 = 420
 const specificationInstallation int64 = 430
 const builderInstallation int64 = 440
+const fixerInstallation int64 = 450
 const builderToken = "ghs_builder"
+const fixerToken = "ghs_fixer"
 const standardsBotID int64 = 4201
 const specificationBotID int64 = 4301
 const standardsToken = "token-standards"
@@ -52,7 +54,7 @@ const specificationToken = "token-specification"
 
 func Test_CheckFixer_should_record_the_fixers_finished_time_and_the_fixer_head_sha_when_the_fixers_run_has_finished(t *testing.T) {
 	repoDir := startedFixer(t)
-	agentID := fixerAgentID(t, repoDir)
+	agentID := fixerCursorAgentID(t, repoDir)
 	stubRun(t, agentID, finishedFixerRun())
 	later := runTick(t, repoDir)
 	startOfTest := time.Now().Add(-time.Second)
@@ -125,7 +127,7 @@ func Test_CheckFixer_should_record_the_fixers_finished_time_and_the_fixer_head_s
 
 func Test_CheckFixer_should_set_the_development_work_to_attention_when_the_fixers_run_has_failed_apply_the_attention_label_and_write_no_fixer_head_sha(t *testing.T) {
 	repoDir := startedFixer(t)
-	agentID := fixerAgentID(t, repoDir)
+	agentID := fixerCursorAgentID(t, repoDir)
 	stubRun(t, agentID, failedRun())
 	stubLabels(t, 7)
 	later := runTick(t, repoDir)
@@ -369,10 +371,25 @@ func Test_CheckFixer_should_set_the_development_work_to_attention_when_a_listed_
 	assert.Equal(t, "/repos/octo/app/commits/"+fixerHeadSHA+"/check-runs", requests[0].path)
 }
 
+func Test_CheckFixer_should_ask_cursor_with_the_stored_cursor_agent_id(t *testing.T) {
+	repoDir := startedFixer(t)
+	stored := fixerCursorAgentID(t, repoDir)
+	assert.Equal(t, cursorAgentID, stored)
+	stubRun(t, stored, finishedFixerRun())
+	want := fmt.Sprintf("/v1/agents/%s/runs/%s", stored, runID)
+	before := countRunPath(t, want)
+	later := runTick(t, repoDir)
+
+	err := runCheckFixer(t, repoDir, later)
+	require.NoError(t, err)
+
+	assert.Equal(t, before+1, countRunPath(t, want))
+}
+
 func recordedFixer(t *testing.T) (repoDir string) {
 	t.Helper()
 	repoDir = startedFixer(t)
-	agentID := fixerAgentID(t, repoDir)
+	agentID := fixerCursorAgentID(t, repoDir)
 	stubRun(t, agentID, finishedFixerRun())
 	later := runTick(t, repoDir)
 	err := runCheckFixer(t, repoDir, later)
@@ -550,11 +567,20 @@ func runSpecification(t *testing.T, repoDir string, id string) (err error) {
 
 func runFixer(t *testing.T, repoDir string, id string) (err error) {
 	t.Helper()
+	allowFixerApp(t)
 	t.Setenv("GH_TOKEN", token)
 	t.Chdir(repoDir)
 	line := fmt.Sprintf("run fixer --tick %s", id)
 	_, err = runRoot(t, line)
 	return
+}
+
+func allowFixerApp(t *testing.T) {
+	t.Helper()
+	pemText := testAppKey(t)
+	t.Setenv("FACTORY_GITHUB_APP_44", pemText)
+	stubAppInstallation(t, 44, fixerInstallation)
+	stubInstallationToken(t, fixerInstallation, fixerToken)
 }
 
 func runCheckFixer(t *testing.T, repoDir string, id string) (err error) {
@@ -634,6 +660,32 @@ func fixerAgentID(t *testing.T, repoDir string) (id string) {
 	fixer, found := agentByRole(agents, "fixer")
 	require.True(t, found)
 	id = fixer.ID
+	return
+}
+
+func fixerCursorAgentID(t *testing.T, repoDir string) (id string) {
+	t.Helper()
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	agents := listAgents(t, db)
+	fixer, found := agentByRole(agents, "fixer")
+	require.True(t, found)
+	require.True(t, fixer.CursorAgentID.Valid)
+	id = fixer.CursorAgentID.String
+	return
+}
+
+func countRunPath(t *testing.T, path string) (count int) {
+	t.Helper()
+	journal, err := wiremockClient.GetAllRequests()
+	require.NoError(t, err)
+	for _, entry := range journal.Requests {
+		request := entry.Request
+		matched := request.Method == "GET" && request.URL == path
+		if matched {
+			count++
+		}
+	}
 	return
 }
 

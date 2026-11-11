@@ -179,12 +179,13 @@ func markFinished(ctx context.Context, repo commands.Repo, workID string) (err e
 }
 
 func (step checkStep) observe(ctx context.Context, repo commands.Repo, stepID string, client *github.Client, item records.ListPendingDevelopmentFixersRow) (line string, err error) {
+	cursorAgentID := item.CursorAgentID.String
 	runID := item.CursorRunID.String
-	run, _, err := step.cursor.getRun(ctx, item.AgentID, runID)
+	run, _, err := step.cursor.getRun(ctx, cursorAgentID, runID)
 	if err != nil {
 		return
 	}
-	log.Info("cursor run", "agent", item.AgentID, "status", run.Status)
+	log.Info("cursor run", "agent", cursorAgentID, "status", run.Status)
 
 	stillRunning := run.Status == runCreating || run.Status == runRunning
 	if stillRunning {

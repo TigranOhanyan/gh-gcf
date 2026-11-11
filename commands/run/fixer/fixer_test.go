@@ -21,6 +21,7 @@ import (
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
 	"github.com/TigranOhanyan/gh-gcf/commands/root"
+	"github.com/TigranOhanyan/gh-gcf/commands/run/agent"
 	"github.com/TigranOhanyan/gh-gcf/statedb"
 	"github.com/TigranOhanyan/gh-gcf/statedb/records"
 )
@@ -43,7 +44,9 @@ const newerStart = "2026-11-08T10:00:00Z"
 const standardsInstallation int64 = 420
 const specificationInstallation int64 = 430
 const builderInstallation int64 = 440
+const fixerInstallation int64 = 450
 const builderToken = "ghs_builder"
+const fixerToken = "ghs_fixer"
 const standardsBotID int64 = 4201
 const specificationBotID int64 = 4301
 const standardsToken = "token-standards"
@@ -390,17 +393,30 @@ func Test_RunFixer_should_start_the_fixer_when_one_verdict_requests_changes(t *t
 	assert.Empty(t, work.Status)
 	assert.True(t, strings.HasPrefix(fixerAgent.ID, "bc-"))
 	assert.Equal(t, "fixer", fixerAgent.Role)
+	assert.True(t, fixerAgent.CursorAgentID.Valid)
+	assert.Equal(t, cursorAgentID, fixerAgent.CursorAgentID.String)
 	assert.True(t, fixerAgent.CursorRunID.Valid)
 	assert.Equal(t, runID, fixerAgent.CursorRunID.String)
 	assert.NotEmpty(t, fixerAgent.StartedAt)
 	assert.False(t, fixerAgent.FinishedAt.Valid)
+	instructionPath := filepath.Join(repoDir, "repos", owner, repoName, "developments", developmentName, "fixer.md")
+	written, err := os.ReadFile(instructionPath)
+	require.NoError(t, err)
+	assert.Equal(t, fixerInstruction, string(written))
 	requests := cursorRequests(t)
 	require.Len(t, requests, 4)
-	request, found := requestFor(requests, fixerAgent.ID)
+	request, found := requestFor(requests, fixerInstruction)
 	require.True(t, found)
 	assert.Contains(t, request, fixerInstruction)
 	assert.Contains(t, request, "Pull request #9")
 	assert.Contains(t, request, "Issue #7: https://github.com/octo/app/issues/7")
+	assert.Contains(t, request, agent.CodingTrailer())
+	assert.NotContains(t, request, agent.ReviewerTrailer())
+	assert.NotContains(t, request, "agentId")
+	assert.NotContains(t, request, fixerAgent.ID)
+	assert.Contains(t, request, `"GH_PERMISSION":"WRITE_READ"`)
+	assert.Contains(t, request, `"GH_TOKEN":"`+fixerToken+`"`)
+	assert.Contains(t, request, `"GITHUB_TOKEN":"`+fixerToken+`"`)
 	assert.Contains(t, request, `"autoCreatePR":false`)
 	assert.Empty(t, labelPosts(t))
 }
@@ -499,6 +515,85 @@ func Test_RunFixer_should_not_start_a_second_fixer_when_one_has_already_started(
 	assert.Empty(t, works[0].Status)
 	assert.True(t, works[0].FixerAgent.Valid)
 	assert.Len(t, cursorRequests(t), posts)
+}
+
+func Test_RunFixer_should_set_attention_when_the_private_key_is_missing(t *testing.T) {
+	repoDir := readyReviewers(t)
+	recordApps(t, repoDir)
+	run := oneRun(checkName, "completed", "success", newerStart)
+	stubCheckRuns(t, headSHA, checkRunsPayload(run))
+	stubReviewerAccess(t)
+	standards := reviewJSON(1, standardsBotID, "CHANGES_REQUESTED", olderStart)
+	specification := reviewJSON(2, specificationBotID, "APPROVED", newerStart)
+	stubReviews(t, reviewsPayload(standards, specification))
+	stubLabels(t, 7)
+	id := runTick(t, repoDir)
+	before := len(cursorRequests(t))
+	t.Setenv("FACTORY_GITHUB_APP_44", "")
+
+	err := runFixerCommand(t, repoDir, id)
+	require.NoError(t, err)
+
+	assert.Len(t, cursorRequests(t), before)
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	assert.Equal(t, "attention", works[0].Status)
+	assert.True(t, works[0].FixerAgent.Valid)
+	agents := listAgents(t, db)
+	fixerAgent, fixerFound := agentByRole(agents, "fixer")
+	require.True(t, fixerFound)
+	assert.False(t, fixerAgent.CursorAgentID.Valid)
+	assert.False(t, fixerAgent.CursorRunID.Valid)
+	events := listEvents(t, db)
+	_, ackFound := eventFor(events, fixerAgent.ID, "ack")
+	assert.False(t, ackFound)
+	rejected, rejectedFound := eventFor(events, fixerAgent.ID, "rejected")
+	require.True(t, rejectedFound)
+	assert.Contains(t, rejected.Message, "github app key is missing")
+	labels := labelPosts(t)
+	require.Len(t, labels, 1)
+	assert.Equal(t, "/repos/octo/app/issues/7/labels", labels[0].url)
+	assert.Contains(t, labels[0].body, "stop")
+}
+
+func Test_RunFixer_should_set_attention_when_the_create_is_refused(t *testing.T) {
+	repoDir := readyReviewers(t)
+	recordApps(t, repoDir)
+	run := oneRun(checkName, "completed", "success", newerStart)
+	stubCheckRuns(t, headSHA, checkRunsPayload(run))
+	stubReviewerAccess(t)
+	standards := reviewJSON(1, standardsBotID, "CHANGES_REQUESTED", olderStart)
+	specification := reviewJSON(2, specificationBotID, "APPROVED", newerStart)
+	stubReviews(t, reviewsPayload(standards, specification))
+	stubCursor(t, 500, `{"error":"nope"}`)
+	stubLabels(t, 7)
+	id := runTick(t, repoDir)
+
+	err := runFixer(t, repoDir, id)
+	require.NoError(t, err)
+
+	body := mustGit(t, repoDir, "log -1 --format=%b state")
+	assert.Contains(t, string(body), "✅ [7] rejected")
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	assert.Equal(t, "attention", works[0].Status)
+	agents := listAgents(t, db)
+	fixerAgent, fixerFound := agentByRole(agents, "fixer")
+	require.True(t, fixerFound)
+	assert.False(t, fixerAgent.CursorAgentID.Valid)
+	assert.False(t, fixerAgent.CursorRunID.Valid)
+	assert.False(t, fixerAgent.FinishedAt.Valid)
+	events := listEvents(t, db)
+	_, ackFound := eventFor(events, fixerAgent.ID, "ack")
+	assert.False(t, ackFound)
+	labels := labelPosts(t)
+	require.Len(t, labels, 1)
+	assert.Equal(t, "/repos/octo/app/issues/7/labels", labels[0].url)
+	assert.Contains(t, labels[0].body, "stop")
 }
 
 func Test_RunFixer_should_wait_when_the_fixer_instruction_hash_differs(t *testing.T) {
@@ -775,11 +870,26 @@ func runSpecification(t *testing.T, repoDir string, id string) (err error) {
 
 func runFixer(t *testing.T, repoDir string, id string) (err error) {
 	t.Helper()
+	allowFixerApp(t)
+	err = runFixerCommand(t, repoDir, id)
+	return
+}
+
+func runFixerCommand(t *testing.T, repoDir string, id string) (err error) {
+	t.Helper()
 	t.Setenv("GH_TOKEN", token)
 	t.Chdir(repoDir)
 	line := fmt.Sprintf("run fixer --tick %s", id)
 	_, err = runRoot(t, line)
 	return
+}
+
+func allowFixerApp(t *testing.T) {
+	t.Helper()
+	pemText := testAppKey(t)
+	t.Setenv("FACTORY_GITHUB_APP_44", pemText)
+	stubAppInstallation(t, 44, fixerInstallation)
+	stubInstallationToken(t, fixerInstallation, fixerToken)
 }
 
 func finishReviewer(t *testing.T, repoDir string, role string) {
@@ -897,7 +1007,7 @@ func assertFixerStarted(t *testing.T, repoDir string) {
 	assert.Equal(t, runID, fixerAgent.CursorRunID.String)
 	assert.False(t, fixerAgent.FinishedAt.Valid)
 	requests := cursorRequests(t)
-	_, found := requestFor(requests, fixerAgent.ID)
+	_, found := requestFor(requests, fixerInstruction)
 	assert.True(t, found)
 }
 
