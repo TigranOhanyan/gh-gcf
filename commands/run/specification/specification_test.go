@@ -36,8 +36,10 @@ const runID = "run-11111111-1111-7111-8111-111111111111"
 const cursorAgentID = "agent-11111111-1111-7111-8111-111111111111"
 const headSHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 const specificationInstallation int64 = 430
+const builderInstallation int64 = 440
 const standardsToken = "ghs_standards"
 const specificationToken = "ghs_specification"
+const builderToken = "ghs_builder"
 
 func Test_RunSpecificationReviewer_should_start_the_specification_reviewer_when_the_standards_reviewer_has_finished_and_the_development_work_is_not_attention_or_finished(t *testing.T) {
 	repoDir := readyStandardsReviewer(t)
@@ -315,8 +317,7 @@ func readyStandardsReviewer(t *testing.T) (repoDir string) {
 	require.NoError(t, err)
 	err = runBuilder(t, repoDir, id)
 	require.NoError(t, err)
-	agentID := builderAgentID(t, repoDir)
-	stubRun(t, agentID, finishedRun("https://github.com/octo/app/pull/9"))
+	stubRun(t, cursorAgentID, finishedRun("https://github.com/octo/app/pull/9"))
 	stubPull(t, 9, headSHA)
 	later := runTick(t, repoDir)
 	err = runCheck(t, repoDir, later)
@@ -406,11 +407,32 @@ func runCompile(t *testing.T, repoDir string, id string) (err error) {
 
 func runBuilder(t *testing.T, repoDir string, id string) (err error) {
 	t.Helper()
+	allowBuilderApp(t)
 	t.Setenv("GH_TOKEN", token)
 	t.Chdir(repoDir)
 	line := fmt.Sprintf("run builder --tick %s", id)
 	_, err = runRoot(t, line)
 	return
+}
+
+func allowBuilderApp(t *testing.T) {
+	t.Helper()
+	pemText := testAppKey(t)
+	t.Setenv("FACTORY_GITHUB_APP_44", pemText)
+	path := fmt.Sprintf("/repos/%s/%s/installation", owner, repoName)
+	body := fmt.Sprintf(`{"id":%d,"client_id":"Iv1.builder","suspended_at":null}`, builderInstallation)
+	rule := wiremock.Get(wiremock.URLPathEqualTo(path)).WillReturnResponse(
+		wiremock.NewResponse().WithStatus(200).WithHeader("Content-Type", "application/json").WithBody(body),
+	)
+	err := wiremockClient.StubFor(rule)
+	require.NoError(t, err)
+	tokenPath := fmt.Sprintf("/app/installations/%d/access_tokens", builderInstallation)
+	tokenBody := fmt.Sprintf(`{"token":%q}`, builderToken)
+	tokenRule := wiremock.Post(wiremock.URLPathEqualTo(tokenPath)).WillReturnResponse(
+		wiremock.NewResponse().WithStatus(200).WithHeader("Content-Type", "application/json").WithBody(tokenBody),
+	)
+	err = wiremockClient.StubFor(tokenRule)
+	require.NoError(t, err)
 }
 
 func runCheck(t *testing.T, repoDir string, id string) (err error) {
@@ -514,16 +536,6 @@ func mustRoot(t *testing.T, line string) (stdout string) {
 	t.Helper()
 	stdout, err := runRoot(t, line)
 	require.NoError(t, err)
-	return
-}
-
-func builderAgentID(t *testing.T, repoDir string) (id string) {
-	t.Helper()
-	db := openStateTip(t, repoDir)
-	defer db.Close()
-	agents := listAgents(t, db)
-	require.Len(t, agents, 1)
-	id = agents[0].ID
 	return
 }
 

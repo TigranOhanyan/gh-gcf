@@ -2,6 +2,10 @@ package builder_test
 
 import (
 	"bytes"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -25,20 +29,23 @@ const token = "test-token"
 const developmentName = "features"
 const instruction = "Build the issue."
 const runID = "run-11111111-1111-7111-8111-111111111111"
+const cursorAgentID = "agent-11111111-1111-7111-8111-111111111111"
 const headSHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+const builderInstallation int64 = 440
+const builderToken = "ghs_builder"
 
 func Test_CheckBuilder_should_record_the_builders_finished_time_the_pull_request_number_and_the_builder_head_sha(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
-	stubCursor(t, 200, `{"agent":{"id":"agent-11111111-1111-7111-8111-111111111111"},"run":{"id":"`+runID+`"}}`)
+	stubCursor(t, 200, createdCursor())
 	repoDir := setupFactory(t, instruction)
 	id := runTick(t, repoDir)
 	err := runCompile(t, repoDir, id)
 	require.NoError(t, err)
 	err = runBuilder(t, repoDir, id)
 	require.NoError(t, err)
-	agentID := builderAgentID(t, repoDir)
-	stubRun(t, agentID, finishedRun("https://github.com/octo/app/pull/9"))
+	stored := cursorAgentIDByRole(t, repoDir, "builder")
+	stubRun(t, stored, finishedRun("https://github.com/octo/app/pull/9"))
 	stubPull(t, 9, headSHA)
 	later := runTick(t, repoDir)
 	startOfTest := time.Now().Add(-time.Second)
@@ -97,15 +104,15 @@ func Test_CheckBuilder_should_record_the_builders_finished_time_the_pull_request
 func Test_CheckBuilder_should_leave_a_running_builder_and_write_no_finished_time(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
-	stubCursor(t, 200, `{"agent":{"id":"agent-11111111-1111-7111-8111-111111111111"},"run":{"id":"`+runID+`"}}`)
+	stubCursor(t, 200, createdCursor())
 	repoDir := setupFactory(t, instruction)
 	id := runTick(t, repoDir)
 	err := runCompile(t, repoDir, id)
 	require.NoError(t, err)
 	err = runBuilder(t, repoDir, id)
 	require.NoError(t, err)
-	agentID := builderAgentID(t, repoDir)
-	stubRun(t, agentID, runningRun())
+	stored := cursorAgentIDByRole(t, repoDir, "builder")
+	stubRun(t, stored, runningRun())
 	later := runTick(t, repoDir)
 
 	err = runCheck(t, repoDir, later)
@@ -134,7 +141,7 @@ func Test_CheckBuilder_should_leave_a_running_builder_and_write_no_finished_time
 func Test_CheckBuilder_should_set_attention_when_the_finished_builder_has_no_pull_request(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
-	stubCursor(t, 200, `{"agent":{"id":"agent-11111111-1111-7111-8111-111111111111"},"run":{"id":"`+runID+`"}}`)
+	stubCursor(t, 200, createdCursor())
 	stubLabels(t, 7)
 	repoDir := setupFactory(t, instruction)
 	id := runTick(t, repoDir)
@@ -142,8 +149,8 @@ func Test_CheckBuilder_should_set_attention_when_the_finished_builder_has_no_pul
 	require.NoError(t, err)
 	err = runBuilder(t, repoDir, id)
 	require.NoError(t, err)
-	agentID := builderAgentID(t, repoDir)
-	stubRun(t, agentID, finishedRun(""))
+	stored := cursorAgentIDByRole(t, repoDir, "builder")
+	stubRun(t, stored, finishedRun(""))
 	later := runTick(t, repoDir)
 
 	err = runCheck(t, repoDir, later)
@@ -177,7 +184,7 @@ func Test_CheckBuilder_should_set_attention_when_the_finished_builder_has_no_pul
 func Test_CheckBuilder_should_set_attention_when_the_builder_run_has_failed(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
-	stubCursor(t, 200, `{"agent":{"id":"agent-11111111-1111-7111-8111-111111111111"},"run":{"id":"`+runID+`"}}`)
+	stubCursor(t, 200, createdCursor())
 	stubLabels(t, 7)
 	repoDir := setupFactory(t, instruction)
 	id := runTick(t, repoDir)
@@ -185,8 +192,8 @@ func Test_CheckBuilder_should_set_attention_when_the_builder_run_has_failed(t *t
 	require.NoError(t, err)
 	err = runBuilder(t, repoDir, id)
 	require.NoError(t, err)
-	agentID := builderAgentID(t, repoDir)
-	stubRun(t, agentID, failedRun())
+	stored := cursorAgentIDByRole(t, repoDir, "builder")
+	stubRun(t, stored, failedRun())
 	later := runTick(t, repoDir)
 
 	err = runCheck(t, repoDir, later)
@@ -220,7 +227,7 @@ func Test_CheckBuilder_should_set_attention_when_the_builder_run_has_failed(t *t
 func Test_CheckBuilder_should_leave_an_attention_work_and_start_no_second_builder(t *testing.T) {
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
-	stubCursor(t, 200, `{"agent":{"id":"agent-11111111-1111-7111-8111-111111111111"},"run":{"id":"`+runID+`"}}`)
+	stubCursor(t, 200, createdCursor())
 	stubLabels(t, 7)
 	repoDir := setupFactory(t, instruction)
 	id := runTick(t, repoDir)
@@ -228,8 +235,8 @@ func Test_CheckBuilder_should_leave_an_attention_work_and_start_no_second_builde
 	require.NoError(t, err)
 	err = runBuilder(t, repoDir, id)
 	require.NoError(t, err)
-	agentID := builderAgentID(t, repoDir)
-	stubRun(t, agentID, failedRun())
+	stored := cursorAgentIDByRole(t, repoDir, "builder")
+	stubRun(t, stored, failedRun())
 	failedTick := runTick(t, repoDir)
 	err = runCheck(t, repoDir, failedTick)
 	require.NoError(t, err)
@@ -253,6 +260,56 @@ func Test_CheckBuilder_should_leave_an_attention_work_and_start_no_second_builde
 	assert.Len(t, cursorCreates(t), 1)
 	assert.Len(t, cursorRunRequests(t), 1)
 	assert.Len(t, labelPosts(t), 1)
+}
+
+func Test_CheckBuilder_should_ask_cursor_with_the_stored_cursor_agent_id(t *testing.T) {
+	resetWireMock(t)
+	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
+	stubCursor(t, 200, createdCursor())
+	repoDir := setupFactory(t, instruction)
+	id := runTick(t, repoDir)
+	err := runCompile(t, repoDir, id)
+	require.NoError(t, err)
+	err = runBuilder(t, repoDir, id)
+	require.NoError(t, err)
+	stored := cursorAgentIDByRole(t, repoDir, "builder")
+	assert.Equal(t, cursorAgentID, stored)
+	stubRun(t, stored, finishedRun("https://github.com/octo/app/pull/9"))
+	stubPull(t, 9, headSHA)
+	later := runTick(t, repoDir)
+
+	err = runCheck(t, repoDir, later)
+	require.NoError(t, err)
+
+	want := fmt.Sprintf("/v1/agents/%s/runs/%s", stored, runID)
+	assert.Contains(t, cursorRunRequests(t), want)
+}
+
+func Test_CheckBuilder_should_skip_an_agent_that_has_no_cursor_agent_id(t *testing.T) {
+	resetWireMock(t)
+	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
+	stubCursorFault(t)
+	repoDir := setupFactory(t, instruction)
+	id := runTick(t, repoDir)
+	err := runCompile(t, repoDir, id)
+	require.NoError(t, err)
+	err = runBuilder(t, repoDir, id)
+	require.Error(t, err)
+	checked := runTick(t, repoDir)
+	before := len(cursorRunRequests(t))
+
+	err = runCheck(t, repoDir, checked)
+	require.NoError(t, err)
+
+	assert.Len(t, cursorRunRequests(t), before)
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	agents := listAgents(t, db)
+	require.Len(t, agents, 1)
+	assert.False(t, agents[0].CursorAgentID.Valid)
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	assert.Empty(t, works[0].Status)
 }
 
 func setupFactory(t *testing.T, text string) (repoDir string) {
@@ -338,11 +395,58 @@ func runCompile(t *testing.T, repoDir string, id string) (err error) {
 
 func runBuilder(t *testing.T, repoDir string, id string) (err error) {
 	t.Helper()
+	allowBuilderApp(t)
 	t.Setenv("GH_TOKEN", token)
 	t.Chdir(repoDir)
 	line := fmt.Sprintf("run builder --tick %s", id)
 	_, err = runRoot(t, line)
 	return
+}
+
+func allowBuilderApp(t *testing.T) {
+	t.Helper()
+	pemText := testAppKey(t)
+	t.Setenv("FACTORY_GITHUB_APP_44", pemText)
+	path := fmt.Sprintf("/repos/%s/%s/installation", owner, repoName)
+	body := fmt.Sprintf(`{"id":%d,"client_id":"Iv1.builder","suspended_at":null}`, builderInstallation)
+	rule := wiremock.Get(wiremock.URLPathEqualTo(path)).WillReturnResponse(
+		wiremock.NewResponse().WithStatus(200).WithHeader("Content-Type", "application/json").WithBody(body),
+	)
+	err := wiremockClient.StubFor(rule)
+	require.NoError(t, err)
+	tokenPath := fmt.Sprintf("/app/installations/%d/access_tokens", builderInstallation)
+	tokenBody := fmt.Sprintf(`{"token":%q}`, builderToken)
+	tokenRule := wiremock.Post(wiremock.URLPathEqualTo(tokenPath)).WillReturnResponse(
+		wiremock.NewResponse().WithStatus(200).WithHeader("Content-Type", "application/json").WithBody(tokenBody),
+	)
+	err = wiremockClient.StubFor(tokenRule)
+	require.NoError(t, err)
+}
+
+func testAppKey(t *testing.T) (pemText string) {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	block := &pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	}
+	pemText = string(pem.EncodeToMemory(block))
+	return
+}
+
+func createdCursor() (payload string) {
+	payload = `{"agent":{"id":"` + cursorAgentID + `"},"run":{"id":"` + runID + `"}}`
+	return
+}
+
+func stubCursorFault(t *testing.T) {
+	t.Helper()
+	rule := wiremock.Post(wiremock.URLPathEqualTo("/v1/agents")).WillReturnResponse(
+		wiremock.NewResponse().WithFault(wiremock.FaultConnectionResetByPeer),
+	)
+	err := wiremockClient.StubFor(rule)
+	require.NoError(t, err)
 }
 
 func runCheck(t *testing.T, repoDir string, id string) (err error) {
@@ -374,13 +478,22 @@ func mustRoot(t *testing.T, line string) (stdout string) {
 	return
 }
 
-func builderAgentID(t *testing.T, repoDir string) (id string) {
+func cursorAgentIDByRole(t *testing.T, repoDir string, role string) (id string) {
 	t.Helper()
 	db := openStateTip(t, repoDir)
 	defer db.Close()
 	agents := listAgents(t, db)
-	require.Len(t, agents, 1)
-	id = agents[0].ID
+	var found bool
+	for _, item := range agents {
+		matched := item.Role == role
+		if matched {
+			require.True(t, item.CursorAgentID.Valid)
+			id = item.CursorAgentID.String
+			found = true
+			return
+		}
+	}
+	require.True(t, found)
 	return
 }
 

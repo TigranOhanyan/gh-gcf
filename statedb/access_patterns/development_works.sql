@@ -63,11 +63,14 @@ SELECT
     w.development_name,
     w.issue_number,
     a.id AS agent_id,
+    a.cursor_agent_id,
     a.cursor_run_id
 FROM development_work w
 JOIN development_agent a ON a.id = w.builder_agent
 WHERE w.status = ''
 AND a.role = 'builder'
+AND a.cursor_agent_id IS NOT NULL
+AND a.cursor_agent_id != ''
 AND a.cursor_run_id IS NOT NULL
 AND a.cursor_run_id != ''
 AND a.finished_at IS NULL

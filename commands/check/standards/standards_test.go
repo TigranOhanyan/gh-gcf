@@ -33,6 +33,8 @@ const runID = "run-11111111-1111-7111-8111-111111111111"
 const cursorAgentID = "agent-11111111-1111-7111-8111-111111111111"
 const headSHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 const standardsInstallation int64 = 420
+const builderInstallation int64 = 440
+const builderToken = "ghs_builder"
 const standardsToken = "ghs_standards"
 
 func Test_CheckStandardsReviewer_should_record_the_standards_reviewers_finished_time(t *testing.T) {
@@ -183,8 +185,7 @@ func Test_CheckStandardsReviewer_should_skip_an_agent_that_has_no_cursor_agent_i
 	require.NoError(t, err)
 	err = runBuilder(t, repoDir, id)
 	require.NoError(t, err)
-	agentID := builderAgentID(t, repoDir)
-	stubRun(t, agentID, finishedRun("https://github.com/octo/app/pull/9"))
+	stubRun(t, cursorAgentID, finishedRun("https://github.com/octo/app/pull/9"))
 	stubPull(t, 9, headSHA)
 	later := runTick(t, repoDir)
 	err = runCheckBuilder(t, repoDir, later)
@@ -262,8 +263,7 @@ func startedStandardsReviewer(t *testing.T) (repoDir string) {
 	require.NoError(t, err)
 	err = runBuilder(t, repoDir, id)
 	require.NoError(t, err)
-	agentID := builderAgentID(t, repoDir)
-	stubRun(t, agentID, finishedRun("https://github.com/octo/app/pull/9"))
+	stubRun(t, cursorAgentID, finishedRun("https://github.com/octo/app/pull/9"))
 	stubPull(t, 9, headSHA)
 	later := runTick(t, repoDir)
 	err = runCheckBuilder(t, repoDir, later)
@@ -352,11 +352,20 @@ func runCompile(t *testing.T, repoDir string, id string) (err error) {
 
 func runBuilder(t *testing.T, repoDir string, id string) (err error) {
 	t.Helper()
+	allowBuilderApp(t)
 	t.Setenv("GH_TOKEN", token)
 	t.Chdir(repoDir)
 	line := fmt.Sprintf("run builder --tick %s", id)
 	_, err = runRoot(t, line)
 	return
+}
+
+func allowBuilderApp(t *testing.T) {
+	t.Helper()
+	pemText := testAppKey(t)
+	t.Setenv("FACTORY_GITHUB_APP_44", pemText)
+	stubInstallation(t, builderInstallation)
+	stubInstallationToken(t, builderInstallation, builderToken)
 }
 
 func runCheckBuilder(t *testing.T, repoDir string, id string) (err error) {
@@ -455,16 +464,6 @@ func mustRoot(t *testing.T, line string) (stdout string) {
 	t.Helper()
 	stdout, err := runRoot(t, line)
 	require.NoError(t, err)
-	return
-}
-
-func builderAgentID(t *testing.T, repoDir string) (id string) {
-	t.Helper()
-	db := openStateTip(t, repoDir)
-	defer db.Close()
-	agents := listAgents(t, db)
-	require.Len(t, agents, 1)
-	id = agents[0].ID
 	return
 }
 

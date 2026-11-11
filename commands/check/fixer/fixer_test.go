@@ -36,12 +36,15 @@ const standardsInstruction = "Review the standards."
 const specificationInstruction = "Review the specification."
 const fixerInstruction = "Apply the requested changes."
 const runID = "run-11111111-1111-7111-8111-111111111111"
+const cursorAgentID = "agent-11111111-1111-7111-8111-111111111111"
 const headSHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 const fixerHeadSHA = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 const olderStart = "2026-11-08T09:00:00Z"
 const newerStart = "2026-11-08T10:00:00Z"
 const standardsInstallation int64 = 420
 const specificationInstallation int64 = 430
+const builderInstallation int64 = 440
+const builderToken = "ghs_builder"
 const standardsBotID int64 = 4201
 const specificationBotID int64 = 4301
 const standardsToken = "token-standards"
@@ -381,15 +384,14 @@ func startedFixer(t *testing.T) (repoDir string) {
 	t.Helper()
 	resetWireMock(t)
 	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
-	stubCursor(t, 200, `{"agent":{"id":"agent-11111111-1111-7111-8111-111111111111"},"run":{"id":"`+runID+`"}}`)
+	stubCursor(t, 200, `{"agent":{"id":"`+cursorAgentID+`"},"run":{"id":"`+runID+`"}}`)
 	repoDir = setupFactory(t)
 	id := runTick(t, repoDir)
 	err := runCompile(t, repoDir, id)
 	require.NoError(t, err)
 	err = runBuilder(t, repoDir, id)
 	require.NoError(t, err)
-	agentID := builderAgentID(t, repoDir)
-	stubRun(t, agentID, finishedRun("https://github.com/octo/app/pull/9"))
+	stubRun(t, cursorAgentID, finishedRun("https://github.com/octo/app/pull/9"))
 	stubPulls(t, 9, headSHA, fixerHeadSHA)
 	later := runTick(t, repoDir)
 	err = runCheckBuilder(t, repoDir, later)
@@ -495,11 +497,26 @@ func runCompile(t *testing.T, repoDir string, id string) (err error) {
 
 func runBuilder(t *testing.T, repoDir string, id string) (err error) {
 	t.Helper()
+	allowBuilderApp(t)
 	t.Setenv("GH_TOKEN", token)
 	t.Chdir(repoDir)
 	line := fmt.Sprintf("run builder --tick %s", id)
 	_, err = runRoot(t, line)
 	return
+}
+
+func allowBuilderApp(t *testing.T) {
+	t.Helper()
+	pemText := testAppKey(t)
+	t.Setenv("FACTORY_GITHUB_APP_44", pemText)
+	path := "/repos/octo/app/installation"
+	body := fmt.Sprintf(`{"id":%d,"client_id":"Iv1.builder","suspended_at":null}`, builderInstallation)
+	rule := wiremock.Get(wiremock.URLPathEqualTo(path)).WillReturnResponse(
+		wiremock.NewResponse().WithStatus(200).WithHeader("Content-Type", "application/json").WithBody(body),
+	)
+	err := wiremockClient.StubFor(rule)
+	require.NoError(t, err)
+	stubInstallationToken(t, builderInstallation, builderToken)
 }
 
 func runCheckBuilder(t *testing.T, repoDir string, id string) (err error) {
@@ -606,16 +623,6 @@ func mustRoot(t *testing.T, line string) (stdout string) {
 	t.Helper()
 	stdout, err := runRoot(t, line)
 	require.NoError(t, err)
-	return
-}
-
-func builderAgentID(t *testing.T, repoDir string) (id string) {
-	t.Helper()
-	db := openStateTip(t, repoDir)
-	defer db.Close()
-	agents := listAgents(t, db)
-	require.Len(t, agents, 1)
-	id = agents[0].ID
 	return
 }
 

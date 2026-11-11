@@ -24,6 +24,10 @@ const roleBuilder = "builder"
 const eventStarting = "starting"
 const eventAck = "ack"
 const eventRejected = "rejected"
+const envGHPermission = "GH_PERMISSION"
+const envGHToken = "GH_TOKEN"
+const envGitHubToken = "GITHUB_TOKEN"
+const permissionWriteRead = "WRITE_READ"
 
 type builderStep struct {
 	GitHub *github.Client
@@ -136,45 +140,59 @@ func (step builderStep) startIssue(ctx context.Context, repo commands.Repo, step
 		return
 	}
 
+	token, err := commands.InstallationToken(ctx, item.BuilderApp, repo.Owner, repo.Name)
+	if err != nil {
+		reason := err.Error()
+		line, err = rejectCreate(ctx, repo, stepID, client, item, number, workID, agentID, reason)
+		return
+	}
+
 	url := issueURL(repo, issue)
 	text := promptText(instruction, number, url)
 	prompt := agent.CursorPrompt{Text: text}
 	repoURL := fmt.Sprintf("https://github.com/%s/%s", repo.Owner, repo.Name)
 	oneRepo := agent.CursorRepo{URL: repoURL}
 	repos := []agent.CursorRepo{oneRepo}
+	env := map[string]string{
+		envGHPermission: permissionWriteRead,
+		envGHToken:      token,
+		envGitHubToken:  token,
+	}
 	body := agent.CursorCreate{
 		Prompt:       prompt,
-		AutoCreatePR: true,
-		AgentID:      agentID,
+		AutoCreatePR: false,
+		EnvVars:      env,
 	}
 	body.Repos = repos
-	_, runID, raw, status, err := step.cursor.Create(ctx, body)
+	cursorAgentID, runID, raw, status, err := step.cursor.Create(ctx, body)
 	lost := err != nil && status == 0
 	if lost {
 		return
 	}
 	refused := err != nil
 	if refused {
-		rejectErr := reject(ctx, repo, stepID, workID, agentID, raw)
-		if rejectErr != nil {
-			err = rejectErr
-			return
-		}
-		labelErr := commands.AddAttention(ctx, client, repo.Owner, repo.Name, number, item.AttentionLabel)
-		if labelErr != nil {
-			err = labelErr
-			return
-		}
-		line = fmt.Sprintf("[%d] rejected", number)
-		err = nil
+		line, err = rejectCreate(ctx, repo, stepID, client, item, number, workID, agentID, raw)
 		return
 	}
 
-	err = ack(ctx, repo, stepID, agentID, runID)
+	err = ack(ctx, repo, stepID, agentID, cursorAgentID, runID)
 	if err != nil {
 		return
 	}
 	line = fmt.Sprintf("[%d] started", number)
+	return
+}
+
+func rejectCreate(ctx context.Context, repo commands.Repo, stepID string, client *github.Client, item records.Development, number int, workID string, agentID string, reason string) (line string, err error) {
+	err = reject(ctx, repo, stepID, workID, agentID, reason)
+	if err != nil {
+		return
+	}
+	err = commands.AddAttention(ctx, client, repo.Owner, repo.Name, number, item.AttentionLabel)
+	if err != nil {
+		return
+	}
+	line = fmt.Sprintf("[%d] rejected", number)
 	return
 }
 
@@ -225,19 +243,21 @@ func claim(ctx context.Context, repo commands.Repo, stepID string, item records.
 	return
 }
 
-func ack(ctx context.Context, repo commands.Repo, stepID string, agentID string, runID string) (err error) {
+func ack(ctx context.Context, repo commands.Repo, stepID string, agentID string, cursorAgentID string, runID string) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
 		log.Error("begin run", "err", err)
 		return
 	}
 	queries := repo.State.Queries.WithTx(tx)
-	run := sql.NullString{String: runID, Valid: true}
-	runParams := records.SetDevelopmentAgentRunIDParams{
-		CursorRunID: run,
-		ID:          agentID,
+	storedAgent := sql.NullString{String: cursorAgentID, Valid: true}
+	storedRun := sql.NullString{String: runID, Valid: true}
+	runParams := records.SetDevelopmentAgentCursorIDsParams{
+		CursorAgentID: storedAgent,
+		CursorRunID:   storedRun,
+		ID:            agentID,
 	}
-	err = queries.SetDevelopmentAgentRunID(ctx, runParams)
+	err = queries.SetDevelopmentAgentCursorIDs(ctx, runParams)
 	if err != nil {
 		err = commands.FinishTx(tx, err)
 		return
@@ -290,7 +310,8 @@ func reject(ctx context.Context, repo commands.Repo, stepID string, workID strin
 
 func promptText(instruction string, number int, url string) (text string) {
 	header := fmt.Sprintf("Issue #%d: %s", number, url)
-	text = instruction + "\n\n" + header
+	trailer := agent.CodingTrailer()
+	text = instruction + "\n\n" + header + "\n\n" + trailer
 	return
 }
 

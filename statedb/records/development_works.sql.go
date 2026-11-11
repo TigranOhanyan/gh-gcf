@@ -246,11 +246,14 @@ SELECT
     w.development_name,
     w.issue_number,
     a.id AS agent_id,
+    a.cursor_agent_id,
     a.cursor_run_id
 FROM development_work w
 JOIN development_agent a ON a.id = w.builder_agent
 WHERE w.status = ''
 AND a.role = 'builder'
+AND a.cursor_agent_id IS NOT NULL
+AND a.cursor_agent_id != ''
 AND a.cursor_run_id IS NOT NULL
 AND a.cursor_run_id != ''
 AND a.finished_at IS NULL
@@ -272,6 +275,7 @@ type ListPendingDevelopmentBuildersRow struct {
 	DevelopmentName string         `json:"development_name"`
 	IssueNumber     int64          `json:"issue_number"`
 	AgentID         string         `json:"agent_id"`
+	CursorAgentID   sql.NullString `json:"cursor_agent_id"`
 	CursorRunID     sql.NullString `json:"cursor_run_id"`
 }
 
@@ -289,6 +293,7 @@ func (q *Queries) ListPendingDevelopmentBuilders(ctx context.Context) ([]ListPen
 			&i.DevelopmentName,
 			&i.IssueNumber,
 			&i.AgentID,
+			&i.CursorAgentID,
 			&i.CursorRunID,
 		); err != nil {
 			return nil, err
