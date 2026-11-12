@@ -5,7 +5,7 @@ A factory turns ready issues in app repos into reviewed pull requests, using Cur
 ## Repos
 
 **Factory repo**:
-A user's own repo that holds a factory's scheduled workflow and a separate config and state for each app repo it drives.
+A user's own repo that holds a factory's config and state for each app repo it drives, and the install of that factory's tick. The tick runs on the schedule that install put in place.
 _Avoid_: host factory, control repo
 
 **App repo**:
@@ -13,8 +13,12 @@ A repo whose issues a factory builds. It holds only its own code, CI and agent r
 _Avoid_: host, host repo, target repo
 
 **Bind**:
-The commit that installs a factory in its factory repo.
+The commit that writes a factory's install into its factory repo.
 _Avoid_: setup, init
+
+**Install**:
+The user's act of putting a factory's tick in place, or of updating it. Bind writes it. The user runs it by hand.
+_Avoid_: deploy, setup
 
 ## Setup
 
