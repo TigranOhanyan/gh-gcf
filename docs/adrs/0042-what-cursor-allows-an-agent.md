@@ -26,7 +26,7 @@ With an installation token for the standards App in `GH_TOKEN` and `GITHUB_TOKEN
 
 A second run set `GH_PERMISSION` to `WRITE_READ` and told the agent that `gh` is read-only unless that value is set. The agent submitted `gh pr review` on pull request 4. The review is `CHANGES_REQUESTED`, body `bonjour`, from `gcf-standards[bot]`. `GH_PERMISSION` is not read by `gh`. It is there so the instruction is one rule with an exception the model can check, instead of two sentences that disagree.
 
-Both runs also left a Cursor branch behind. The factory does not use that branch.
+Both runs also left a Cursor branch behind. The factory does not use that branch, except the builder check in `0043-the-builder-pull-request-is-cursors-then-the-branchs.md`, which uses it as the head when the run has no pull request URL.
 
 ## What we rejected
 
