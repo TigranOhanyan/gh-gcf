@@ -31,11 +31,12 @@ type CursorRepo struct {
 // CursorCreate is the body that starts one Cursor agent.
 // An empty AgentID is omitted. Cursor refuses a body that sends both agentId and envVars.
 type CursorCreate struct {
-	Prompt       CursorPrompt      `json:"prompt"`
-	Repos        []CursorRepo      `json:"repos"`
-	AutoCreatePR bool              `json:"autoCreatePR"`
-	AgentID      string            `json:"agentId,omitempty"`
-	EnvVars      map[string]string `json:"envVars,omitempty"`
+	Prompt              CursorPrompt      `json:"prompt"`
+	Repos               []CursorRepo      `json:"repos"`
+	AutoCreatePR        bool              `json:"autoCreatePR"`
+	SkipReviewerRequest bool              `json:"skipReviewerRequest,omitempty"`
+	AgentID             string            `json:"agentId,omitempty"`
+	EnvVars             map[string]string `json:"envVars,omitempty"`
 }
 
 type cursorRun struct {

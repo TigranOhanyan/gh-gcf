@@ -159,9 +159,10 @@ func (step builderStep) startIssue(ctx context.Context, repo commands.Repo, step
 		envGitHubToken:  token,
 	}
 	body := agent.CursorCreate{
-		Prompt:       prompt,
-		AutoCreatePR: false,
-		EnvVars:      env,
+		Prompt:              prompt,
+		AutoCreatePR:        true,
+		SkipReviewerRequest: true,
+		EnvVars:             env,
 	}
 	body.Repos = repos
 	cursorAgentID, runID, raw, status, err := step.cursor.Create(ctx, body)
@@ -310,7 +311,7 @@ func reject(ctx context.Context, repo commands.Repo, stepID string, workID strin
 
 func promptText(instruction string, number int, url string) (text string) {
 	header := fmt.Sprintf("Issue #%d: %s", number, url)
-	trailer := agent.CodingTrailer()
+	trailer := agent.BuilderTrailer()
 	text = instruction + "\n\n" + header + "\n\n" + trailer
 	return
 }

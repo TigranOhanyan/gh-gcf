@@ -410,7 +410,7 @@ func Test_RunFixer_should_start_the_fixer_when_one_verdict_requests_changes(t *t
 	assert.Contains(t, request, fixerInstruction)
 	assert.Contains(t, request, "Pull request #9")
 	assert.Contains(t, request, "Issue #7: https://github.com/octo/app/issues/7")
-	assert.Contains(t, request, agent.CodingTrailer())
+	assert.Contains(t, request, agent.FixerTrailer())
 	assert.NotContains(t, request, agent.ReviewerTrailer())
 	assert.NotContains(t, request, "agentId")
 	assert.NotContains(t, request, fixerAgent.ID)
@@ -419,6 +419,30 @@ func Test_RunFixer_should_start_the_fixer_when_one_verdict_requests_changes(t *t
 	assert.Contains(t, request, `"GITHUB_TOKEN":"`+fixerToken+`"`)
 	assert.Contains(t, request, `"autoCreatePR":false`)
 	assert.Empty(t, labelPosts(t))
+}
+
+func Test_RunFixer_should_send_autoCreatePR_false_omit_skipReviewerRequest_and_say_nothing_about_which_tool_opens_a_pull_request(t *testing.T) {
+	repoDir := readyReviewers(t)
+	recordApps(t, repoDir)
+	run := oneRun(checkName, "completed", "success", newerStart)
+	stubCheckRuns(t, headSHA, checkRunsPayload(run))
+	stubReviewerAccess(t)
+	standards := reviewJSON(1, standardsBotID, "CHANGES_REQUESTED", olderStart)
+	specification := reviewJSON(2, specificationBotID, "APPROVED", newerStart)
+	stubReviews(t, reviewsPayload(standards, specification))
+	id := runTick(t, repoDir)
+
+	err := runFixer(t, repoDir, id)
+	require.NoError(t, err)
+
+	requests := cursorRequests(t)
+	request, found := requestFor(requests, fixerInstruction)
+	require.True(t, found)
+	assert.Contains(t, request, `"autoCreatePR":false`)
+	assert.NotContains(t, request, "skipReviewerRequest")
+	assert.Contains(t, request, agent.FixerTrailer())
+	assert.NotContains(t, request, "Do not open the pull request with gh.")
+	assert.NotContains(t, agent.FixerTrailer(), "pull request")
 }
 
 func Test_RunFixer_should_start_the_fixer_when_a_listed_check_is_red(t *testing.T) {

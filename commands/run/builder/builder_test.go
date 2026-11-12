@@ -67,7 +67,7 @@ func Test_RunBuilder_should_start_a_builder_for_an_open_issue(t *testing.T) {
 	require.Len(t, requests, 1)
 	assert.Contains(t, requests[0], instruction)
 	assert.Contains(t, requests[0], "Issue #7: https://github.com/octo/app/issues/7")
-	assert.Contains(t, requests[0], agent.CodingTrailer())
+	assert.Contains(t, requests[0], agent.BuilderTrailer())
 	assert.NotContains(t, requests[0], agent.ReviewerTrailer())
 	assert.NotContains(t, requests[0], "Add a thing")
 	assert.NotContains(t, requests[0], "Do it")
@@ -76,7 +76,49 @@ func Test_RunBuilder_should_start_a_builder_for_an_open_issue(t *testing.T) {
 	assert.Contains(t, requests[0], `"GH_PERMISSION":"WRITE_READ"`)
 	assert.Contains(t, requests[0], `"GH_TOKEN":"`+builderToken+`"`)
 	assert.Contains(t, requests[0], `"GITHUB_TOKEN":"`+builderToken+`"`)
-	assert.Contains(t, requests[0], `"autoCreatePR":false`)
+	assert.Contains(t, requests[0], `"autoCreatePR":true`)
+	assert.Contains(t, requests[0], `"skipReviewerRequest":true`)
+}
+
+func Test_RunBuilder_should_send_autoCreatePR_true_and_skipReviewerRequest_true(t *testing.T) {
+	resetWireMock(t)
+	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
+	stubCursor(t, 200, createdCursor())
+	repoDir := setupFactory(t, instruction)
+	id := runTick(t, repoDir)
+	err := runCompile(t, repoDir, id)
+	require.NoError(t, err)
+
+	err = runBuilder(t, repoDir, id)
+	require.NoError(t, err)
+
+	requests := cursorRequests(t)
+	require.Len(t, requests, 1)
+	assert.Contains(t, requests[0], `"autoCreatePR":true`)
+	assert.Contains(t, requests[0], `"skipReviewerRequest":true`)
+}
+
+func Test_RunBuilder_should_tell_the_agent_not_to_open_the_pull_request_with_gh_and_leave_that_sentence_out_of_the_instruction_file(t *testing.T) {
+	resetWireMock(t)
+	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
+	stubCursor(t, 200, createdCursor())
+	repoDir := setupFactory(t, instruction)
+	id := runTick(t, repoDir)
+	err := runCompile(t, repoDir, id)
+	require.NoError(t, err)
+
+	err = runBuilder(t, repoDir, id)
+	require.NoError(t, err)
+
+	instructionPath := filepath.Join(repoDir, "repos", owner, repoName, "developments", developmentName, "builder.md")
+	written, err := os.ReadFile(instructionPath)
+	require.NoError(t, err)
+	assert.Equal(t, instruction, string(written))
+	assert.NotContains(t, string(written), "Do not open the pull request with gh.")
+	requests := cursorRequests(t)
+	require.Len(t, requests, 1)
+	assert.Contains(t, requests[0], "Do not open the pull request with gh.")
+	assert.Contains(t, requests[0], agent.BuilderTrailer())
 }
 
 func Test_RunBuilder_should_start_a_builder_without_writing_a_coding_work(t *testing.T) {

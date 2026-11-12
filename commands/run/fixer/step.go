@@ -351,7 +351,7 @@ func reject(ctx context.Context, repo commands.Repo, stepID string, workID strin
 func promptText(instruction string, issueNumber int64, issueURL string, pullNumber int64) (text string) {
 	header := fmt.Sprintf("Pull request #%d", pullNumber)
 	issue := fmt.Sprintf("Issue #%d: %s", issueNumber, issueURL)
-	trailer := agent.CodingTrailer()
+	trailer := agent.FixerTrailer()
 	text = instruction + "\n\n" + header + "\n\n" + issue + "\n\n" + trailer
 	return
 }

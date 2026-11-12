@@ -7,9 +7,16 @@ func ReviewerTrailer() (text string) {
 	return
 }
 
-// CodingTrailer is the factory text appended to a builder or fixer instruction.
+// FixerTrailer is the factory text appended to a fixer instruction.
 // It is not written back into the instruction file.
-func CodingTrailer() (text string) {
+func FixerTrailer() (text string) {
 	text = "gh is read-only unless GH_PERMISSION is WRITE_READ. This run sets GH_PERMISSION to WRITE_READ. GH_TOKEN and GITHUB_TOKEN are this App. Read the issue with gh. Leave a comment with gh when you need to convey something."
+	return
+}
+
+// BuilderTrailer is the factory text appended to a builder instruction.
+// It is not written back into the instruction file.
+func BuilderTrailer() (text string) {
+	text = FixerTrailer() + " Do not open the pull request with gh."
 	return
 }

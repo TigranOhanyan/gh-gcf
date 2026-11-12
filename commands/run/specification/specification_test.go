@@ -110,6 +110,21 @@ func Test_RunSpecificationReviewer_should_start_the_specification_reviewer_when_
 	assert.Contains(t, request, `"autoCreatePR":false`)
 }
 
+func Test_RunSpecificationReviewer_should_send_autoCreatePR_false_and_omit_skipReviewerRequest(t *testing.T) {
+	repoDir := readyStandardsReviewer(t)
+	allowSpecificationApp(t)
+	id := runTick(t, repoDir)
+
+	err := runSpecification(t, repoDir, id)
+	require.NoError(t, err)
+
+	requests := cursorRequests(t)
+	request, found := requestContaining(requests, specificationInstruction)
+	require.True(t, found)
+	assert.Contains(t, request, `"autoCreatePR":false`)
+	assert.NotContains(t, request, "skipReviewerRequest")
+}
+
 func Test_RunSpecificationReviewer_should_record_the_specification_reviewers_started_time_and_a_starting_event(t *testing.T) {
 	repoDir := readyStandardsReviewer(t)
 	allowSpecificationApp(t)
