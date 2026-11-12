@@ -8,7 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/log/v2"
+	"go.uber.org/zap"
+
+	"github.com/TigranOhanyan/gh-gcf/logging"
 	"github.com/google/go-github/v93/github"
 	"github.com/oklog/ulid/v2"
 
@@ -38,12 +40,12 @@ func (checkStep) Name() (name string) {
 func (step checkStep) Apply(ctx context.Context, repo commands.Repo, _ records.Tick, stepRow records.Step) (message string, err error) {
 	finished, err := repo.State.Queries.ListWorksReadyForFixerChecks(ctx)
 	if err != nil {
-		log.Error("list fixer checks", "owner", repo.Owner, "name", repo.Name, "err", err)
+		logging.From(ctx).Error("list fixer checks", zap.Any("owner", repo.Owner), zap.Any("name", repo.Name), zap.Error(err))
 		return
 	}
 	pending, err := repo.State.Queries.ListPendingDevelopmentFixers(ctx)
 	if err != nil {
-		log.Error("list fixers", "owner", repo.Owner, "name", repo.Name, "err", err)
+		logging.From(ctx).Error("list fixers", zap.Any("owner", repo.Owner), zap.Any("name", repo.Name), zap.Error(err))
 		return
 	}
 	none := len(finished) == 0 && len(pending) == 0
@@ -92,7 +94,7 @@ func (step checkStep) Apply(ctx context.Context, repo commands.Repo, _ records.T
 func (step checkStep) judgeChecks(ctx context.Context, repo commands.Repo, client *github.Client, work records.ListWorksReadyForFixerChecksRow) (line string, err error) {
 	names, err := repo.State.Queries.ListDevelopmentCheckNames(ctx, work.DevelopmentName)
 	if err != nil {
-		log.Error("list checks", "development", work.DevelopmentName, "err", err)
+		logging.From(ctx).Error("list checks", zap.Any("development", work.DevelopmentName), zap.Error(err))
 		return
 	}
 	listed := len(names) > 0
@@ -103,7 +105,7 @@ func (step checkStep) judgeChecks(ctx context.Context, repo commands.Repo, clien
 		missingHead := invalid || empty
 		if missingHead {
 			err = fmt.Errorf("fixer head is missing")
-			log.Error("fixer head", "issue", work.IssueNumber, "err", err)
+			logging.From(ctx).Error("fixer head", zap.Any("issue", work.IssueNumber), zap.Error(err))
 			return
 		}
 		var runs []*github.CheckRun
@@ -113,7 +115,7 @@ func (step checkStep) judgeChecks(ctx context.Context, repo commands.Repo, clien
 		}
 		waiting := listedChecksWaiting(names, runs)
 		if waiting {
-			log.Info("checks waiting", "issue", work.IssueNumber)
+			logging.From(ctx).Info("checks waiting", zap.Any("issue", work.IssueNumber))
 			return
 		}
 		red := listedChecksRed(names, runs)
@@ -129,7 +131,7 @@ func (step checkStep) judgeChecks(ctx context.Context, repo commands.Repo, clien
 func (step checkStep) stopForChecks(ctx context.Context, repo commands.Repo, client *github.Client, work records.ListWorksReadyForFixerChecksRow) (line string, err error) {
 	development, err := repo.State.Queries.GetDevelopment(ctx, work.DevelopmentName)
 	if err != nil {
-		log.Error("development", "development", work.DevelopmentName, "err", err)
+		logging.From(ctx).Error("development", zap.Any("development", work.DevelopmentName), zap.Error(err))
 		return
 	}
 	err = markAttention(ctx, repo, work.WorkID)
@@ -141,6 +143,7 @@ func (step checkStep) stopForChecks(ctx context.Context, repo commands.Repo, cli
 	if err != nil {
 		return
 	}
+	logging.From(ctx).Info("attention", zap.Int("issue", number), zap.String("label", development.AttentionLabel))
 	line = fmt.Sprintf("[%d] check is red", work.IssueNumber)
 	return
 }
@@ -157,7 +160,7 @@ func (step checkStep) finishWork(ctx context.Context, repo commands.Repo, work r
 func markAttention(ctx context.Context, repo commands.Repo, workID string) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
-		log.Error("begin check", "err", err)
+		logging.From(ctx).Error("begin check", zap.Error(err))
 		return
 	}
 	queries := repo.State.Queries.WithTx(tx)
@@ -169,7 +172,7 @@ func markAttention(ctx context.Context, repo commands.Repo, workID string) (err 
 func markFinished(ctx context.Context, repo commands.Repo, workID string) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
-		log.Error("begin check", "err", err)
+		logging.From(ctx).Error("begin check", zap.Error(err))
 		return
 	}
 	queries := repo.State.Queries.WithTx(tx)
@@ -185,7 +188,7 @@ func (step checkStep) observe(ctx context.Context, repo commands.Repo, stepID st
 	if err != nil {
 		return
 	}
-	log.Info("cursor run", "agent", cursorAgentID, "status", run.Status)
+	logging.From(ctx).Info("cursor run", zap.Any("agent", cursorAgentID), zap.Any("run", runID), zap.Any("status", run.Status), zap.Any("issue", item.IssueNumber), zap.Any("development", item.DevelopmentName))
 
 	stillRunning := run.Status == runCreating || run.Status == runRunning
 	if stillRunning {
@@ -236,7 +239,7 @@ func (step checkStep) missingPull(ctx context.Context, repo commands.Repo, stepI
 func (step checkStep) stopForPerson(ctx context.Context, repo commands.Repo, stepID string, client *github.Client, item records.ListPendingDevelopmentFixersRow, reason string) (line string, err error) {
 	development, err := repo.State.Queries.GetDevelopment(ctx, item.DevelopmentName)
 	if err != nil {
-		log.Error("development", "development", item.DevelopmentName, "err", err)
+		logging.From(ctx).Error("development", zap.Any("development", item.DevelopmentName), zap.Error(err))
 		return
 	}
 	err = markFailed(ctx, repo, stepID, item.WorkID, item.AgentID, reason)
@@ -248,6 +251,7 @@ func (step checkStep) stopForPerson(ctx context.Context, repo commands.Repo, ste
 	if err != nil {
 		return
 	}
+	logging.From(ctx).Info("attention", zap.Int("issue", number), zap.String("label", development.AttentionLabel), zap.String("reason", reason))
 	line = reason
 	return
 }
@@ -255,7 +259,7 @@ func (step checkStep) stopForPerson(ctx context.Context, repo commands.Repo, ste
 func markFixed(ctx context.Context, repo commands.Repo, stepID string, agentID string, workID string, sha string, message string) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
-		log.Error("begin check", "err", err)
+		logging.From(ctx).Error("begin check", zap.Error(err))
 		return
 	}
 	queries := repo.State.Queries.WithTx(tx)
@@ -282,7 +286,7 @@ func markFixed(ctx context.Context, repo commands.Repo, stepID string, agentID s
 func markFailed(ctx context.Context, repo commands.Repo, stepID string, workID string, agentID string, reason string) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
-		log.Error("begin check", "err", err)
+		logging.From(ctx).Error("begin check", zap.Error(err))
 		return
 	}
 	queries := repo.State.Queries.WithTx(tx)
@@ -322,7 +326,7 @@ func completedEvent(ctx context.Context, queries *records.Queries, stepID string
 	}
 	err = queries.CreateDevelopmentEvent(ctx, params)
 	if err != nil {
-		log.Error("create event", "agent", agentID, "err", err)
+		logging.From(ctx).Error("create event", zap.Any("agent", agentID), zap.Error(err))
 	}
 	return
 }
@@ -331,7 +335,7 @@ func newEventID() (id string, err error) {
 	timestamp := ulid.Timestamp(time.Now())
 	value, err := ulid.New(timestamp, rand.Reader)
 	if err != nil {
-		log.Error("new event id", "err", err)
+		zap.L().Error("new event id", zap.Error(err))
 		return
 	}
 	id = value.String()

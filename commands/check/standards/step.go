@@ -7,7 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/log/v2"
+	"go.uber.org/zap"
+
+	"github.com/TigranOhanyan/gh-gcf/logging"
 	"github.com/google/go-github/v93/github"
 	"github.com/oklog/ulid/v2"
 
@@ -33,7 +35,7 @@ func (checkStep) Name() (name string) {
 func (step checkStep) Apply(ctx context.Context, repo commands.Repo, _ records.Tick, stepRow records.Step) (message string, err error) {
 	pending, err := repo.State.Queries.ListPendingDevelopmentStandardsReviewers(ctx)
 	if err != nil {
-		log.Error("list standards reviewers", "owner", repo.Owner, "name", repo.Name, "err", err)
+		logging.From(ctx).Error("list standards reviewers", zap.Any("owner", repo.Owner), zap.Any("name", repo.Name), zap.Error(err))
 		return
 	}
 	none := len(pending) == 0
@@ -72,7 +74,7 @@ func (step checkStep) observe(ctx context.Context, repo commands.Repo, stepID st
 	if err != nil {
 		return
 	}
-	log.Info("cursor run", "agent", cursorAgentID, "status", run.Status)
+	logging.From(ctx).Info("cursor run", zap.Any("agent", cursorAgentID), zap.Any("run", runID), zap.Any("status", run.Status), zap.Any("issue", item.IssueNumber), zap.Any("development", item.DevelopmentName))
 
 	stillRunning := run.Status == runCreating || run.Status == runRunning
 	if stillRunning {
@@ -107,7 +109,7 @@ func (step checkStep) finishReviewer(ctx context.Context, repo commands.Repo, st
 func (step checkStep) stopForPerson(ctx context.Context, repo commands.Repo, stepID string, client *github.Client, item records.ListPendingDevelopmentStandardsReviewersRow, reason string) (line string, err error) {
 	development, err := repo.State.Queries.GetDevelopment(ctx, item.DevelopmentName)
 	if err != nil {
-		log.Error("development", "development", item.DevelopmentName, "err", err)
+		logging.From(ctx).Error("development", zap.Any("development", item.DevelopmentName), zap.Error(err))
 		return
 	}
 	err = markFailed(ctx, repo, stepID, item.WorkID, item.AgentID, reason)
@@ -119,6 +121,7 @@ func (step checkStep) stopForPerson(ctx context.Context, repo commands.Repo, ste
 	if err != nil {
 		return
 	}
+	logging.From(ctx).Info("attention", zap.Int("issue", number), zap.String("label", development.AttentionLabel), zap.String("reason", reason))
 	line = reason
 	return
 }
@@ -126,7 +129,7 @@ func (step checkStep) stopForPerson(ctx context.Context, repo commands.Repo, ste
 func markReviewed(ctx context.Context, repo commands.Repo, stepID string, agentID string, message string) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
-		log.Error("begin check", "err", err)
+		logging.From(ctx).Error("begin check", zap.Error(err))
 		return
 	}
 	queries := repo.State.Queries.WithTx(tx)
@@ -143,7 +146,7 @@ func markReviewed(ctx context.Context, repo commands.Repo, stepID string, agentI
 func markFailed(ctx context.Context, repo commands.Repo, stepID string, workID string, agentID string, reason string) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
-		log.Error("begin check", "err", err)
+		logging.From(ctx).Error("begin check", zap.Error(err))
 		return
 	}
 	queries := repo.State.Queries.WithTx(tx)
@@ -183,7 +186,7 @@ func completedEvent(ctx context.Context, queries *records.Queries, stepID string
 	}
 	err = queries.CreateDevelopmentEvent(ctx, params)
 	if err != nil {
-		log.Error("create event", "agent", agentID, "err", err)
+		logging.From(ctx).Error("create event", zap.Any("agent", agentID), zap.Error(err))
 	}
 	return
 }
@@ -192,7 +195,7 @@ func newEventID() (id string, err error) {
 	timestamp := ulid.Timestamp(time.Now())
 	value, err := ulid.New(timestamp, rand.Reader)
 	if err != nil {
-		log.Error("new event id", "err", err)
+		zap.L().Error("new event id", zap.Error(err))
 		return
 	}
 	id = value.String()

@@ -9,7 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/log/v2"
+	"go.uber.org/zap"
+
+	"github.com/TigranOhanyan/gh-gcf/logging"
 	"github.com/google/go-github/v93/github"
 	"github.com/google/uuid"
 	"github.com/oklog/ulid/v2"
@@ -43,7 +45,7 @@ func (builderStep) Name() (name string) {
 func (step builderStep) Apply(ctx context.Context, repo commands.Repo, _ records.Tick, stepRow records.Step) (message string, err error) {
 	developments, err := repo.State.Queries.ListDevelopments(ctx)
 	if err != nil {
-		log.Error("list developments", "owner", repo.Owner, "name", repo.Name, "err", err)
+		logging.From(ctx).Error("list developments", zap.Any("owner", repo.Owner), zap.Any("name", repo.Name), zap.Error(err))
 		return
 	}
 	none := len(developments) == 0
@@ -80,7 +82,7 @@ func (step builderStep) startDevelopment(ctx context.Context, repo commands.Repo
 	if changed {
 		line := fmt.Sprintf("[%s] instruction changed", item.Name)
 		lines = append(lines, line)
-		log.Info("instruction changed", "development", item.Name)
+		logging.From(ctx).Info("instruction changed", zap.Any("development", item.Name))
 		return
 	}
 
@@ -118,7 +120,7 @@ func (step builderStep) startIssue(ctx context.Context, repo commands.Repo, step
 	absent := errors.Is(err, sql.ErrNoRows)
 	lookupFailed := err != nil && !absent
 	if lookupFailed {
-		log.Error("development work", "issue", number, "err", err)
+		logging.From(ctx).Error("development work", zap.Any("issue", number), zap.Error(err))
 		return
 	}
 	err = nil
@@ -165,6 +167,7 @@ func (step builderStep) startIssue(ctx context.Context, repo commands.Repo, step
 		EnvVars:             env,
 	}
 	body.Repos = repos
+	logging.From(ctx).Info("cursor create", zap.String("role", roleBuilder), zap.String("development", item.Name), zap.Int("issue", number))
 	cursorAgentID, runID, raw, status, err := step.cursor.Create(ctx, body)
 	lost := err != nil && status == 0
 	if lost {
@@ -193,6 +196,7 @@ func rejectCreate(ctx context.Context, repo commands.Repo, stepID string, client
 	if err != nil {
 		return
 	}
+	logging.From(ctx).Info("attention", zap.Int("issue", number), zap.String("label", item.AttentionLabel), zap.String("reason", reason))
 	line = fmt.Sprintf("[%d] rejected", number)
 	return
 }
@@ -200,7 +204,7 @@ func rejectCreate(ctx context.Context, repo commands.Repo, stepID string, client
 func claim(ctx context.Context, repo commands.Repo, stepID string, item records.Development, issue *github.Issue, agentID string, workID string) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
-		log.Error("begin run", "err", err)
+		logging.From(ctx).Error("begin run", zap.Error(err))
 		return
 	}
 	queries := repo.State.Queries.WithTx(tx)
@@ -247,7 +251,7 @@ func claim(ctx context.Context, repo commands.Repo, stepID string, item records.
 func ack(ctx context.Context, repo commands.Repo, stepID string, agentID string, cursorAgentID string, runID string) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
-		log.Error("begin run", "err", err)
+		logging.From(ctx).Error("begin run", zap.Error(err))
 		return
 	}
 	queries := repo.State.Queries.WithTx(tx)
@@ -283,7 +287,7 @@ func ack(ctx context.Context, repo commands.Repo, stepID string, agentID string,
 func reject(ctx context.Context, repo commands.Repo, stepID string, workID string, agentID string, reason string) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
-		log.Error("begin run", "err", err)
+		logging.From(ctx).Error("begin run", zap.Error(err))
 		return
 	}
 	queries := repo.State.Queries.WithTx(tx)
@@ -328,7 +332,7 @@ func issueURL(repo commands.Repo, issue *github.Issue) (url string) {
 func newAgentID() (id string, err error) {
 	value, err := uuid.NewV7()
 	if err != nil {
-		log.Error("new agent id", "err", err)
+		zap.L().Error("new agent id", zap.Error(err))
 		return
 	}
 	id = "bc-" + value.String()
@@ -339,7 +343,7 @@ func newWorkID() (id string, err error) {
 	timestamp := ulid.Timestamp(time.Now())
 	value, err := ulid.New(timestamp, rand.Reader)
 	if err != nil {
-		log.Error("new development work id", "err", err)
+		zap.L().Error("new development work id", zap.Error(err))
 		return
 	}
 	id = value.String()
@@ -350,7 +354,7 @@ func newEventID() (id string, err error) {
 	timestamp := ulid.Timestamp(time.Now())
 	value, err := ulid.New(timestamp, rand.Reader)
 	if err != nil {
-		log.Error("new event id", "err", err)
+		zap.L().Error("new event id", zap.Error(err))
 		return
 	}
 	id = value.String()

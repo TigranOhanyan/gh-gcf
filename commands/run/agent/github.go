@@ -3,7 +3,9 @@ package agent
 import (
 	"context"
 
-	"charm.land/log/v2"
+	"go.uber.org/zap"
+
+	"github.com/TigranOhanyan/gh-gcf/logging"
 	"github.com/google/go-github/v93/github"
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
@@ -27,7 +29,7 @@ func ListOpenIssues(ctx context.Context, client *github.Client, owner string, re
 		commands.CloseGitHub(resp)
 		if callErr != nil {
 			err = callErr
-			log.Error("list issues", "owner", owner, "name", repo, "label", label, "err", err)
+			logging.From(ctx).Error("list issues", zap.Any("owner", owner), zap.Any("name", repo), zap.Any("label", label), zap.Error(err))
 			return
 		}
 		issues = append(issues, batch...)

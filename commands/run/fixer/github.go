@@ -8,7 +8,9 @@ import (
 	"strconv"
 	"time"
 
-	"charm.land/log/v2"
+	"go.uber.org/zap"
+
+	"github.com/TigranOhanyan/gh-gcf/logging"
 	"github.com/google/go-github/v93/github"
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
@@ -27,7 +29,7 @@ func listCheckRuns(ctx context.Context, client *github.Client, owner string, rep
 	result, resp, err := client.Checks.ListCheckRunsForRef(ctx, owner, repo, sha, options)
 	commands.CloseGitHub(resp)
 	if err != nil {
-		log.Error("check runs", "owner", owner, "name", repo, "sha", sha, "err", err)
+		logging.From(ctx).Error("check runs", zap.Any("owner", owner), zap.Any("name", repo), zap.Any("sha", sha), zap.Error(err))
 		return
 	}
 	if result == nil {
@@ -65,7 +67,7 @@ func reviewerClient(ctx context.Context, appID int64, installationID int64) (cli
 	now := time.Now()
 	signed, err := commands.SignAppJWT(appID, key, now)
 	if err != nil {
-		log.Error("app jwt", "app", appID, "err", err)
+		logging.From(ctx).Error("app jwt", zap.Any("app", appID), zap.Error(err))
 		return
 	}
 	appClient, err := commands.NewGitHubClientWithToken(signed)
@@ -75,7 +77,7 @@ func reviewerClient(ctx context.Context, appID int64, installationID int64) (cli
 	issued, tokenResp, err := appClient.Apps.CreateInstallationToken(ctx, installationID, nil)
 	commands.CloseGitHub(tokenResp)
 	if err != nil {
-		log.Error("installation token", "app", appID, "installation", installationID, "err", err)
+		logging.From(ctx).Error("installation token", zap.Any("app", appID), zap.Any("installation", installationID), zap.Error(err))
 		return
 	}
 	token := ""
@@ -85,7 +87,7 @@ func reviewerClient(ctx context.Context, appID int64, installationID int64) (cli
 	missingToken := token == ""
 	if missingToken {
 		err = fmt.Errorf("installation token is empty")
-		log.Error("installation token", "app", appID, "installation", installationID, "err", err)
+		logging.From(ctx).Error("installation token", zap.Any("app", appID), zap.Any("installation", installationID), zap.Error(err))
 		return
 	}
 	client, err = commands.NewGitHubClientWithToken(token)
@@ -95,14 +97,14 @@ func reviewerClient(ctx context.Context, appID int64, installationID int64) (cli
 	user, userResp, err := client.Users.Get(ctx, "")
 	commands.CloseGitHub(userResp)
 	if err != nil {
-		log.Error("app user", "app", appID, "err", err)
+		logging.From(ctx).Error("app user", zap.Any("app", appID), zap.Error(err))
 		return
 	}
 	botID = user.GetID()
 	missingUser := botID == 0
 	if missingUser {
 		err = fmt.Errorf("app user is missing")
-		log.Error("app user", "app", appID, "err", err)
+		logging.From(ctx).Error("app user", zap.Any("app", appID), zap.Error(err))
 	}
 	return
 }
@@ -113,12 +115,12 @@ func loadAppKey(id int64) (key *rsa.PrivateKey, err error) {
 	missing := pemText == ""
 	if missing {
 		err = fmt.Errorf("github app key is missing")
-		log.Error("github app", "app", id, "err", err)
+		zap.L().Error("github app", zap.Any("app", id), zap.Error(err))
 		return
 	}
 	key, err = commands.ParseAppKey(pemText)
 	if err != nil {
-		log.Error("github app", "app", id, "err", err)
+		zap.L().Error("github app", zap.Any("app", id), zap.Error(err))
 	}
 	return
 }
@@ -135,7 +137,7 @@ func listReviews(ctx context.Context, client *github.Client, owner string, repo 
 		batch, resp, err = client.PullRequests.ListReviews(ctx, owner, repo, number, &options)
 		commands.CloseGitHub(resp)
 		if err != nil {
-			log.Error("list reviews", "owner", owner, "name", repo, "pull", number, "err", err)
+			logging.From(ctx).Error("list reviews", zap.Any("owner", owner), zap.Any("name", repo), zap.Any("pull", number), zap.Error(err))
 			return
 		}
 		reviews = append(reviews, batch...)

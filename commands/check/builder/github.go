@@ -6,7 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-	"charm.land/log/v2"
+	"go.uber.org/zap"
+
+	"github.com/TigranOhanyan/gh-gcf/logging"
 	"github.com/google/go-github/v93/github"
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
@@ -66,7 +68,7 @@ func oneOpenPull(ctx context.Context, client *github.Client, owner string, repo 
 	pulls, resp, err := client.PullRequests.List(ctx, owner, repo, opts)
 	commands.CloseGitHub(resp)
 	if err != nil {
-		log.Error("pull requests", "owner", owner, "name", repo, "branch", branch, "err", err)
+		logging.From(ctx).Error("pull requests", zap.Any("owner", owner), zap.Any("name", repo), zap.Any("branch", branch), zap.Error(err))
 		return
 	}
 	single := len(pulls) == 1
@@ -86,19 +88,19 @@ func headSHA(ctx context.Context, client *github.Client, owner string, repo stri
 	pull, resp, err := client.PullRequests.Get(ctx, owner, repo, number)
 	commands.CloseGitHub(resp)
 	if err != nil {
-		log.Error("pull request", "owner", owner, "name", repo, "pull", number, "err", err)
+		logging.From(ctx).Error("pull request", zap.Any("owner", owner), zap.Any("name", repo), zap.Any("pull", number), zap.Error(err))
 		return
 	}
 	if pull == nil {
 		err = fmt.Errorf("pull request is missing")
-		log.Error("pull request", "owner", owner, "name", repo, "pull", number, "err", err)
+		logging.From(ctx).Error("pull request", zap.Any("owner", owner), zap.Any("name", repo), zap.Any("pull", number), zap.Error(err))
 		return
 	}
 	sha = pull.GetHead().GetSHA()
 	missing := sha == ""
 	if missing {
 		err = fmt.Errorf("pull request head is missing")
-		log.Error("pull request", "owner", owner, "name", repo, "pull", number, "err", err)
+		logging.From(ctx).Error("pull request", zap.Any("owner", owner), zap.Any("name", repo), zap.Any("pull", number), zap.Error(err))
 	}
 	return
 }

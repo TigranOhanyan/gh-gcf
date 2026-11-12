@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"strings"
 
-	"charm.land/log/v2"
+	"go.uber.org/zap"
+
+	"github.com/TigranOhanyan/gh-gcf/logging"
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
 	configrecords "github.com/TigranOhanyan/gh-gcf/configdb/records"
@@ -37,13 +39,13 @@ func (compileStep) Name() (name string) {
 func (step compileStep) Apply(ctx context.Context, repo commands.Repo, _ records.Tick, _ records.Step) (message string, err error) {
 	items, err := repo.Config.Queries.ListDevelopments(ctx)
 	if err != nil {
-		log.Error("list developments", "owner", repo.Owner, "name", repo.Name, "err", err)
+		logging.From(ctx).Error("list developments", zap.Any("owner", repo.Owner), zap.Any("name", repo.Name), zap.Error(err))
 		return
 	}
 
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
-		log.Error("begin compile", "err", err)
+		logging.From(ctx).Error("begin compile", zap.Error(err))
 		return
 	}
 	queries := repo.State.Queries.WithTx(tx)
@@ -81,7 +83,7 @@ func copyDevelopment(ctx context.Context, repo commands.Repo, queries *records.Q
 
 	checks, err := repo.Config.Queries.ListDevelopmentChecks(ctx, item.Name)
 	if err != nil {
-		log.Error("list checks", "development", item.Name, "err", err)
+		logging.From(ctx).Error("list checks", zap.Any("development", item.Name), zap.Error(err))
 		return
 	}
 	for _, check := range checks {
@@ -117,7 +119,7 @@ func saveDevelopment(ctx context.Context, queries *records.Queries, item configr
 	absent := errors.Is(err, sql.ErrNoRows)
 	lookupFailed := err != nil && !absent
 	if lookupFailed {
-		log.Error("get development", "development", item.Name, "err", err)
+		logging.From(ctx).Error("get development", zap.Any("development", item.Name), zap.Error(err))
 		return
 	}
 	err = nil
@@ -138,7 +140,7 @@ func saveDevelopment(ctx context.Context, queries *records.Queries, item configr
 		}
 		err = queries.CreateDevelopment(ctx, params)
 		if err != nil {
-			log.Error("insert development", "development", item.Name, "err", err)
+			logging.From(ctx).Error("insert development", zap.Any("development", item.Name), zap.Error(err))
 			return
 		}
 		line = fmt.Sprintf("[%s] recorded", item.Name)
@@ -164,7 +166,7 @@ func saveDevelopment(ctx context.Context, queries *records.Queries, item configr
 	}
 	err = queries.UpdateDevelopment(ctx, params)
 	if err != nil {
-		log.Error("update development", "development", item.Name, "err", err)
+		logging.From(ctx).Error("update development", zap.Any("development", item.Name), zap.Error(err))
 		return
 	}
 	line = fmt.Sprintf("[%s] updated", item.Name)
@@ -195,7 +197,7 @@ func saveCheck(ctx context.Context, queries *records.Queries, developmentName st
 	absent := errors.Is(err, sql.ErrNoRows)
 	lookupFailed := err != nil && !absent
 	if lookupFailed {
-		log.Error("get check", "development", developmentName, "check", name, "err", err)
+		logging.From(ctx).Error("get check", zap.Any("development", developmentName), zap.Any("check", name), zap.Error(err))
 		return
 	}
 	err = nil
@@ -209,7 +211,7 @@ func saveCheck(ctx context.Context, queries *records.Queries, developmentName st
 	}
 	err = queries.CreateDevelopmentCheck(ctx, create)
 	if err != nil {
-		log.Error("insert check", "development", developmentName, "check", name, "err", err)
+		logging.From(ctx).Error("insert check", zap.Any("development", developmentName), zap.Any("check", name), zap.Error(err))
 		return
 	}
 	line = fmt.Sprintf("[%s] [%s] recorded", developmentName, name)

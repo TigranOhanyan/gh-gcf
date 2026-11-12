@@ -8,7 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/log/v2"
+	"go.uber.org/zap"
+
+	"github.com/TigranOhanyan/gh-gcf/logging"
 	"github.com/google/go-github/v93/github"
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
@@ -31,7 +33,7 @@ func (labelStep) Name() (name string) {
 func (step labelStep) Apply(ctx context.Context, repo commands.Repo, _ records.Tick, _ records.Step) (message string, err error) {
 	labels, err := repo.Config.Queries.ListLabels(ctx)
 	if err != nil {
-		log.Error("list labels", "owner", repo.Owner, "name", repo.Name, "err", err)
+		logging.From(ctx).Error("list labels", zap.Any("owner", repo.Owner), zap.Any("name", repo.Name), zap.Error(err))
 		return
 	}
 
@@ -68,7 +70,7 @@ func (step labelStep) ensure(ctx context.Context, repo commands.Repo, label conf
 	absent := errors.Is(err, sql.ErrNoRows)
 	lookupFailed := err != nil && !absent
 	if lookupFailed {
-		log.Error("get label", "owner", repo.Owner, "name", repo.Name, "label", label.Name, "err", err)
+		logging.From(ctx).Error("get label", zap.Any("owner", repo.Owner), zap.Any("name", repo.Name), zap.Any("label", label.Name), zap.Error(err))
 		return
 	}
 	err = nil
@@ -116,7 +118,7 @@ func (step labelStep) labelOnGitHub(ctx context.Context, owner string, repoName 
 		err = nil
 		return
 	}
-	log.Error("get github label", "owner", owner, "name", repoName, "label", name, "err", err)
+	logging.From(ctx).Error("get github label", zap.Any("owner", owner), zap.Any("name", repoName), zap.Any("label", name), zap.Error(err))
 	return
 }
 
@@ -129,7 +131,7 @@ func (step labelStep) createOnGitHub(ctx context.Context, owner string, repoName
 	_, resp, err := step.GitHub.Issues.CreateLabel(ctx, owner, repoName, request)
 	commands.CloseGitHub(resp)
 	if err != nil {
-		log.Error("create github label", "owner", owner, "name", repoName, "label", label.Name, "err", err)
+		logging.From(ctx).Error("create github label", zap.Any("owner", owner), zap.Any("name", repoName), zap.Any("label", label.Name), zap.Error(err))
 	}
 	return
 }
@@ -137,7 +139,7 @@ func (step labelStep) createOnGitHub(ctx context.Context, owner string, repoName
 func (step labelStep) insertLabel(ctx context.Context, repo commands.Repo, label configrecords.Label) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
-		log.Error("begin label", "err", err)
+		logging.From(ctx).Error("begin label", zap.Error(err))
 		return
 	}
 	queries := repo.State.Queries.WithTx(tx)
@@ -153,7 +155,7 @@ func (step labelStep) insertLabel(ctx context.Context, repo commands.Repo, label
 func (step labelStep) beginCreate(ctx context.Context, repo commands.Repo, label configrecords.Label, absent bool) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
-		log.Error("begin label", "err", err)
+		logging.From(ctx).Error("begin label", zap.Error(err))
 		return
 	}
 	queries := repo.State.Queries.WithTx(tx)
@@ -175,7 +177,7 @@ func (step labelStep) beginCreate(ctx context.Context, repo commands.Repo, label
 func (step labelStep) finishCreate(ctx context.Context, repo commands.Repo, name string) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
-		log.Error("begin label", "err", err)
+		logging.From(ctx).Error("begin label", zap.Error(err))
 		return
 	}
 	queries := repo.State.Queries.WithTx(tx)

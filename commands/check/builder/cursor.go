@@ -10,7 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/log/v2"
+	"go.uber.org/zap"
+
+	"github.com/TigranOhanyan/gh-gcf/logging"
 )
 
 const cursorAPIEnv = "CURSOR_API_URL"
@@ -51,7 +53,7 @@ func newCursorClient() (client cursorClient, err error) {
 	missing := key == ""
 	if missing {
 		err = fmt.Errorf("cursor api key is missing")
-		log.Error("cursor", "err", err)
+		zap.L().Error("cursor", zap.Error(err))
 		return
 	}
 	base := os.Getenv(cursorAPIEnv)
@@ -70,38 +72,38 @@ func (client cursorClient) getRun(ctx context.Context, agentID string, runID str
 	url := client.base + "/v1/agents/" + agentID + "/runs/" + runID
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		log.Error("cursor run", "agent", agentID, "err", err)
+		logging.From(ctx).Error("cursor run", zap.Any("agent", agentID), zap.Error(err))
 		return
 	}
 	request.SetBasicAuth(client.key, "")
 
 	response, err := client.http.Do(request)
 	if err != nil {
-		log.Error("cursor run", "agent", agentID, "err", err)
+		logging.From(ctx).Error("cursor run", zap.Any("agent", agentID), zap.Error(err))
 		return
 	}
 	defer response.Body.Close()
 	status = response.StatusCode
 	raw, err := io.ReadAll(response.Body)
 	if err != nil {
-		log.Error("cursor run", "agent", agentID, "err", err)
+		logging.From(ctx).Error("cursor run", zap.Any("agent", agentID), zap.Error(err))
 		return
 	}
 	success := status == http.StatusOK
 	if !success {
 		err = fmt.Errorf("cursor run returned %d", status)
-		log.Error("cursor run", "agent", agentID, "status", status, "body", string(raw), "err", err)
+		logging.From(ctx).Error("cursor run", zap.Any("agent", agentID), zap.Any("status", status), zap.Any("body", string(raw)), zap.Error(err))
 		return
 	}
 	err = json.Unmarshal(raw, &run)
 	if err != nil {
-		log.Error("cursor run", "agent", agentID, "err", err)
+		logging.From(ctx).Error("cursor run", zap.Any("agent", agentID), zap.Error(err))
 		return
 	}
 	missing := run.Status == ""
 	if missing {
 		err = fmt.Errorf("cursor run status is missing")
-		log.Error("cursor run", "agent", agentID, "err", err)
+		logging.From(ctx).Error("cursor run", zap.Any("agent", agentID), zap.Error(err))
 	}
 	return
 }

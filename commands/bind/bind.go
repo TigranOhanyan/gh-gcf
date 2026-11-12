@@ -18,12 +18,18 @@ import (
 )
 
 const (
-	workflowRel   = ".github/workflows/factory-tick.yml"
-	gitignoreRel  = ".worktrees/.gitignore"
-	hintRel       = ".worktrees/internal_use_only"
-	commitMessage = "bind factory"
-	versionToken  = "__GCF_VERSION__"
-	devVersion    = "dev"
+	deployRel          = ".github/workflows/factory-deploy.yml"
+	deleteRel          = ".github/workflows/factory-delete.yml"
+	secretsWorkflowRel = ".github/workflows/factory-secrets.yml"
+	templateRel        = "infrastructure.yaml"
+	secretsRel         = "secrets.yaml"
+	legacyTickRel      = ".github/workflows/factory-tick.yml"
+	gitignoreRel       = ".worktrees/.gitignore"
+	hintRel            = ".worktrees/internal_use_only"
+	commitMessage      = "bind factory"
+	versionToken       = "__GCF_VERSION__"
+	devVersion         = "dev"
+	appSecretsToken    = "__APP_SECRETS__"
 )
 
 // Version is the release tag of this binary. The release build sets it with -X.
@@ -33,7 +39,7 @@ var Version = devVersion
 func NewBind() (cmd *cobra.Command) {
 	cmd = &cobra.Command{
 		Use:   "bind",
-		Short: "Install the tick workflow and migrate config",
+		Short: "Write the factory install and migrate config",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) (err error) {
 			dir, err := os.Getwd()
@@ -62,9 +68,33 @@ func Bind(ctx context.Context, factoryDir string) (err error) {
 	}
 	log.Info("factory repo", "path", factoryDir)
 
-	err = installWorkflow(factoryDir)
+	err = installDeploy(factoryDir)
 	if err != nil {
-		log.Error("install workflow", "path", factoryDir, "err", err)
+		log.Error("install deploy", "path", factoryDir, "err", err)
+		return
+	}
+
+	err = installDelete(factoryDir)
+	if err != nil {
+		log.Error("install delete", "path", factoryDir, "err", err)
+		return
+	}
+
+	err = installTemplate(factoryDir)
+	if err != nil {
+		log.Error("install template", "path", factoryDir, "err", err)
+		return
+	}
+
+	err = installSecrets(factoryDir)
+	if err != nil {
+		log.Error("install secrets", "path", factoryDir, "err", err)
+		return
+	}
+
+	err = installSecretsWorkflow(factoryDir)
+	if err != nil {
+		log.Error("install secrets workflow", "path", factoryDir, "err", err)
 		return
 	}
 
@@ -74,39 +104,77 @@ func Bind(ctx context.Context, factoryDir string) (err error) {
 		return
 	}
 
+	tracked, err := removeLegacyTick(ctx, factoryDir)
+	if err != nil {
+		log.Error("remove tick workflow", "path", factoryDir, "err", err)
+		return
+	}
+
 	configRels, err := migrateConfigs(ctx, factoryDir)
 	if err != nil {
 		log.Error("migrate config", "path", factoryDir, "err", err)
 		return
 	}
 
-	files := []string{workflowRel, gitignoreRel, hintRel}
+	files := []string{deployRel, deleteRel, secretsWorkflowRel, templateRel, secretsRel, gitignoreRel, hintRel}
+	if tracked {
+		files = append(files, legacyTickRel)
+	}
 	files = append(files, configRels...)
 	err = commitCheckout(ctx, factoryDir, files)
 	return
 }
 
-func installWorkflow(factoryDir string) (err error) {
-	workflowPath := filepath.Join(factoryDir, filepath.FromSlash(workflowRel))
-	err = os.Remove(workflowPath)
-	missing := os.IsNotExist(err)
-	if missing {
-		err = nil
-	}
+func installDeploy(factoryDir string) (err error) {
+	contents, err := deployContents()
 	if err != nil {
 		return
 	}
+	err = installFile(factoryDir, deployRel, contents)
+	return
+}
 
-	workflowDir := filepath.Dir(workflowPath)
-	err = os.MkdirAll(workflowDir, 0755)
+func installDelete(factoryDir string) (err error) {
+	contents, err := workflowfile.ReadFactoryDelete()
 	if err != nil {
 		return
 	}
-	contents, err := workflowContents(factoryDir)
+	err = installFile(factoryDir, deleteRel, contents)
+	return
+}
+
+func installTemplate(factoryDir string) (err error) {
+	contents, err := templateContents()
 	if err != nil {
 		return
 	}
-	err = os.WriteFile(workflowPath, contents, 0644)
+	err = installFile(factoryDir, templateRel, contents)
+	return
+}
+
+func installFile(factoryDir string, rel string, contents []byte) (err error) {
+	path := filepath.Join(factoryDir, filepath.FromSlash(rel))
+	dir := filepath.Dir(path)
+	err = os.MkdirAll(dir, 0755)
+	if err != nil {
+		return
+	}
+	err = os.WriteFile(path, contents, 0644)
+	return
+}
+
+func removeLegacyTick(ctx context.Context, factoryDir string) (tracked bool, err error) {
+	line := "cat-file -e HEAD:" + legacyTickRel
+	_, statErr := commands.Git(ctx, factoryDir, line)
+	tracked = statErr == nil
+
+	path := filepath.Join(factoryDir, filepath.FromSlash(legacyTickRel))
+	removeErr := os.Remove(path)
+	missing := os.IsNotExist(removeErr)
+	if missing {
+		removeErr = nil
+	}
+	err = removeErr
 	return
 }
 
@@ -118,44 +186,72 @@ func requireRelease() (err error) {
 	return
 }
 
-const appKeyToken = "__APP_KEYS__"
+func installSecrets(factoryDir string) (err error) {
+	contents, err := secretsContents(factoryDir)
+	if err != nil {
+		return
+	}
+	err = installFile(factoryDir, secretsRel, contents)
+	return
+}
 
-func workflowContents(factoryDir string) (contents []byte, err error) {
-	template, err := workflowfile.ReadFactoryTick()
+func installSecretsWorkflow(factoryDir string) (err error) {
+	contents, err := workflowfile.ReadFactorySecrets()
+	if err != nil {
+		return
+	}
+	err = installFile(factoryDir, secretsWorkflowRel, contents)
+	return
+}
+
+func deployContents() (contents []byte, err error) {
+	template, err := workflowfile.ReadFactoryDeploy()
 	if err != nil {
 		return
 	}
 	token := []byte(versionToken)
 	hasToken := bytes.Contains(template, token)
 	if !hasToken {
-		err = fmt.Errorf("workflow template has no version token")
+		err = fmt.Errorf("deploy workflow has no version token")
 		return
 	}
 	version := []byte(Version)
 	contents = bytes.ReplaceAll(template, token, version)
+	return
+}
 
+func templateContents() (contents []byte, err error) {
+	contents, err = workflowfile.ReadInfrastructure()
+	return
+}
+
+func secretsContents(factoryDir string) (contents []byte, err error) {
+	template, err := workflowfile.ReadSecrets()
+	if err != nil {
+		return
+	}
 	ids, err := commands.ListAppIDs(factoryDir)
 	if err != nil {
 		return
 	}
-	contents, err = replaceAppKeys(contents, ids)
+	contents, err = replaceMarker(template, appSecretsToken, appSecretResources(ids))
 	return
 }
 
-func replaceAppKeys(contents []byte, ids []int64) (next []byte, err error) {
+func replaceMarker(contents []byte, marker string, replacement [][]byte) (next []byte, err error) {
 	lines := bytes.Split(contents, []byte("\n"))
 	index := -1
 	var indent string
+	token := []byte(marker)
 	for i, line := range lines {
 		body, lead := markerBody(line)
-		token := []byte(appKeyToken)
 		match := bytes.Equal(body, token)
 		if !match {
 			continue
 		}
 		already := index >= 0
 		if already {
-			err = fmt.Errorf("workflow template has more than one app key marker")
+			err = fmt.Errorf("template has more than one %s marker", marker)
 			return
 		}
 		index = i
@@ -163,18 +259,29 @@ func replaceAppKeys(contents []byte, ids []int64) (next []byte, err error) {
 	}
 	missing := index < 0
 	if missing {
-		err = fmt.Errorf("workflow template has no app key marker")
+		err = fmt.Errorf("template has no %s marker", marker)
 		return
 	}
 
-	replacement := appKeyLines(indent, ids)
+	indented := indentLines(indent, replacement)
 	var out [][]byte
 	head := lines[:index]
 	tail := lines[index+1:]
 	out = append(out, head...)
-	out = append(out, replacement...)
+	out = append(out, indented...)
 	out = append(out, tail...)
 	next = bytes.Join(out, []byte("\n"))
+	return
+}
+
+func indentLines(indent string, lines [][]byte) (indented [][]byte) {
+	indented = make([][]byte, 0, len(lines))
+	for _, line := range lines {
+		joined := make([]byte, 0, len(indent)+len(line))
+		joined = append(joined, indent...)
+		joined = append(joined, line...)
+		indented = append(indented, joined)
+	}
 	return
 }
 
@@ -186,13 +293,19 @@ func markerBody(line []byte) (body []byte, indent string) {
 	return
 }
 
-func appKeyLines(indent string, ids []int64) (lines [][]byte) {
-	lines = make([][]byte, 0, len(ids))
+func appSecretResources(ids []int64) (lines [][]byte) {
+	lines = make([][]byte, 0, len(ids)*8)
 	for _, id := range ids {
 		text := strconv.FormatInt(id, 10)
-		line := indent + "FACTORY_GITHUB_APP_" + text + ": ${{ secrets.FACTORY_GITHUB_APP_" + text + " }}"
-		raw := []byte(line)
-		lines = append(lines, raw)
+		lines = append(lines, []byte("AppKey"+text+":"))
+		lines = append(lines, []byte("  Type: AWS::SecretsManager::Secret"))
+		lines = append(lines, []byte("  DeletionPolicy: Delete"))
+		lines = append(lines, []byte("  UpdateReplacePolicy: Delete"))
+		lines = append(lines, []byte("  Properties:"))
+		name := "    Name: !Sub \"${AWS::StackName}/app/" + text + "\""
+		lines = append(lines, []byte(name))
+		description := "    Description: GitHub App " + text + " private key"
+		lines = append(lines, []byte(description))
 	}
 	return
 }

@@ -20,6 +20,9 @@ import (
 
 	"charm.land/log/v2"
 	"github.com/google/go-github/v93/github"
+	"go.uber.org/zap"
+
+	"github.com/TigranOhanyan/gh-gcf/logging"
 )
 
 const githubAPIURL = "GITHUB_API_URL"
@@ -110,7 +113,7 @@ func AddAttention(ctx context.Context, client *github.Client, owner string, repo
 	_, resp, err := client.Issues.AddLabelsToIssue(ctx, owner, repo, number, labels)
 	CloseGitHub(resp)
 	if err != nil {
-		log.Error("attention label", "owner", owner, "name", repo, "issue", number, "label", label, "err", err)
+		logging.From(ctx).Error("attention label", zap.String("owner", owner), zap.String("repo", repo), zap.Int("issue", number), zap.String("label", label), zap.Error(err))
 	}
 	return
 }

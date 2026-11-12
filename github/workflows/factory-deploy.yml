@@ -1,0 +1,55 @@
+# Deploy. Bind copies this file to .github/workflows/factory-deploy.yml
+# in the factory repo. A person runs it with the Actions button.
+#
+# __GCF_VERSION__ is the release whose tick zip this deploy downloads.
+# Bind replaces it with the release tag of the binary that writes this file.
+# STACK_NAME is an Actions variable on the factory repo. Two factories in one
+# account set two names. The secrets stack is that name with -secrets appended.
+# This deploy does not write secret values. The tick reads them on each launch.
+# GCF_RELEASE_TOKEN reads the private gh-gcf release and nothing else.
+
+name: Factory Deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout factory
+        uses: actions/checkout@v4
+
+      - name: Setup SAM
+        uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Download release
+        env:
+          GH_TOKEN: ${{ secrets.GCF_RELEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release download __GCF_VERSION__ --repo TigranOhanyan/gh-gcf --pattern tick_linux_arm64.zip --output tick.zip --clobber
+
+      - name: Deploy
+        run: |
+          set -euo pipefail
+          sam deploy \
+            --template-file infrastructure.yaml \
+            --stack-name "${{ vars.STACK_NAME }}" \
+            --s3-bucket "${{ secrets.AWS_APPLICATION_BUCKET }}" \
+            --capabilities CAPABILITY_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides "SecretsStackName=${{ vars.STACK_NAME }}-secrets FactoryRepoOwner=${{ github.repository_owner }} FactoryRepoName=${{ github.event.repository.name }}"

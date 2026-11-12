@@ -13,11 +13,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/TigranOhanyan/gh-gcf/commands"
 	"github.com/TigranOhanyan/gh-gcf/configdb"
 	"github.com/TigranOhanyan/gh-gcf/github"
 )
 
-func Test_Bind_should_commit_the_workflow_on_main(t *testing.T) {
+func Test_Bind_should_commit_the_deploy_workflow_on_main(t *testing.T) {
 	repoDir := setupMain(t)
 	t.Chdir(repoDir)
 
@@ -27,9 +28,38 @@ func Test_Bind_should_commit_the_workflow_on_main(t *testing.T) {
 	message := mustGit(t, repoDir, "log -1 --format=%s main")
 	assert.Equal(t, commitMessage, strings.TrimSpace(string(message)))
 
-	showLine := fmt.Sprintf("show main:%s", workflowRel)
+	showLine := fmt.Sprintf("show main:%s", deployRel)
 	committed := mustGit(t, repoDir, showLine)
-	expected := pinnedWorkflow(t)
+	expected := pinnedDeploy(t)
+	assert.Equal(t, expected, committed)
+	assert.NotContains(t, string(committed), versionToken)
+	assert.Contains(t, string(committed), Version)
+}
+
+func Test_Bind_should_commit_the_delete_workflow_on_main(t *testing.T) {
+	repoDir := setupMain(t)
+	t.Chdir(repoDir)
+
+	err := runBind(t)
+	require.NoError(t, err)
+
+	showLine := fmt.Sprintf("show main:%s", deleteRel)
+	committed := mustGit(t, repoDir, showLine)
+	expected, err := workflowfile.ReadFactoryDelete()
+	require.NoError(t, err)
+	assert.Equal(t, expected, committed)
+}
+
+func Test_Bind_should_commit_the_template_on_main(t *testing.T) {
+	repoDir := setupMain(t)
+	t.Chdir(repoDir)
+
+	err := runBind(t)
+	require.NoError(t, err)
+
+	showLine := fmt.Sprintf("show main:%s", templateRel)
+	committed := mustGit(t, repoDir, showLine)
+	expected := pinnedTemplate(t)
 	assert.Equal(t, expected, committed)
 }
 
@@ -48,7 +78,23 @@ func Test_Bind_should_refuse_a_dev_version(t *testing.T) {
 	message := mustGit(t, repoDir, "log -1 --format=%s main")
 	assert.Equal(t, "init", strings.TrimSpace(string(message)))
 
-	_, err = os.Stat(filepath.Join(repoDir, filepath.FromSlash(workflowRel)))
+	_, err = os.Stat(filepath.Join(repoDir, filepath.FromSlash(deployRel)))
+	assert.Error(t, err)
+	assert.True(t, os.IsNotExist(err))
+
+	_, err = os.Stat(filepath.Join(repoDir, filepath.FromSlash(deleteRel)))
+	assert.Error(t, err)
+	assert.True(t, os.IsNotExist(err))
+
+	_, err = os.Stat(filepath.Join(repoDir, templateRel))
+	assert.Error(t, err)
+	assert.True(t, os.IsNotExist(err))
+
+	_, err = os.Stat(filepath.Join(repoDir, secretsRel))
+	assert.Error(t, err)
+	assert.True(t, os.IsNotExist(err))
+
+	_, err = os.Stat(filepath.Join(repoDir, filepath.FromSlash(secretsWorkflowRel)))
 	assert.Error(t, err)
 	assert.True(t, os.IsNotExist(err))
 }
@@ -77,26 +123,45 @@ func Test_Bind_should_migrate_config_and_commit_it_on_main(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func Test_Bind_should_replace_the_previous_workflow(t *testing.T) {
+func Test_Bind_should_replace_the_previous_deploy_workflow(t *testing.T) {
 	repoDir := setupMain(t)
 	t.Chdir(repoDir)
 	err := runBind(t)
 	require.NoError(t, err)
 
-	workflowPath := filepath.Join(repoDir, filepath.FromSlash(workflowRel))
+	workflowPath := filepath.Join(repoDir, filepath.FromSlash(deployRel))
 	err = os.WriteFile(workflowPath, []byte("previous: true\n"), 0644)
 	require.NoError(t, err)
-	addLine := fmt.Sprintf("add %s", workflowRel)
+	addLine := fmt.Sprintf("add %s", deployRel)
 	_ = mustGit(t, repoDir, addLine)
 	_ = mustGit(t, repoDir, `commit -m "previous workflow"`)
 
 	err = runBind(t)
 	require.NoError(t, err)
 
-	showLine := fmt.Sprintf("show main:%s", workflowRel)
+	showLine := fmt.Sprintf("show main:%s", deployRel)
 	committed := mustGit(t, repoDir, showLine)
-	expected := pinnedWorkflow(t)
+	expected := pinnedDeploy(t)
 	assert.Equal(t, expected, committed)
+}
+
+func Test_Bind_should_remove_a_committed_tick_workflow(t *testing.T) {
+	repoDir := setupMain(t)
+	workflowPath := filepath.Join(repoDir, filepath.FromSlash(legacyTickRel))
+	err := os.MkdirAll(filepath.Dir(workflowPath), 0755)
+	require.NoError(t, err)
+	err = os.WriteFile(workflowPath, []byte("old: true\n"), 0644)
+	require.NoError(t, err)
+	addLine := fmt.Sprintf("add %s", legacyTickRel)
+	_ = mustGit(t, repoDir, addLine)
+	_ = mustGit(t, repoDir, "commit -m tick")
+	t.Chdir(repoDir)
+
+	err = runBind(t)
+	require.NoError(t, err)
+
+	_, err = commands.Git(t.Context(), repoDir, "cat-file -e HEAD:"+legacyTickRel)
+	require.Error(t, err)
 }
 
 func Test_Bind_should_commit_the_worktrees_hint_on_main(t *testing.T) {
@@ -126,7 +191,7 @@ func Test_Bind_should_refuse_a_directory_that_is_not_a_git_repo(t *testing.T) {
 	err = runBind(t)
 	require.Error(t, err)
 
-	_, err = os.Stat(filepath.Join(repoDir, filepath.FromSlash(workflowRel)))
+	_, err = os.Stat(filepath.Join(repoDir, filepath.FromSlash(deployRel)))
 	assert.Error(t, err)
 	assert.True(t, os.IsNotExist(err))
 
@@ -135,14 +200,16 @@ func Test_Bind_should_refuse_a_directory_that_is_not_a_git_repo(t *testing.T) {
 	assert.True(t, os.IsNotExist(err))
 }
 
-func pinnedWorkflow(t *testing.T) (contents []byte) {
+func pinnedDeploy(t *testing.T) (contents []byte) {
 	t.Helper()
-	template, err := workflowfile.ReadFactoryTick()
+	contents, err := deployContents()
 	require.NoError(t, err)
-	token := []byte(versionToken)
-	version := []byte(Version)
-	replaced := bytes.ReplaceAll(template, token, version)
-	contents, err = replaceAppKeys(replaced, nil)
+	return
+}
+
+func pinnedTemplate(t *testing.T) (contents []byte) {
+	t.Helper()
+	contents, err := templateContents()
 	require.NoError(t, err)
 	return
 }
@@ -157,7 +224,7 @@ func Test_Bind_should_refuse_a_subdirectory_of_a_git_checkout(t *testing.T) {
 	err = runBind(t)
 	require.Error(t, err)
 
-	_, err = os.Stat(filepath.Join(repoDir, filepath.FromSlash(workflowRel)))
+	_, err = os.Stat(filepath.Join(repoDir, filepath.FromSlash(deployRel)))
 	assert.Error(t, err)
 	assert.True(t, os.IsNotExist(err))
 
@@ -166,7 +233,7 @@ func Test_Bind_should_refuse_a_subdirectory_of_a_git_checkout(t *testing.T) {
 	assert.True(t, os.IsNotExist(err))
 }
 
-func Test_Bind_should_commit_the_workflow_on_the_open_branch(t *testing.T) {
+func Test_Bind_should_commit_the_deploy_workflow_on_the_open_branch(t *testing.T) {
 	repoDir := setupMain(t)
 	_ = mustGit(t, repoDir, "checkout -b bind-me")
 	t.Chdir(repoDir)
@@ -180,9 +247,9 @@ func Test_Bind_should_commit_the_workflow_on_the_open_branch(t *testing.T) {
 	message := mustGit(t, repoDir, "log -1 --format=%s")
 	assert.Equal(t, commitMessage, strings.TrimSpace(string(message)))
 
-	showLine := fmt.Sprintf("show HEAD:%s", workflowRel)
+	showLine := fmt.Sprintf("show HEAD:%s", deployRel)
 	committed := mustGit(t, repoDir, showLine)
-	expected := pinnedWorkflow(t)
+	expected := pinnedDeploy(t)
 	assert.Equal(t, expected, committed)
 
 	mainTip := mustGit(t, repoDir, "log -1 --format=%s main")

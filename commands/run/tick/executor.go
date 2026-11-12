@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"time"
 
-	"charm.land/log/v2"
+	"go.uber.org/zap"
+
+	"github.com/TigranOhanyan/gh-gcf/logging"
 	"github.com/oklog/ulid/v2"
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
@@ -29,18 +31,21 @@ type tickExecutor struct {
 // The same id is stored in every repo. An empty FactoryDir uses the current directory.
 // The first error stops the walk. Repos already committed stay committed.
 func (tick tickExecutor) CreateTick(ctx context.Context) (id string, err error) {
-	id, err = newTickID()
+	id, err = newTickID(ctx)
 	if err != nil {
 		return
 	}
+	ctx = logging.With(ctx, zap.String("tick_id", id), zap.String("step", tickName))
+	logging.From(ctx).Info("tick")
 
 	visit := func(ctx context.Context, repo commands.Repo) (commit commands.StateCommit, err error) {
+		ctx = logging.With(ctx, zap.String("owner", repo.Owner), zap.String("repo", repo.Name))
 		err = repo.State.Queries.CreateTick(ctx, id)
 		if err != nil {
-			log.Error("insert tick", "owner", repo.Owner, "name", repo.Name, "err", err)
+			logging.From(ctx).Error("insert tick", zap.Any("owner", repo.Owner), zap.Any("name", repo.Name), zap.Error(err))
 			return
 		}
-		log.Info("insert tick", "owner", repo.Owner, "name", repo.Name)
+		logging.From(ctx).Info("insert tick", zap.Any("owner", repo.Owner), zap.Any("name", repo.Name))
 		repoName := repo.Owner + "/" + repo.Name
 		commit.Subject = commands.CommitSubject(id, tickName, repoName, tickCreated)
 		return
@@ -53,15 +58,14 @@ func (tick tickExecutor) CreateTick(ctx context.Context) (id string, err error) 
 	return
 }
 
-func newTickID() (id string, err error) {
+func newTickID(ctx context.Context) (id string, err error) {
 	now := time.Now()
 	timestamp := ulid.Timestamp(now)
 	value, err := ulid.New(timestamp, rand.Reader)
 	if err != nil {
-		log.Error("new tick id", "err", err)
+		logging.From(ctx).Error("new tick id", zap.Error(err))
 		return
 	}
 	id = value.String()
-	log.Info("tick", "id", id)
 	return
 }

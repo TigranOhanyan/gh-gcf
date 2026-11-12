@@ -11,7 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/log/v2"
+	"go.uber.org/zap"
+
+	"github.com/TigranOhanyan/gh-gcf/logging"
 )
 
 const cursorAPIEnv = "CURSOR_API_URL"
@@ -65,7 +67,7 @@ func NewCursorClient() (client CursorClient, err error) {
 	missing := key == ""
 	if missing {
 		err = fmt.Errorf("cursor api key is missing")
-		log.Error("cursor", "err", err)
+		zap.L().Error("cursor", zap.Error(err))
 		return
 	}
 	base := os.Getenv(cursorAPIEnv)
@@ -85,13 +87,13 @@ func NewCursorClient() (client CursorClient, err error) {
 func (client CursorClient) Create(ctx context.Context, body CursorCreate) (agentID string, runID string, responseBody string, status int, err error) {
 	payload, err := json.Marshal(body)
 	if err != nil {
-		log.Error("cursor create", "err", err)
+		logging.From(ctx).Error("cursor create", zap.Error(err))
 		return
 	}
 	url := client.base + "/v1/agents"
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
-		log.Error("cursor create", "err", err)
+		logging.From(ctx).Error("cursor create", zap.Error(err))
 		return
 	}
 	request.Header.Set("Content-Type", "application/json")
@@ -99,21 +101,21 @@ func (client CursorClient) Create(ctx context.Context, body CursorCreate) (agent
 
 	response, err := client.http.Do(request)
 	if err != nil {
-		log.Error("cursor create", "err", err)
+		logging.From(ctx).Error("cursor create", zap.Error(err))
 		return
 	}
 	defer response.Body.Close()
 	status = response.StatusCode
 	raw, err := io.ReadAll(response.Body)
 	if err != nil {
-		log.Error("cursor create", "err", err)
+		logging.From(ctx).Error("cursor create", zap.Error(err))
 		return
 	}
 	responseBody = string(raw)
 	success := status == http.StatusOK || status == http.StatusCreated || status == http.StatusNoContent
 	if !success {
 		err = fmt.Errorf("cursor create returned %d", status)
-		log.Error("cursor create", "status", status, "body", responseBody, "err", err)
+		logging.From(ctx).Error("cursor create", zap.Any("status", status), zap.Any("body", responseBody), zap.Error(err))
 		return
 	}
 	empty := status == http.StatusNoContent
@@ -123,7 +125,7 @@ func (client CursorClient) Create(ctx context.Context, body CursorCreate) (agent
 	var parsed cursorCreateResponse
 	err = json.Unmarshal(raw, &parsed)
 	if err != nil {
-		log.Error("cursor create", "err", err)
+		logging.From(ctx).Error("cursor create", zap.Error(err))
 		return
 	}
 	agentID = parsed.Agent.ID
@@ -131,13 +133,13 @@ func (client CursorClient) Create(ctx context.Context, body CursorCreate) (agent
 	missingRun := runID == ""
 	if missingRun {
 		err = fmt.Errorf("cursor run id is missing")
-		log.Error("cursor create", "err", err)
+		logging.From(ctx).Error("cursor create", zap.Error(err))
 		return
 	}
 	missingAgent := agentID == ""
 	if missingAgent {
 		err = fmt.Errorf("cursor agent id is missing")
-		log.Error("cursor create", "err", err)
+		logging.From(ctx).Error("cursor create", zap.Error(err))
 	}
 	return
 }

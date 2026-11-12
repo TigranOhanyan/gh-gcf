@@ -61,8 +61,8 @@ func LoadFactoryApp() (app FactoryApp, err error) {
 	return
 }
 
-// Client returns an installation client for the factory app on owner/repo.
-func (app FactoryApp) Client(ctx context.Context, owner string, repo string) (client *github.Client, err error) {
+// Token mints an installation token for the factory app on owner/repo.
+func (app FactoryApp) Token(ctx context.Context, owner string, repo string) (token string, err error) {
 	now := time.Now()
 	signed, err := SignAppJWT(app.id, app.key, now)
 	if err != nil {
@@ -104,14 +104,21 @@ func (app FactoryApp) Client(ctx context.Context, owner string, repo string) (cl
 		log.Error("installation token", "owner", owner, "name", repo, "err", err)
 		return
 	}
-	missingToken := issued.Token == nil || *issued.Token == ""
+	token = issued.GetToken()
+	missingToken := token == ""
 	if missingToken {
 		err = fmt.Errorf("installation token is empty")
 		log.Error("installation token", "owner", owner, "name", repo, "err", err)
+	}
+	return
+}
+
+// Client returns an installation client for the factory app on owner/repo.
+func (app FactoryApp) Client(ctx context.Context, owner string, repo string) (client *github.Client, err error) {
+	token, err := app.Token(ctx, owner, repo)
+	if err != nil {
 		return
 	}
-
-	token := issued.GetToken()
 	client, err = NewGitHubClientWithToken(token)
 	return
 }
