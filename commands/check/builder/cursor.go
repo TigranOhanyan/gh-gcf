@@ -26,6 +26,7 @@ const runExpired = "EXPIRED"
 
 type cursorBranch struct {
 	RepoURL string `json:"repoUrl"`
+	Branch  string `json:"branch"`
 	PRURL   string `json:"prUrl"`
 }
 

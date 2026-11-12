@@ -98,6 +98,12 @@ func (step checkStep) observe(ctx context.Context, repo commands.Repo, stepID st
 
 func (step checkStep) finishBuilder(ctx context.Context, repo commands.Repo, stepID string, client *github.Client, item records.ListPendingDevelopmentBuildersRow, run cursorRun) (line string, err error) {
 	number, found := pullNumber(run.Git.Branches, repo.Owner, repo.Name)
+	if !found {
+		number, found, err = openFromBranch(ctx, client, repo.Owner, repo.Name, run.Git.Branches)
+		if err != nil {
+			return
+		}
+	}
 	missing := !found
 	if missing {
 		line, err = step.missingPull(ctx, repo, stepID, client, item)

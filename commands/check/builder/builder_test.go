@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/wiremock/go-wiremock"
+	"github.com/wiremock/go-wiremock/journal"
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
 	"github.com/TigranOhanyan/gh-gcf/commands/root"
@@ -548,8 +549,277 @@ func issueJSON(number int, title string, body string) (payload string) {
 	return
 }
 
+func Test_CheckBuilder_should_record_the_pull_request_number_and_the_builder_head_sha_from_the_run_pull_request_url_and_not_list_pull_requests(t *testing.T) {
+	resetWireMock(t)
+	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
+	stubCursor(t, 200, createdCursor())
+	repoDir := setupFactory(t, instruction)
+	id := runTick(t, repoDir)
+	err := runCompile(t, repoDir, id)
+	require.NoError(t, err)
+	err = runBuilder(t, repoDir, id)
+	require.NoError(t, err)
+	stored := cursorAgentIDByRole(t, repoDir, "builder")
+	stubRun(t, stored, branchRun("cursor/one", "https://github.com/octo/app/pull/9"))
+	stubPull(t, 9, headSHA)
+	later := runTick(t, repoDir)
+
+	err = runCheck(t, repoDir, later)
+	require.NoError(t, err)
+
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	assert.True(t, works[0].PullRequestNumber.Valid)
+	assert.Equal(t, int64(9), works[0].PullRequestNumber.Int64)
+	assert.True(t, works[0].BuilderHeadSha.Valid)
+	assert.Equal(t, headSHA, works[0].BuilderHeadSha.String)
+	assert.Empty(t, pullLists(t))
+}
+
+func Test_CheckBuilder_should_record_the_one_open_pull_request_on_the_single_branch_when_the_run_has_no_pull_request_url(t *testing.T) {
+	resetWireMock(t)
+	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
+	stubCursor(t, 200, createdCursor())
+	repoDir := setupFactory(t, instruction)
+	id := runTick(t, repoDir)
+	err := runCompile(t, repoDir, id)
+	require.NoError(t, err)
+	err = runBuilder(t, repoDir, id)
+	require.NoError(t, err)
+	stored := cursorAgentIDByRole(t, repoDir, "builder")
+	stubRun(t, stored, branchRun("cursor/one", ""))
+	stubOpenPulls(t, "octo:cursor/one", `[{"number":9}]`)
+	stubPull(t, 9, headSHA)
+	later := runTick(t, repoDir)
+
+	err = runCheck(t, repoDir, later)
+	require.NoError(t, err)
+
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	assert.True(t, works[0].PullRequestNumber.Valid)
+	assert.Equal(t, int64(9), works[0].PullRequestNumber.Int64)
+	assert.True(t, works[0].BuilderHeadSha.Valid)
+	assert.Equal(t, headSHA, works[0].BuilderHeadSha.String)
+	lists := pullLists(t)
+	require.Len(t, lists, 1)
+	assert.Equal(t, "open", lists[0].state)
+	assert.Equal(t, "octo:cursor/one", lists[0].head)
+}
+
+func Test_CheckBuilder_should_record_a_draft_on_that_branch(t *testing.T) {
+	resetWireMock(t)
+	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
+	stubCursor(t, 200, createdCursor())
+	repoDir := setupFactory(t, instruction)
+	id := runTick(t, repoDir)
+	err := runCompile(t, repoDir, id)
+	require.NoError(t, err)
+	err = runBuilder(t, repoDir, id)
+	require.NoError(t, err)
+	stored := cursorAgentIDByRole(t, repoDir, "builder")
+	stubRun(t, stored, branchRun("cursor/one", ""))
+	stubOpenPulls(t, "octo:cursor/one", `[{"number":9,"draft":true}]`)
+	stubPull(t, 9, headSHA)
+	later := runTick(t, repoDir)
+
+	err = runCheck(t, repoDir, later)
+	require.NoError(t, err)
+
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	assert.True(t, works[0].PullRequestNumber.Valid)
+	assert.Equal(t, int64(9), works[0].PullRequestNumber.Int64)
+	assert.Equal(t, headSHA, works[0].BuilderHeadSha.String)
+}
+
+func Test_CheckBuilder_should_set_attention_when_a_finished_run_has_no_pull_request_url_and_no_branch_and_store_no_pull_request_number(t *testing.T) {
+	resetWireMock(t)
+	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
+	stubCursor(t, 200, createdCursor())
+	stubLabels(t, 7)
+	repoDir := setupFactory(t, instruction)
+	id := runTick(t, repoDir)
+	err := runCompile(t, repoDir, id)
+	require.NoError(t, err)
+	err = runBuilder(t, repoDir, id)
+	require.NoError(t, err)
+	stored := cursorAgentIDByRole(t, repoDir, "builder")
+	stubRun(t, stored, finishedRun(""))
+	later := runTick(t, repoDir)
+
+	err = runCheck(t, repoDir, later)
+	require.NoError(t, err)
+
+	assertMissingPull(t, repoDir)
+	assert.Empty(t, pullLists(t))
+}
+
+func Test_CheckBuilder_should_set_attention_when_a_finished_run_has_more_than_one_branch_and_no_pull_request_url_and_not_list_pull_requests(t *testing.T) {
+	resetWireMock(t)
+	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
+	stubCursor(t, 200, createdCursor())
+	stubLabels(t, 7)
+	repoDir := setupFactory(t, instruction)
+	id := runTick(t, repoDir)
+	err := runCompile(t, repoDir, id)
+	require.NoError(t, err)
+	err = runBuilder(t, repoDir, id)
+	require.NoError(t, err)
+	stored := cursorAgentIDByRole(t, repoDir, "builder")
+	stubRun(t, stored, twoBranchRun())
+	later := runTick(t, repoDir)
+
+	err = runCheck(t, repoDir, later)
+	require.NoError(t, err)
+
+	assertMissingPull(t, repoDir)
+	assert.Empty(t, pullLists(t))
+}
+
+func Test_CheckBuilder_should_set_attention_when_the_only_branch_is_for_another_repo_and_not_list_pull_requests(t *testing.T) {
+	resetWireMock(t)
+	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
+	stubCursor(t, 200, createdCursor())
+	stubLabels(t, 7)
+	repoDir := setupFactory(t, instruction)
+	id := runTick(t, repoDir)
+	err := runCompile(t, repoDir, id)
+	require.NoError(t, err)
+	err = runBuilder(t, repoDir, id)
+	require.NoError(t, err)
+	stored := cursorAgentIDByRole(t, repoDir, "builder")
+	stubRun(t, stored, otherRepoRun())
+	later := runTick(t, repoDir)
+
+	err = runCheck(t, repoDir, later)
+	require.NoError(t, err)
+
+	assertMissingPull(t, repoDir)
+	assert.Empty(t, pullLists(t))
+}
+
+func Test_CheckBuilder_should_set_attention_when_the_branch_has_no_open_pull_request_and_store_no_pull_request_number(t *testing.T) {
+	resetWireMock(t)
+	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
+	stubCursor(t, 200, createdCursor())
+	stubLabels(t, 7)
+	repoDir := setupFactory(t, instruction)
+	id := runTick(t, repoDir)
+	err := runCompile(t, repoDir, id)
+	require.NoError(t, err)
+	err = runBuilder(t, repoDir, id)
+	require.NoError(t, err)
+	stored := cursorAgentIDByRole(t, repoDir, "builder")
+	stubRun(t, stored, branchRun("cursor/one", ""))
+	stubOpenPulls(t, "octo:cursor/one", `[]`)
+	later := runTick(t, repoDir)
+
+	err = runCheck(t, repoDir, later)
+	require.NoError(t, err)
+
+	assertMissingPull(t, repoDir)
+	require.Len(t, pullLists(t), 1)
+}
+
+func Test_CheckBuilder_should_set_attention_when_the_branch_has_more_than_one_open_pull_request_and_store_no_pull_request_number(t *testing.T) {
+	resetWireMock(t)
+	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
+	stubCursor(t, 200, createdCursor())
+	stubLabels(t, 7)
+	repoDir := setupFactory(t, instruction)
+	id := runTick(t, repoDir)
+	err := runCompile(t, repoDir, id)
+	require.NoError(t, err)
+	err = runBuilder(t, repoDir, id)
+	require.NoError(t, err)
+	stored := cursorAgentIDByRole(t, repoDir, "builder")
+	stubRun(t, stored, branchRun("cursor/one", ""))
+	stubOpenPulls(t, "octo:cursor/one", `[{"number":9},{"number":10}]`)
+	later := runTick(t, repoDir)
+
+	err = runCheck(t, repoDir, later)
+	require.NoError(t, err)
+
+	assertMissingPull(t, repoDir)
+	assert.Empty(t, pullGets(t))
+}
+
+func Test_CheckBuilder_should_set_attention_when_the_branch_has_only_a_closed_pull_request_and_store_no_pull_request_number(t *testing.T) {
+	resetWireMock(t)
+	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
+	stubCursor(t, 200, createdCursor())
+	stubLabels(t, 7)
+	repoDir := setupFactory(t, instruction)
+	id := runTick(t, repoDir)
+	err := runCompile(t, repoDir, id)
+	require.NoError(t, err)
+	err = runBuilder(t, repoDir, id)
+	require.NoError(t, err)
+	stored := cursorAgentIDByRole(t, repoDir, "builder")
+	stubRun(t, stored, branchRun("cursor/one", ""))
+	stubOpenPulls(t, "octo:cursor/one", `[]`)
+	later := runTick(t, repoDir)
+
+	err = runCheck(t, repoDir, later)
+	require.NoError(t, err)
+
+	assertMissingPull(t, repoDir)
+	lists := pullLists(t)
+	require.Len(t, lists, 1)
+	assert.Equal(t, "open", lists[0].state)
+}
+
+func Test_CheckBuilder_should_fail_when_listing_pull_requests_fails_and_leave_the_work_without_attention_and_without_a_pull_request_number(t *testing.T) {
+	resetWireMock(t)
+	stubIssues(t, issueJSON(7, "Add a thing", "Do it"))
+	stubCursor(t, 200, createdCursor())
+	repoDir := setupFactory(t, instruction)
+	id := runTick(t, repoDir)
+	err := runCompile(t, repoDir, id)
+	require.NoError(t, err)
+	err = runBuilder(t, repoDir, id)
+	require.NoError(t, err)
+	stored := cursorAgentIDByRole(t, repoDir, "builder")
+	stubRun(t, stored, branchRun("cursor/one", ""))
+	stubPullListFailure(t)
+	later := runTick(t, repoDir)
+
+	err = runCheck(t, repoDir, later)
+	require.Error(t, err)
+
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	assert.Empty(t, works[0].Status)
+	assert.False(t, works[0].PullRequestNumber.Valid)
+	assert.False(t, works[0].BuilderHeadSha.Valid)
+}
+
 func finishedRun(prURL string) (payload string) {
 	payload = fmt.Sprintf(`{"id":"%s","status":"FINISHED","git":{"branches":[{"repoUrl":"https://github.com/octo/app","prUrl":"%s"}]}}`, runID, prURL)
+	return
+}
+
+func branchRun(branch string, prURL string) (payload string) {
+	payload = fmt.Sprintf(`{"id":"%s","status":"FINISHED","git":{"branches":[{"repoUrl":"https://github.com/octo/app","branch":"%s","prUrl":"%s"}]}}`, runID, branch, prURL)
+	return
+}
+
+func twoBranchRun() (payload string) {
+	payload = fmt.Sprintf(`{"id":"%s","status":"FINISHED","git":{"branches":[{"repoUrl":"https://github.com/octo/app","branch":"cursor/one"},{"repoUrl":"https://github.com/octo/app","branch":"cursor/two"}]}}`, runID)
+	return
+}
+
+func otherRepoRun() (payload string) {
+	payload = fmt.Sprintf(`{"id":"%s","status":"FINISHED","git":{"branches":[{"repoUrl":"https://github.com/other/app","branch":"cursor/one"}]}}`, runID)
 	return
 }
 
@@ -592,6 +862,29 @@ func stubRun(t *testing.T, agentID string, payload string) {
 	path := fmt.Sprintf("/v1/agents/%s/runs/%s", agentID, runID)
 	rule := wiremock.Get(wiremock.URLPathEqualTo(path)).WillReturnResponse(
 		wiremock.NewResponse().WithStatus(200).WithHeader("Content-Type", "application/json").WithBody(payload),
+	)
+	err := wiremockClient.StubFor(rule)
+	require.NoError(t, err)
+}
+
+func stubOpenPulls(t *testing.T, head string, body string) {
+	t.Helper()
+	path := "/repos/octo/app/pulls"
+	rule := wiremock.Get(wiremock.URLPathEqualTo(path)).
+		WithQueryParam("state", wiremock.EqualTo("open")).
+		WithQueryParam("head", wiremock.EqualTo(head)).
+		WillReturnResponse(
+			wiremock.NewResponse().WithStatus(200).WithHeader("Content-Type", "application/json").WithBody(body),
+		)
+	err := wiremockClient.StubFor(rule)
+	require.NoError(t, err)
+}
+
+func stubPullListFailure(t *testing.T) {
+	t.Helper()
+	path := "/repos/octo/app/pulls"
+	rule := wiremock.Get(wiremock.URLPathEqualTo(path)).WillReturnResponse(
+		wiremock.NewResponse().WithStatus(500).WithHeader("Content-Type", "application/json").WithBody(`{"message":"boom"}`),
 	)
 	err := wiremockClient.StubFor(rule)
 	require.NoError(t, err)
@@ -644,6 +937,56 @@ func cursorRunRequests(t *testing.T) (paths []string) {
 		}
 	}
 	return
+}
+
+type pullList struct {
+	head  string
+	state string
+}
+
+func pullLists(t *testing.T) (lists []pullList) {
+	t.Helper()
+	journal, err := wiremockClient.GetAllRequests()
+	require.NoError(t, err)
+	for _, entry := range journal.Requests {
+		request := entry.Request
+		path, _, _ := strings.Cut(request.URL, "?")
+		listed := request.Method == "GET" && strings.HasSuffix(path, "/pulls")
+		if !listed {
+			continue
+		}
+		list := pullList{
+			head:  queryValue(request.QueryParams, "head"),
+			state: queryValue(request.QueryParams, "state"),
+		}
+		lists = append(lists, list)
+	}
+	return
+}
+
+func queryValue(params journal.Params, key string) (value string) {
+	param, ok := params[key]
+	missing := !ok
+	if missing {
+		return
+	}
+	empty := len(param.Values) == 0
+	if empty {
+		return
+	}
+	value = param.Values[0]
+	return
+}
+
+func assertMissingPull(t *testing.T, repoDir string) {
+	t.Helper()
+	db := openStateTip(t, repoDir)
+	defer db.Close()
+	works := listWorks(t, db)
+	require.Len(t, works, 1)
+	assert.Equal(t, "attention", works[0].Status)
+	assert.False(t, works[0].PullRequestNumber.Valid)
+	assert.False(t, works[0].BuilderHeadSha.Valid)
 }
 
 func pullGets(t *testing.T) (paths []string) {
