@@ -8,7 +8,7 @@ docker run --rm --platform linux/arm64 \
   -v "$root:/out" \
   public.ecr.aws/amazonlinux/amazonlinux:2023 \
   bash -c 'set -euo pipefail
-    dnf install -y git
+    dnf install -y git findutils gawk
     dest=/out/gitroot
     mkdir -p "$dest/bin" "$dest/libexec" "$dest/lib"
     cp -a /usr/bin/git "$dest/bin/git"

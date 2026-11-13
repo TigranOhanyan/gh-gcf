@@ -1,0 +1,25 @@
+name: release check
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: docker/setup-qemu-action@v3
+      - name: Bundle git
+        run: bash lambda/bundle-git.sh
+      - name: Build tick zip
+        run: |
+          set -euo pipefail
+          cd lambda
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o bootstrap -tags lambda.norpc .
+          zip -r tick_linux_arm64.zip bootstrap gitroot
