@@ -16,6 +16,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - uses: docker/setup-qemu-action@v3
       - name: Bundle git
         run: bash lambda/bundle-git.sh
       - name: Build tick zip
