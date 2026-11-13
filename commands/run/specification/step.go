@@ -8,7 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/log/v2"
+	"go.uber.org/zap"
+
+	"github.com/TigranOhanyan/gh-gcf/logging"
 	"github.com/google/go-github/v93/github"
 	"github.com/google/uuid"
 	"github.com/oklog/ulid/v2"
@@ -42,7 +44,7 @@ func (specificationStep) Name() (name string) {
 func (step specificationStep) Apply(ctx context.Context, repo commands.Repo, _ records.Tick, stepRow records.Step) (message string, err error) {
 	works, err := repo.State.Queries.ListReadySpecificationWorks(ctx)
 	if err != nil {
-		log.Error("list works", "owner", repo.Owner, "name", repo.Name, "err", err)
+		logging.From(ctx).Error("list works", zap.Any("owner", repo.Owner), zap.Any("name", repo.Name), zap.Error(err))
 		return
 	}
 	none := len(works) == 0
@@ -78,7 +80,7 @@ func (step specificationStep) Apply(ctx context.Context, repo commands.Repo, _ r
 func (step specificationStep) consider(ctx context.Context, repo commands.Repo, stepID string, client *github.Client, work records.ListReadySpecificationWorksRow, noted map[string]struct{}) (line string, err error) {
 	development, err := repo.State.Queries.GetDevelopment(ctx, work.DevelopmentName)
 	if err != nil {
-		log.Error("development", "development", work.DevelopmentName, "err", err)
+		logging.From(ctx).Error("development", zap.Any("development", work.DevelopmentName), zap.Error(err))
 		return
 	}
 	sum, err := commands.DevelopmentInstructionFingerprint(repo.Dir, development.Name, roleSpecification)
@@ -93,7 +95,7 @@ func (step specificationStep) consider(ctx context.Context, repo commands.Repo, 
 		}
 		noted[development.Name] = struct{}{}
 		line = fmt.Sprintf("[%s] instruction changed", development.Name)
-		log.Info("instruction changed", "development", development.Name)
+		logging.From(ctx).Info("instruction changed", zap.Any("development", development.Name))
 		return
 	}
 
@@ -109,7 +111,7 @@ func (step specificationStep) startWork(ctx context.Context, repo commands.Repo,
 	missingPull := !work.PullRequestNumber.Valid
 	if missingPull {
 		err = fmt.Errorf("pull request is missing")
-		log.Error("pull request", "issue", work.IssueNumber, "err", err)
+		logging.From(ctx).Error("pull request", zap.Any("issue", work.IssueNumber), zap.Error(err))
 		return
 	}
 	agentID, err := newAgentID()
@@ -145,6 +147,7 @@ func (step specificationStep) startWork(ctx context.Context, repo commands.Repo,
 		EnvVars:      env,
 	}
 	body.Repos = repos
+	logging.From(ctx).Info("cursor create", zap.String("role", roleSpecification), zap.String("development", development.Name), zap.Int64("issue", work.IssueNumber))
 	cursorAgentID, runID, raw, status, err := step.cursor.Create(ctx, body)
 	lost := err != nil && status == 0
 	if lost {
@@ -174,6 +177,7 @@ func rejectCreate(ctx context.Context, repo commands.Repo, stepID string, client
 	if err != nil {
 		return
 	}
+	logging.From(ctx).Info("attention", zap.Int("issue", number), zap.String("label", development.AttentionLabel), zap.String("reason", reason))
 	line = fmt.Sprintf("[%d] rejected", work.IssueNumber)
 	return
 }
@@ -181,7 +185,7 @@ func rejectCreate(ctx context.Context, repo commands.Repo, stepID string, client
 func claim(ctx context.Context, repo commands.Repo, stepID string, developmentName string, work records.ListReadySpecificationWorksRow, agentID string) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
-		log.Error("begin run", "err", err)
+		logging.From(ctx).Error("begin run", zap.Error(err))
 		return
 	}
 	queries := repo.State.Queries.WithTx(tx)
@@ -224,7 +228,7 @@ func claim(ctx context.Context, repo commands.Repo, stepID string, developmentNa
 func ack(ctx context.Context, repo commands.Repo, stepID string, agentID string, cursorAgentID string, runID string) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
-		log.Error("begin run", "err", err)
+		logging.From(ctx).Error("begin run", zap.Error(err))
 		return
 	}
 	queries := repo.State.Queries.WithTx(tx)
@@ -260,7 +264,7 @@ func ack(ctx context.Context, repo commands.Repo, stepID string, agentID string,
 func reject(ctx context.Context, repo commands.Repo, stepID string, workID string, agentID string, reason string) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
-		log.Error("begin run", "err", err)
+		logging.From(ctx).Error("begin run", zap.Error(err))
 		return
 	}
 	queries := repo.State.Queries.WithTx(tx)
@@ -297,7 +301,7 @@ func promptText(instruction string, issueNumber int64, issueURL string, pullNumb
 func newAgentID() (id string, err error) {
 	value, err := uuid.NewV7()
 	if err != nil {
-		log.Error("new agent id", "err", err)
+		zap.L().Error("new agent id", zap.Error(err))
 		return
 	}
 	id = "bc-" + value.String()
@@ -308,7 +312,7 @@ func newEventID() (id string, err error) {
 	timestamp := ulid.Timestamp(time.Now())
 	value, err := ulid.New(timestamp, rand.Reader)
 	if err != nil {
-		log.Error("new event id", "err", err)
+		zap.L().Error("new event id", zap.Error(err))
 		return
 	}
 	id = value.String()

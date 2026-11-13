@@ -8,7 +8,9 @@ import (
 	"strconv"
 	"time"
 
-	"charm.land/log/v2"
+	"go.uber.org/zap"
+
+	"github.com/TigranOhanyan/gh-gcf/logging"
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
 )
@@ -24,7 +26,7 @@ func (step appStep) lookUp(ctx context.Context, owner string, repoName string, i
 	now := time.Now()
 	signed, err := commands.SignAppJWT(id, key, now)
 	if err != nil {
-		log.Error("app jwt", "owner", owner, "name", repoName, "app", id, "err", err)
+		logging.From(ctx).Error("app jwt", zap.Any("owner", owner), zap.Any("name", repoName), zap.Any("app", id), zap.Error(err))
 		return
 	}
 	client, err := commands.NewGitHubClientWithToken(signed)
@@ -41,7 +43,7 @@ func (step appStep) lookUp(ctx context.Context, owner string, repoName string, i
 		return
 	}
 	if err != nil {
-		log.Error("repository installation", "owner", owner, "name", repoName, "app", id, "err", err)
+		logging.From(ctx).Error("repository installation", zap.Any("owner", owner), zap.Any("name", repoName), zap.Any("app", id), zap.Error(err))
 		return
 	}
 	if installation == nil {
@@ -62,7 +64,7 @@ func (step appStep) lookUp(ctx context.Context, owner string, repoName string, i
 	incomplete := missingID || missingClient
 	if incomplete {
 		err = fmt.Errorf("installation is missing")
-		log.Error("repository installation", "owner", owner, "name", repoName, "app", id, "err", err)
+		logging.From(ctx).Error("repository installation", zap.Any("owner", owner), zap.Any("name", repoName), zap.Any("app", id), zap.Error(err))
 		return
 	}
 	seen = sightInstalled
@@ -75,12 +77,12 @@ func loadAppKey(id int64) (key *rsa.PrivateKey, err error) {
 	missing := pemText == ""
 	if missing {
 		err = fmt.Errorf("github app key is missing")
-		log.Error("github app", "app", id, "err", err)
+		zap.L().Error("github app", zap.Any("app", id), zap.Error(err))
 		return
 	}
 	key, err = commands.ParseAppKey(pemText)
 	if err != nil {
-		log.Error("github app", "app", id, "err", err)
+		zap.L().Error("github app", zap.Any("app", id), zap.Error(err))
 	}
 	return
 }

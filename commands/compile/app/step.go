@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"strings"
 
-	"charm.land/log/v2"
+	"go.uber.org/zap"
+
+	"github.com/TigranOhanyan/gh-gcf/logging"
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
 	"github.com/TigranOhanyan/gh-gcf/statedb/records"
@@ -33,7 +35,7 @@ func (appStep) Name() (name string) {
 func (step appStep) Apply(ctx context.Context, repo commands.Repo, _ records.Tick, _ records.Step) (message string, err error) {
 	ids, err := repo.Config.Queries.ListGithubApps(ctx)
 	if err != nil {
-		log.Error("list apps", "owner", repo.Owner, "name", repo.Name, "err", err)
+		logging.From(ctx).Error("list apps", zap.Any("owner", repo.Owner), zap.Any("name", repo.Name), zap.Error(err))
 		return
 	}
 
@@ -61,7 +63,7 @@ func (step appStep) ensure(ctx context.Context, repo commands.Repo, id int64) (l
 	absent := errors.Is(err, sql.ErrNoRows)
 	lookupFailed := err != nil && !absent
 	if lookupFailed {
-		log.Error("get app", "owner", repo.Owner, "name", repo.Name, "app", id, "err", err)
+		logging.From(ctx).Error("get app", zap.Any("owner", repo.Owner), zap.Any("name", repo.Name), zap.Any("app", id), zap.Error(err))
 		return
 	}
 	err = nil
@@ -112,7 +114,7 @@ func absentInstallation(seen sight) (err error) {
 func insertApp(ctx context.Context, repo commands.Repo, id int64, clientID string, installationID int64) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
-		log.Error("begin app", "err", err)
+		logging.From(ctx).Error("begin app", zap.Error(err))
 		return
 	}
 	queries := repo.State.Queries.WithTx(tx)
@@ -129,7 +131,7 @@ func insertApp(ctx context.Context, repo commands.Repo, id int64, clientID strin
 func updateApp(ctx context.Context, repo commands.Repo, id int64, clientID string, installationID int64) (err error) {
 	tx, err := repo.State.DB.BeginTx(ctx, nil)
 	if err != nil {
-		log.Error("begin app", "err", err)
+		logging.From(ctx).Error("begin app", zap.Error(err))
 		return
 	}
 	queries := repo.State.Queries.WithTx(tx)

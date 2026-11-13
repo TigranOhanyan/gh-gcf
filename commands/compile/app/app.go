@@ -3,7 +3,9 @@ package app
 import (
 	"os"
 
-	"charm.land/log/v2"
+	"go.uber.org/zap"
+
+	"github.com/TigranOhanyan/gh-gcf/logging"
 	"github.com/spf13/cobra"
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
@@ -20,14 +22,16 @@ func NewCompileApp() (cmd *cobra.Command) {
 		Short: "Record configured apps that are installed",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) (err error) {
+			ctx := logging.With(cmd.Context(), zap.String("tick_id", tickID))
+			cmd.SetContext(ctx)
 			dir, err := os.Getwd()
 			if err != nil {
-				log.Error("current directory", "err", err)
+				logging.From(cmd.Context()).Error("current directory", zap.Error(err))
 				return
 			}
 			err = commands.RequireCheckout(cmd.Context(), dir)
 			if err != nil {
-				log.Error("factory repo", "path", dir, "err", err)
+				logging.From(cmd.Context()).Error("factory repo", zap.Any("path", dir), zap.Error(err))
 				return
 			}
 			exec := executor.StepExecutor{
@@ -48,7 +52,7 @@ func NewCompileApp() (cmd *cobra.Command) {
 	flags.StringVar(&tickID, "tick", "", "tick id this step records")
 	err := cmd.MarkFlagRequired("tick")
 	if err != nil {
-		log.Error("tick flag", "err", err)
+		logging.From(cmd.Context()).Error("tick flag", zap.Error(err))
 	}
 	return
 }

@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -23,12 +22,26 @@ func Test_Bind_should_name_each_registered_app_key(t *testing.T) {
 	_, err := runRoot(t, "bind")
 	require.NoError(t, err)
 
-	committed := gitOut(t, repoDir, "show main:.github/workflows/factory-tick.yml")
+	committed := gitOut(t, repoDir, "show main:secrets.yaml")
 	text := string(committed)
-	indent := indentOf(t, text, "FACTORY_GITHUB_APP_PRIVATE_KEY:")
-	want := indent + "FACTORY_GITHUB_APP_42: ${{ secrets.FACTORY_GITHUB_APP_42 }}\n"
-	assert.Contains(t, text, want)
-	assert.NotContains(t, text, "__APP_KEYS__\n")
+	assert.Contains(t, text, "Name: !Sub \"${AWS::StackName}/app/42\"\n")
+	assert.NotContains(t, text, "SecretString:")
+	assert.NotContains(t, text, "__APP_SECRETS__\n")
+}
+
+func Test_Bind_should_name_each_registered_app_in_the_template(t *testing.T) {
+	repoDir := bindCheckout(t)
+	t.Chdir(repoDir)
+	mustRoot(t, "setup apps add --id 42")
+
+	_, err := runRoot(t, "bind")
+	require.NoError(t, err)
+
+	committed := gitOut(t, repoDir, "show main:infrastructure.yaml")
+	text := string(committed)
+	assert.Contains(t, text, "FACTORY_SECRET_PREFIX:")
+	assert.NotContains(t, text, "AppKey42")
+	assert.NotContains(t, text, "__APP_ENV__\n")
 }
 
 func bindCheckout(t *testing.T) (repoDir string) {
@@ -71,21 +84,5 @@ func mustRoot(t *testing.T, line string) (stdout string) {
 	t.Helper()
 	stdout, err := runRoot(t, line)
 	require.NoError(t, err)
-	return
-}
-
-func indentOf(t *testing.T, text string, key string) (indent string) {
-	t.Helper()
-	lines := strings.Split(text, "\n")
-	for _, line := range lines {
-		trimmed := strings.TrimLeft(line, " \t")
-		match := strings.HasPrefix(trimmed, key)
-		if match {
-			lead := len(line) - len(trimmed)
-			indent = line[:lead]
-			return
-		}
-	}
-	t.Fatalf("workflow has no %s", key)
 	return
 }

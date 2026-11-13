@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"charm.land/log/v2"
+	"go.uber.org/zap"
+
+	"github.com/TigranOhanyan/gh-gcf/logging"
 	"github.com/spf13/cobra"
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
@@ -21,12 +23,12 @@ func NewRunTick() (cmd *cobra.Command) {
 		RunE: func(cmd *cobra.Command, _ []string) (err error) {
 			dir, err := os.Getwd()
 			if err != nil {
-				log.Error("current directory", "err", err)
+				logging.From(cmd.Context()).Error("current directory", zap.Error(err))
 				return
 			}
 			err = commands.RequireCheckout(cmd.Context(), dir)
 			if err != nil {
-				log.Error("factory repo", "path", dir, "err", err)
+				logging.From(cmd.Context()).Error("factory repo", zap.Any("path", dir), zap.Error(err))
 				return
 			}
 			tick := tickExecutor{

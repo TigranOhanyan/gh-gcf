@@ -13,7 +13,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Bundle git
+        run: bash lambda/bundle-git.sh
+      - name: Build tick zip
+        run: |
+          set -euo pipefail
+          cd lambda
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o bootstrap -tags lambda.norpc .
+          zip -r tick_linux_arm64.zip bootstrap gitroot
       - uses: cli/gh-extension-precompile@v2
         with:
           go_version_file: go.mod
           go_build_options: -ldflags=-X=github.com/TigranOhanyan/gh-gcf/commands/bind.Version=${{ github.ref_name }}
+      - name: Upload tick zip
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.ref_name }}" lambda/tick_linux_arm64.zip --clobber

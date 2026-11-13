@@ -20,7 +20,7 @@ func Test_NewRoot_should_list_bind(t *testing.T) {
 
 	text := output.String()
 	assert.Contains(t, text, "bind")
-	assert.Contains(t, text, "Install the tick workflow and migrate config")
+	assert.Contains(t, text, "Write the factory install and migrate config")
 }
 
 func Test_NewRoot_should_list_compile(t *testing.T) {

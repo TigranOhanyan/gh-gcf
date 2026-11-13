@@ -6,7 +6,7 @@
 
 **gcf** is this extension. Install it with `gh`. Your issues and pull requests do not live here.
 
-**Factory repo** is a repository you create. It holds the scheduled workflow, and the config and state for each app repo.
+**Factory repo** is a repository you create. It holds the config and state for each app repo, and the install of the tick.
 
 **App repo** is a repository whose issues the factory builds. It holds its own code. It has no factory files.
 
@@ -22,7 +22,7 @@ gh extension install TigranOhanyan/gh-gcf
 
 1. Create an empty repository and clone it. This is the factory repo.
 
-2. Create the factory app. The steps are under [GitHub Apps](#github-apps). Install it on the factory repo and on each app repo before the tick workflow runs.
+2. Create the factory app. The steps are under [GitHub Apps](#github-apps). Install it on the factory repo and on each app repo before the tick runs.
 
 3. In the factory checkout, on the branch you want to change:
 
@@ -30,17 +30,19 @@ gh extension install TigranOhanyan/gh-gcf
 gh gcf bind
 ```
 
-Bind writes the tick workflow and commits. Push the branch. When the factory repo only accepts changes through a pull request, open one from this branch. The tick reads `main` after that pull request is merged.
+Bind writes the deploy workflow, the delete workflow, the secrets workflow, `infrastructure.yaml`, and `secrets.yaml`, and commits. Push the branch. When the factory repo only accepts changes through a pull request, open one from this branch. A merge to `main` deploys the empty secrets. The tick reads `main` after that merge.
 
-4. In the factory repo's Actions secrets, set `CURSOR_API_KEY`, `FACTORY_GITHUB_APP_ID`, and `FACTORY_GITHUB_APP_PRIVATE_KEY`. The private key is the PEM for the factory app.
+4. In the factory repo's Actions secrets, set `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, and `AWS_APPLICATION_BUCKET`. In the factory repo's Actions variables, set `STACK_NAME`. Two factories in one AWS account use two names. After the secrets stack exists, set `cursor-api-key`, `factory-app-id`, and `factory-app-private-key` in Secrets Manager under the `<STACK_NAME>-secrets` prefix. A new value is picked up on the next tick.
 
-5. From the factory checkout:
+5. Create a fine-grained personal access token that can read the contents of `TigranOhanyan/gh-gcf` and no other repository. In the factory repo's Actions secrets, set `GCF_RELEASE_TOKEN` to that token. Deploy downloads the pinned release with it.
+
+6. From the factory checkout:
 
 ```shell
 gh gcf setup tui
 ```
 
-Enter opens Repos or Apps. `a` adds a repo, a label, or an App ID. An App is the number GitHub shows as the App ID. Setup writes that id as `apps/<app id>`, and a repo can then use it. Adding the App on GitHub, and the secret `FACTORY_GITHUB_APP_<app id>`, are under [GitHub Apps](#github-apps).
+Enter opens Repos or Apps. `a` adds a repo, a label, or an App ID. An App is the number GitHub shows as the App ID. Setup writes that id as `apps/<app id>`, and a repo can then use it. Adding the App on GitHub, and storing its key, are under [GitHub Apps](#github-apps).
 
 Inside a repo, setup records labels, the Apps that repo uses, and developments. A label is a name you choose for one app repo. The starting label marks an issue as ready. The attention label marks an issue the factory stopped on, so a person has to look. The factory creates a missing label on that app repo. A label recorded for one app repo is not a label on another.
 
@@ -60,7 +62,9 @@ gh gcf setup development add --owner octo --repo app --name features --starting 
 gh gcf setup development check add --owner octo --repo app --development features --name "ci / unit"
 ```
 
-The scheduled workflow records a tick, runs the [steps](#steps), and pushes state. From the factory checkout, after `gh gcf run tick` prints an id:
+On the factory repo, run the Factory Deploy workflow after the secret values are set. It downloads the release pinned by bind and deploys the tick. The tick runs every 5 minutes and reads the secrets on each launch. Factory Delete removes the tick stack and the secrets stack. `STACK_NAME` is the tick stack. The secrets stack is that name with `-secrets` appended. Adding an App takes another bind and a merge to `main`, then the new secret's value. Deleting the factory repo leaves the tick running.
+
+From the factory checkout, after `gh gcf run tick` prints an id:
 
 ```shell
 gh gcf compile app --tick <id>
@@ -85,15 +89,15 @@ A person creates every App on GitHub. There are two kinds.
 The factory app is the identity the tick uses when it creates and reads GitHub resources. It does not build, review, or fix.
 
 1. Create the App and note the App ID GitHub shows.
-2. Generate a private key. That PEM is the Actions secret `FACTORY_GITHUB_APP_PRIVATE_KEY`. The App ID is `FACTORY_GITHUB_APP_ID`.
-3. Install it on the factory repo and on each app repo before the tick workflow runs.
+2. Generate a private key. Store that PEM in the `factory-app-private-key` secret. Store the App ID in the `factory-app-id` secret.
+3. Install it on the factory repo and on each app repo before the tick runs.
 
 ### Reviewer App
 
 A reviewer App is the identity one reviewer posts as. A development has two, and they are different Apps. The builder and the fixer have none.
 
 1. Create one App per reviewer and note each App ID.
-2. Generate a private key for each. Store the PEM as the Actions secret `FACTORY_GITHUB_APP_<app id>`. The key stays in that secret.
+2. Generate a private key for each. After `apps/<app id>` is on `main`, store that PEM in the `app/<app id>` secret.
 3. Install each App on the account that owns the app repo. `compile app` records that installation. A missing or suspended installation stops the step.
 4. Register and attach the id from the factory checkout:
 
@@ -102,7 +106,7 @@ gh gcf setup apps add --id 42
 gh gcf setup apps attach --owner octo --repo app --id 42
 ```
 
-5. Run `gh gcf bind` again after `apps/<app id>` exists, so the tick workflow receives `FACTORY_GITHUB_APP_<app id>`. Commit and push that change the same way as the first bind.
+5. Run `gh gcf bind` again after `apps/<app id>` exists, so the secrets template creates `app/<app id>`. Commit and push that change the same way as the first bind. The merge creates the empty secret. Store the PEM there. The next tick reads it.
 
 ## Steps
 

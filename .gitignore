@@ -4,6 +4,9 @@
 
 **/junk/*
 !**/junk/_keepme
+lambda/bootstrap
+lambda/gitroot/
+lambda/tick_linux_arm64.zip
 
 /.keys
 /.test_cursor

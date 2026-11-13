@@ -1,0 +1,33 @@
+# Delete. Bind copies this file to .github/workflows/factory-delete.yml
+# in the factory repo. A person runs it with the Actions button.
+# STACK_NAME is the same Actions variable the deploy workflow uses.
+
+name: Factory Delete
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  delete:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SAM
+        uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Delete
+        run: |
+          set -euo pipefail
+          sam delete --stack-name "${{ vars.STACK_NAME }}" --no-prompts --region "${{ secrets.AWS_REGION }}"
+          sam delete --stack-name "${{ vars.STACK_NAME }}-secrets" --no-prompts --region "${{ secrets.AWS_REGION }}"

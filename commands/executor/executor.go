@@ -7,7 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/log/v2"
+	"go.uber.org/zap"
+
+	"github.com/TigranOhanyan/gh-gcf/logging"
 	"github.com/oklog/ulid/v2"
 
 	"github.com/TigranOhanyan/gh-gcf/commands"
@@ -47,19 +49,21 @@ func (exec StepExecutor) Execute(ctx context.Context, step Step) (err error) {
 	missingTick := exec.TickID == ""
 	if missingTick {
 		err = fmt.Errorf("tick id is required")
-		log.Error("tick id", "err", err)
+		logging.From(ctx).Error("tick id", zap.Error(err))
 		return
 	}
 
 	name := step.Name()
-	log.Info("step", "name", name)
+	ctx = logging.With(ctx, zap.String("step", name))
+	logging.From(ctx).Info("step", zap.String("name", name))
 
-	stepID, err := newStepID()
+	stepID, err := newStepID(ctx)
 	if err != nil {
 		return
 	}
 
 	visit := func(ctx context.Context, repo commands.Repo) (commit commands.StateCommit, err error) {
+		ctx = logging.With(ctx, zap.String("owner", repo.Owner), zap.String("repo", repo.Name), zap.String("step_id", stepID))
 		err = insertStep(ctx, repo, stepID, exec.TickID, name)
 		if err != nil {
 			return
@@ -75,11 +79,11 @@ func (exec StepExecutor) Execute(ctx context.Context, step Step) (err error) {
 		repoName := repo.Owner + "/" + repo.Name
 		failed := err != nil
 		if failed {
-			log.Error("apply", "name", name, "repo", repoName, "err", err)
+			logging.From(ctx).Error("apply", zap.Any("name", name), zap.Any("repo", repoName), zap.Error(err))
 		}
 		succeeded := !failed
 		if succeeded {
-			log.Info("apply", "name", name, "repo", repoName, "message", message)
+			logging.From(ctx).Info("apply", zap.Any("name", name), zap.Any("repo", repoName), zap.Any("message", message))
 		}
 		commit.Subject = stepSubject(failed, exec.TickID, name, repoName)
 		commit.Body = markedBody(message, err)
@@ -97,10 +101,10 @@ func insertStep(ctx context.Context, repo commands.Repo, id string, tickID strin
 	}
 	err = repo.State.Queries.CreateStep(ctx, params)
 	if err != nil {
-		log.Error("insert step", "owner", repo.Owner, "name", repo.Name, "err", err)
+		logging.From(ctx).Error("insert step", zap.Any("owner", repo.Owner), zap.Any("name", repo.Name), zap.Error(err))
 		return
 	}
-	log.Info("insert step", "owner", repo.Owner, "name", repo.Name, "id", id)
+	logging.From(ctx).Info("insert step", zap.Any("owner", repo.Owner), zap.Any("name", repo.Name), zap.Any("id", id))
 	return
 }
 
@@ -153,15 +157,15 @@ func joinLines(left string, right string) (joined string) {
 	return
 }
 
-func newStepID() (id string, err error) {
+func newStepID(ctx context.Context) (id string, err error) {
 	now := time.Now()
 	timestamp := ulid.Timestamp(now)
 	value, err := ulid.New(timestamp, rand.Reader)
 	if err != nil {
-		log.Error("new step id", "err", err)
+		logging.From(ctx).Error("new step id", zap.Error(err))
 		return
 	}
 	id = value.String()
-	log.Info("step", "id", id)
+	logging.From(ctx).Info("step", zap.String("step_id", id))
 	return
 }

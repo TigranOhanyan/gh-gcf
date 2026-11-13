@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Factory tick
+
+Parameters:
+  SecretsStackName:
+    Type: String
+  FactoryRepoOwner:
+    Type: String
+  FactoryRepoName:
+    Type: String
+
+Resources:
+  TickLogs:
+    Type: AWS::Logs::LogGroup
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Properties:
+      LogGroupName: !Sub "/${AWS::StackName}/tick"
+      RetentionInDays: 14
+
+  TickFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-tick"
+      Architectures:
+        - arm64
+      Timeout: 120
+      MemorySize: 512
+      ReservedConcurrentExecutions: 1
+      Runtime: provided.al2023
+      Handler: bootstrap
+      CodeUri: tick.zip
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${SecretsStackName}/*"
+      LoggingConfig:
+        LogFormat: JSON
+        LogGroup: !Ref TickLogs
+      Environment:
+        Variables:
+          FACTORY_SECRET_PREFIX:
+            Fn::ImportValue: !Sub "${SecretsStackName}-prefix"
+          FACTORY_REPO_OWNER: !Ref FactoryRepoOwner
+          FACTORY_REPO_NAME: !Ref FactoryRepoName
+      Events:
+        Schedule:
+          Type: ScheduleV2
+          Properties:
+            ScheduleExpression: rate(5 minutes)
+            ScheduleExpressionTimezone: UTC
+            State: ENABLED
+            FlexibleTimeWindow:
+              Mode: "OFF"
+            RetryPolicy:
+              MaximumRetryAttempts: 10
+              MaximumEventAgeInSeconds: 3600
