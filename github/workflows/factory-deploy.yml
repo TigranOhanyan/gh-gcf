@@ -8,6 +8,7 @@
 # This deploy does not write secret values. The tick reads them on each launch.
 # GCF_RELEASE_TOKEN reads the private gh-gcf release and nothing else.
 # The workflow builds the tick image in this account's ECR and deploys it.
+# Bind writes tick/Dockerfile; deploy copies it into the image build context.
 
 name: Factory Deploy
 
@@ -51,11 +52,10 @@ jobs:
           gh release download __GCF_VERSION__ \
             --repo TigranOhanyan/gh-gcf \
             --pattern tick_linux_arm64 \
-            --pattern tick.Dockerfile \
             --dir tick-image \
             --clobber
           mv tick-image/tick_linux_arm64 tick-image/bootstrap
-          mv tick-image/tick.Dockerfile tick-image/Dockerfile
+          cp tick/Dockerfile tick-image/Dockerfile
 
       - name: Build and push tick image
         id: image

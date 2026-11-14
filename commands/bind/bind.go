@@ -23,6 +23,7 @@ const (
 	secretsWorkflowRel = ".github/workflows/factory-secrets.yml"
 	templateRel        = "infrastructure.yaml"
 	secretsRel         = "secrets.yaml"
+	dockerfileRel      = "tick/Dockerfile"
 	legacyTickRel      = ".github/workflows/factory-tick.yml"
 	gitignoreRel       = ".worktrees/.gitignore"
 	hintRel            = ".worktrees/internal_use_only"
@@ -86,6 +87,12 @@ func Bind(ctx context.Context, factoryDir string) (err error) {
 		return
 	}
 
+	err = installDockerfile(factoryDir)
+	if err != nil {
+		log.Error("install dockerfile", "path", factoryDir, "err", err)
+		return
+	}
+
 	err = installSecrets(factoryDir)
 	if err != nil {
 		log.Error("install secrets", "path", factoryDir, "err", err)
@@ -116,7 +123,7 @@ func Bind(ctx context.Context, factoryDir string) (err error) {
 		return
 	}
 
-	files := []string{deployRel, deleteRel, secretsWorkflowRel, templateRel, secretsRel, gitignoreRel, hintRel}
+	files := []string{deployRel, deleteRel, secretsWorkflowRel, templateRel, dockerfileRel, secretsRel, gitignoreRel, hintRel}
 	if tracked {
 		files = append(files, legacyTickRel)
 	}
@@ -149,6 +156,15 @@ func installTemplate(factoryDir string) (err error) {
 		return
 	}
 	err = installFile(factoryDir, templateRel, contents)
+	return
+}
+
+func installDockerfile(factoryDir string) (err error) {
+	contents, err := workflowfile.ReadDockerfile()
+	if err != nil {
+		return
+	}
+	err = installFile(factoryDir, dockerfileRel, contents)
 	return
 }
 

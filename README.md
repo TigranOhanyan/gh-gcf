@@ -30,7 +30,7 @@ gh extension install TigranOhanyan/gh-gcf
 gh gcf bind
 ```
 
-Bind writes the deploy workflow, the delete workflow, the secrets workflow, `infrastructure.yaml`, and `secrets.yaml`, and commits. Push the branch. When the factory repo only accepts changes through a pull request, open one from this branch. A merge to `main` deploys the empty secrets. The tick reads `main` after that merge.
+Bind writes the deploy workflow, the delete workflow, the secrets workflow, `infrastructure.yaml`, `tick/Dockerfile`, and `secrets.yaml`, and commits. Push the branch. When the factory repo only accepts changes through a pull request, open one from this branch. A merge to `main` deploys the empty secrets. The tick reads `main` after that merge.
 
 4. In the factory repo's Actions secrets, set `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, and `AWS_APPLICATION_BUCKET`. In the factory repo's Actions variables, set `STACK_NAME`. Two factories in one AWS account use two names. After the secrets stack exists, set `cursor-api-key`, `factory-app-id`, and `factory-app-private-key` in Secrets Manager under the `<STACK_NAME>-secrets` prefix. A new value is picked up on the next tick.
 

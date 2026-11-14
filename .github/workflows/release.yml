@@ -21,17 +21,11 @@ jobs:
           set -euo pipefail
           cd lambda
           GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o tick_linux_arm64 -tags lambda.norpc .
-          cp Dockerfile tick.Dockerfile
       - uses: cli/gh-extension-precompile@v2
         with:
           go_version_file: go.mod
           go_build_options: -ldflags=-X=github.com/TigranOhanyan/gh-gcf/commands/bind.Version=${{ github.ref_name }}
-      - name: Upload tick image assets
+      - name: Upload tick binary
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          gh release upload "${{ github.ref_name }}" \
-            lambda/tick_linux_arm64 \
-            lambda/tick.Dockerfile \
-            --clobber
+        run: gh release upload "${{ github.ref_name }}" lambda/tick_linux_arm64 --clobber
