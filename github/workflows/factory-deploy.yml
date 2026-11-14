@@ -1,12 +1,13 @@
 # Deploy. Bind copies this file to .github/workflows/factory-deploy.yml
 # in the factory repo. A person runs it with the Actions button.
 #
-# __GCF_VERSION__ is the release whose tick zip this deploy downloads.
+# __GCF_VERSION__ is the release whose tick binary this deploy downloads.
 # Bind replaces it with the release tag of the binary that writes this file.
 # STACK_NAME is an Actions variable on the factory repo. Two factories in one
 # account set two names. The secrets stack is that name with -secrets appended.
 # This deploy does not write secret values. The tick reads them on each launch.
 # GCF_RELEASE_TOKEN reads the private gh-gcf release and nothing else.
+# The workflow builds the tick image in this account's ECR and deploys it.
 
 name: Factory Deploy
 
@@ -35,12 +36,51 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Download release
         env:
           GH_TOKEN: ${{ secrets.GCF_RELEASE_TOKEN }}
         run: |
           set -euo pipefail
-          gh release download __GCF_VERSION__ --repo TigranOhanyan/gh-gcf --pattern tick_linux_arm64.zip --output tick.zip --clobber
+          mkdir -p tick-image
+          gh release download __GCF_VERSION__ \
+            --repo TigranOhanyan/gh-gcf \
+            --pattern tick_linux_arm64 \
+            --pattern tick.Dockerfile \
+            --dir tick-image \
+            --clobber
+          mv tick-image/tick_linux_arm64 tick-image/bootstrap
+          mv tick-image/tick.Dockerfile tick-image/Dockerfile
+
+      - name: Build and push tick image
+        id: image
+        run: |
+          set -euo pipefail
+          account="$(aws sts get-caller-identity --query Account --output text)"
+          region="${{ secrets.AWS_REGION }}"
+          repo="${{ vars.STACK_NAME }}-tick"
+          version="__GCF_VERSION__"
+          uri="${account}.dkr.ecr.${region}.amazonaws.com/${repo}:${version}"
+
+          aws ecr describe-repositories --repository-names "${repo}" >/dev/null 2>&1 || \
+            aws ecr create-repository --repository-name "${repo}" >/dev/null
+
+          aws ecr get-login-password --region "${region}" |
+            docker login --username AWS --password-stdin "${account}.dkr.ecr.${region}.amazonaws.com"
+
+          docker buildx build \
+            --platform linux/arm64 \
+            --provenance=false \
+            --tag "${uri}" \
+            --push \
+            tick-image
+
+          echo "uri=${uri}" >> "${GITHUB_OUTPUT}"
 
       - name: Deploy
         run: |
@@ -52,4 +92,4 @@ jobs:
             --capabilities CAPABILITY_IAM \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
-            --parameter-overrides "SecretsStackName=${{ vars.STACK_NAME }}-secrets FactoryRepoOwner=${{ github.repository_owner }} FactoryRepoName=${{ github.event.repository.name }}"
+            --parameter-overrides "SecretsStackName=${{ vars.STACK_NAME }}-secrets FactoryRepoOwner=${{ github.repository_owner }} FactoryRepoName=${{ github.event.repository.name }} TickImageUri=${{ steps.image.outputs.uri }}"

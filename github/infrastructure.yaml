@@ -9,6 +9,8 @@ Parameters:
     Type: String
   FactoryRepoName:
     Type: String
+  TickImageUri:
+    Type: String
 
 Resources:
   TickLogs:
@@ -23,14 +25,13 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub "${AWS::StackName}-tick"
+      PackageType: Image
       Architectures:
         - arm64
       Timeout: 120
       MemorySize: 512
       ReservedConcurrentExecutions: 1
-      Runtime: provided.al2023
-      Handler: bootstrap
-      CodeUri: tick.zip
+      ImageUri: !Ref TickImageUri
       Policies:
         - Version: "2012-10-17"
           Statement:

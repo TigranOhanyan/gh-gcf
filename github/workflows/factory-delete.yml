@@ -29,5 +29,10 @@ jobs:
       - name: Delete
         run: |
           set -euo pipefail
-          sam delete --stack-name "${{ vars.STACK_NAME }}" --no-prompts --region "${{ secrets.AWS_REGION }}"
-          sam delete --stack-name "${{ vars.STACK_NAME }}-secrets" --no-prompts --region "${{ secrets.AWS_REGION }}"
+          region="${{ secrets.AWS_REGION }}"
+          repo="${{ vars.STACK_NAME }}-tick"
+          sam delete --stack-name "${{ vars.STACK_NAME }}" --no-prompts --region "${region}"
+          sam delete --stack-name "${{ vars.STACK_NAME }}-secrets" --no-prompts --region "${region}"
+          if aws ecr describe-repositories --repository-names "${repo}" --region "${region}" >/dev/null 2>&1; then
+            aws ecr delete-repository --repository-name "${repo}" --region "${region}" --force >/dev/null
+          fi

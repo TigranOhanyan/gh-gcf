@@ -62,7 +62,7 @@ gh gcf setup development add --owner octo --repo app --name features --starting 
 gh gcf setup development check add --owner octo --repo app --development features --name "ci / unit"
 ```
 
-On the factory repo, run the Factory Deploy workflow after the secret values are set. It downloads the release pinned by bind and deploys the tick. The tick runs every 5 minutes and reads the secrets on each launch. Factory Delete removes the tick stack and the secrets stack. `STACK_NAME` is the tick stack. The secrets stack is that name with `-secrets` appended. Adding an App takes another bind and a merge to `main`, then the new secret's value. Deleting the factory repo leaves the tick running.
+On the factory repo, run the Factory Deploy workflow after the secret values are set. It downloads the release pinned by bind, builds the tick image into ECR in that account, and deploys it. The tick runs every 5 minutes and reads the secrets on each launch. Factory Delete removes the tick stack, the secrets stack, and the tick ECR repository. `STACK_NAME` is the tick stack. The secrets stack is that name with `-secrets` appended. Adding an App takes another bind and a merge to `main`, then the new secret's value. Deleting the factory repo leaves the tick running.
 
 From the factory checkout, after `gh gcf run tick` prints an id:
 
